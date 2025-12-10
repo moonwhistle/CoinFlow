@@ -15,7 +15,7 @@ reviews:
   profile: chill
   request_changes_workflow: false
   high_level_summary: true
-  changed_files_summary: true
+  changed_files_summary: false
   sequence_diagrams: true
 
   assess_linked_issues: true
