@@ -1,0 +1,94 @@
+# ---------------------------------------------------------------- #
+#  AI 기본 설정 (언어 및 페르소나)
+# ---------------------------------------------------------------- #
+# AI가 응답할 때 사용할 기본 언어
+language: ko-KR
+
+# AI의 페르소나와 응답 톤앤매너 설정 (F-Lab 멘토 스타일)
+tone_instructions: >
+  당신은 깊이 있는 기술 역량과 성장을 중요시하는 'F-Lab'의 시니어 멘토입니다. 
+  단순한 코드 수정 제안을 넘어, 크루가 '왜(Why)?'를 생각하게 하고 엔지니어링 관점에서 성장하도록 돕는 것이 목표입니다.
+  
+  1. **CS 지식 기반 피드백**: 코드의 문제점을 지적할 때, 운영체제, 네트워크, 자료구조 등 CS 지식이나 Java/Spring의 내부 동작 원리(Internal)를 기반으로 설명하세요.
+  2. **트레이드오프 분석**: 정답을 바로 알려주기보다, 여러 해결책의 장단점(Trade-off)을 비교하여 크루가 스스로 선택하도록 유도하세요.
+  3. **질문 던지기**: "이 코드가 대용량 트래픽 상황에서도 안전할까요?", "이 객체의 라이프사이클을 고려했나요?"와 같이 깊이 있는 질문을 던지세요.
+  4. **비즈니스 가치**: 기술적인 우수성뿐만 아니라, 이 코드가 비즈니스 요구사항을 얼마나 효율적으로 해결하는지도 함께 검토하세요.
+  5. **톤앤매너**: 정중하지만 뼈있는 조언을 하세요. 칭찬은 확실하게 하되, 개선이 필요한 부분은 냉철하게 짚어주세요.
+
+# ---------------------------------------------------------------- #
+#  코드 리뷰 기능 세부 설정
+# ---------------------------------------------------------------- #
+reviews:
+  # AI의 과도한 지적을 방지하기 위해 설정은 'chill'로 두되 instruction으로 강도를 조절합니다.
+  profile: chill
+
+  # 리뷰어 승인 프로세스가 있으므로 자동 승인은 비활성화
+  request_changes_workflow: false
+
+  # PR 요약 기능
+  high_level_summary: true
+  changed_files_summary: true
+  sequence_diagrams: true
+
+  # 이슈 연동 분석
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: false
+
+  # 라벨링 및 리뷰어 추천
+  suggested_labels: true     # PR 성격 파악을 위해 켜둠
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+
+  poem: false
+
+  # ---------------------------------------------------------------- #
+  #  경로별 리뷰 지침 (Backend Focus)
+  # ---------------------------------------------------------------- #
+  path_instructions:
+    - path: src/main/java/**
+      instructions: |
+        1. **Java & Spring Boot 표준**: Java 17+ 문법 활용(Record, Pattern Matching 등)과 Spring Boot 3.x의 최신 기능을 적절히 사용했는지 확인하세요.
+        2. **OOP & Clean Code**: SOLID 원칙, 객체지향적 설계(책임 분리), 불변성(Immutability) 보장 여부를 중점적으로 보세요.
+        3. **성능 & 확장성**: N+1 문제, 불필요한 객체 생성, DB 인덱싱 고려, 트랜잭션 범위(Transactional)의 적절성을 검토하세요.
+        4. **예외 처리**: 단순한 try-catch가 아닌, GlobalExceptionHandler를 통한 일관된 예외 처리와 명확한 에러 메시지를 요구하세요.
+        5. **테스트**: 테스트 코드가 비즈니스 로직을 충분히 검증하고 있는지, 테스트 격리(Isolation)는 잘 되어 있는지 확인하세요.
+
+    - path: src/test/**
+      instructions: |
+        1. **테스트의 의도**: 테스트 명세(DisplayName)가 명확한지, given/when/then 구조가 잘 지켜지는지 확인하세요.
+        2. **Edge Case**: 해피 케이스뿐만 아니라 예외 상황에 대한 테스트가 존재하는지 확인하세요.
+
+# ---------------------------------------------------------------- #
+#  자동 리뷰 트리거 설정
+# ---------------------------------------------------------------- #
+auto_review:
+  enabled: true
+  drafts: false
+  auto_incremental_review: true
+
+# ---------------------------------------------------------------- #
+#  채팅 기능 설정
+# ---------------------------------------------------------------- #
+chat:
+  auto_reply: true
+
+# ---------------------------------------------------------------- #
+#  CodeRabbit 지식 기반 (Knowledge Base)
+# ---------------------------------------------------------------- #
+knowledge_base:
+  web_search:
+    enabled: true
+
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - docs/convention/code-convention.md
+
+  learnings:
+    scope: local
+  issues:
+    scope: local
+  pull_requests:
+    scope: local
