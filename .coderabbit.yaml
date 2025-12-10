@@ -15,7 +15,7 @@ reviews:
   profile: chill
   request_changes_workflow: false
   high_level_summary: true
-  changed_files_summary: true
+  changed_files_summary: false
   sequence_diagrams: true
 
   assess_linked_issues: true
@@ -38,7 +38,7 @@ reviews:
   #  경로별 리뷰 지침
   # ---------------------------------------------------------------- #
   path_instructions:
-    - path: src/main/java/**
+    - path: "stockflow-*/src/main/java/**"
       instructions: |
         당신은 F-Lab 멘토로서 다음 기준에 맞춰 깊이 있는 리뷰를 진행하세요.
 
@@ -57,7 +57,7 @@ reviews:
         5. **예외 처리**: 
            - GlobalExceptionHandler를 통한 일관된 처리를 요구하세요.
 
-    - path: src/test/**
+    - path: "stockflow-*/src/test/java/**"
       instructions: |
         1. **테스트의 의도**: DisplayName이 명확한지, BDD 구조를 준수하는지 확인하세요.
         2. **엣지 케이스**: 예외 상황 테스트가 누락되지 않았는지 체크하세요.
