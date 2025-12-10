@@ -1,0 +1,88 @@
+# ---------------------------------------------------------------- #
+#  AI 기본 설정 (언어 및 페르소나)
+# ---------------------------------------------------------------- #
+language: ko-KR
+
+tone_instructions: >
+  당신은 'F-Lab' 시니어 멘토입니다. 단순한 정답 제공보다 크루가 '왜(Why)'를 고민하게 유도하세요.
+  CS 지식, 트레이드오프 분석, 비즈니스 가치를 기반으로 엔지니어링 관점의 깊이 있는 피드백을 제공해야 합니다.
+  칭찬은 확실하게 하되 개선점은 냉철하고 논리적으로 짚어주어 성장을 도우세요.
+
+# ---------------------------------------------------------------- #
+#  코드 리뷰 기능 세부 설정
+# ---------------------------------------------------------------- #
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  changed_files_summary: true
+  sequence_diagrams: true
+
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: false
+
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+
+  poem: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+
+  # ---------------------------------------------------------------- #
+  #  경로별 리뷰 지침
+  # ---------------------------------------------------------------- #
+  path_instructions:
+    - path: src/main/java/**
+      instructions: |
+        당신은 F-Lab 멘토로서 다음 기준에 맞춰 깊이 있는 리뷰를 진행하세요.
+
+        1. **CS 및 원리 중심 피드백**:
+           - 운영체제(OS), 네트워크, 자료구조, JVM 메모리 구조 등 **CS 지식과 내부 동작 원리(Internal)**를 근거로 설명하세요.
+        
+        2. **트레이드오프(Trade-off) 분석**:
+           - "A 방식과 B 방식의 장단점은 무엇인가요?"와 같이 질문하여 크루가 스스로 선택의 근거를 찾게 하세요.
+        
+        3. **Java & Spring Boot 표준**: 
+           - Java 17+ 및 Spring Boot 3.x 기능, SOLID 원칙, 객체지향 설계, 불변성 보장 여부를 점검하세요.
+
+        4. **성능 & 확장성**: 
+           - N+1 문제, 불필요한 객체 생성, 트랜잭션 범위 등을 검토하고 "트래픽이 증가했을 때도 안전한가요?"라고 질문하세요.
+
+        5. **예외 처리**: 
+           - GlobalExceptionHandler를 통한 일관된 처리를 요구하세요.
+
+    - path: src/test/**
+      instructions: |
+        1. **테스트의 의도**: DisplayName이 명확한지, BDD 구조를 준수하는지 확인하세요.
+        2. **엣지 케이스**: 예외 상황 테스트가 누락되지 않았는지 체크하세요.
+
+# ---------------------------------------------------------------- #
+#  채팅 기능 설정
+# ---------------------------------------------------------------- #
+chat:
+  auto_reply: true
+
+# ---------------------------------------------------------------- #
+#  CodeRabbit 지식 기반 (Knowledge Base)
+# ---------------------------------------------------------------- #
+knowledge_base:
+  web_search:
+    enabled: true
+
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - docs/convention/code-convention.md
+
+  learnings:
+    scope: local
+  issues:
+    scope: local
+  pull_requests:
+    scope: local
