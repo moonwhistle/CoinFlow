@@ -1,0 +1,14 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation project(':stockflow-core')
+    implementation project(':stockflow-common')
+    implementation project(':stockflow-redis')
+
+    implementation 'org.springframework.boot:spring-boot-starter'
+}
+
+bootJar { enabled = true }
+jar { enabled = false }
