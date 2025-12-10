@@ -1,1 +1,8 @@
-rootProject.name = 'curricraft'
+rootProject.name = 'StockFlow'
+
+include 'stockflow-api'
+include 'stockflow-core'
+include 'stockflow-common'
+include 'stockflow-redis'
+include 'stockflow-collector'
+include 'stockflow-batch'
