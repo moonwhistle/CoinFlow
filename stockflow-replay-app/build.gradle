@@ -8,7 +8,6 @@ dependencies {
     implementation project(':stockflow-infra-redis')
 
     implementation 'org.springframework.boot:spring-boot-starter-batch'
-    implementation 'org.springframework.boot:spring-boot-starter'
 }
 
 bootJar { enabled = true }
