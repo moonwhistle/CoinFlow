@@ -5,10 +5,9 @@ plugins {
 dependencies {
     implementation project(':stockflow-core')
     implementation project(':stockflow-common')
-    implementation project(':stockflow-redis')
+    implementation project(':stockflow-infra-redis')
 
-    implementation 'org.springframework.boot:spring-boot-starter-batch'
-    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
 }
 
 bootJar { enabled = true }
