@@ -40,9 +40,6 @@ public class Symbol {
     @Column(nullable = false)
     private boolean active;
 
-    @Column(length = 10)
-    private String currency;
-
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)
     private MarketType marketType;
@@ -60,7 +57,6 @@ public class Symbol {
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = this.createdAt;
-        this.active = true;
     }
 
     @PreUpdate
