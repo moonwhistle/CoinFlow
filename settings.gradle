@@ -1,8 +1,9 @@
 rootProject.name = 'StockFlow'
 
-include 'stockflow-api'
+include 'stockflow-api-app'
+include 'stockflow-aggregation-app'
+include 'stockflow-collector-app'
+include 'stockflow-replay-app'
 include 'stockflow-core'
 include 'stockflow-common'
-include 'stockflow-redis'
-include 'stockflow-collector'
-include 'stockflow-batch'
+include 'stockflow-infra-redis'
