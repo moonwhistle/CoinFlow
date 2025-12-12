@@ -54,4 +54,3 @@ public class MissingTickLog {
         this.resolved = true;
     }
 }
-
