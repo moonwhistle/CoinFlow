@@ -1,4 +1,4 @@
-package com.Stockflow.domain.symbol.vo;
+package com.StockFlow.domain.symbol.domain.vo;
 
 public enum MarketType {
 

@@ -1,6 +1,6 @@
-package com.Stockflow.domain.symbol;
+package com.StockFlow.domain.symbol.domain;
 
-import com.Stockflow.domain.symbol.vo.MarketType;
+import com.StockFlow.domain.symbol.domain.vo.MarketType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -59,7 +59,7 @@ public class Symbol {
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = this.createdAt;
         this.active = true;
     }
 
