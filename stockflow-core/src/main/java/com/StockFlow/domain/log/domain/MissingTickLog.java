@@ -41,16 +41,20 @@ public class MissingTickLog {
     @Column(nullable = false, updatable = false)
     private LocalDateTime detectedAt;
 
-    @Column(nullable = false)
-    private boolean resolved;
+    @Builder.Default
+    private boolean resolved = false;
 
     @PrePersist
     public void prePersist() {
-        this.detectedAt = LocalDateTime.now();
-        this.resolved = false;
+        if(detectedAt == null) {
+            this.detectedAt = LocalDateTime.now();
+        }
     }
 
     public void markResolved() {
+        if (this.resolved) {
+            return;
+        }
         this.resolved = true;
     }
 }
