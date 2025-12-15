@@ -1,6 +1,6 @@
 package com.coinflow.handler.binance.constant;
 
-public class BinanceTradeMessageFields {
+public final class BinanceTradeMessageFields {
 
     public static final String DATA = "data";
     public static final String SYMBOL = "s";
