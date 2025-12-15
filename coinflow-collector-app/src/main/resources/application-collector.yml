@@ -1,0 +1,7 @@
+binance:
+  websocket:
+    base-url: wss://stream.binance.com:9443/stream
+    trade-stream-suffix: "@trade"
+    symbols:
+      - btcusdt
+      - ethusdt
