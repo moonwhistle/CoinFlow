@@ -7,11 +7,17 @@ dependencies {
     implementation project(':coinflow-common')
     implementation project(':coinflow-infra-redis')
 
-    implementation 'org.springframework.boot:spring-boot-starter'
+    // JSON
+    implementation 'org.springframework.boot:spring-boot-starter-json'
+
+    // ConfigurationProperties metadata
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
-    // validation
+    // Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // WebSocket client (lightweight)
+    implementation 'org.java-websocket:Java-WebSocket:1.5.4'
 }
 
 bootJar { enabled = true }
