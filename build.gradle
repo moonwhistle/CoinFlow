@@ -5,7 +5,7 @@ plugins {
 }
 
 allprojects {
-	group = 'com.stockflow'
+	group = 'com.coinflow'
 	version = '0.0.1-SNAPSHOT'
 
 	repositories {
