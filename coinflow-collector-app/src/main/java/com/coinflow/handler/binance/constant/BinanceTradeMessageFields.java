@@ -1,4 +1,4 @@
-package com.coinflow.handler.binance.support;
+package com.coinflow.handler.binance.constant;
 
 public class BinanceTradeMessageFields {
 

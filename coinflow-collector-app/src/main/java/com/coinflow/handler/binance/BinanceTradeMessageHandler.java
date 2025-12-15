@@ -1,10 +1,10 @@
 package com.coinflow.handler.binance;
 
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.DATA;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.EVENT_TIME;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.PRICE;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.QUANTITY;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.SYMBOL;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.DATA;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.EVENT_TIME;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.PRICE;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.QUANTITY;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.SYMBOL;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
 import com.coinflow.handler.TickMessageHandler;
