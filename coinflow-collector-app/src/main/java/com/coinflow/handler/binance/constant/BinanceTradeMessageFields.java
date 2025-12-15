@@ -7,4 +7,7 @@ public class BinanceTradeMessageFields {
     public static final String PRICE = "p";
     public static final String QUANTITY = "q";
     public static final String EVENT_TIME = "E";
+
+    private BinanceTradeMessageFields() {
+    }
 }
