@@ -4,4 +4,3 @@ binance:
     trade-stream-suffix: "@trade"
     symbols:
       - btcusdt
-      - ethusdt
