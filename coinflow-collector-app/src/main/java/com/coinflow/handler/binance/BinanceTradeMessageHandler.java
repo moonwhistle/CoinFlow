@@ -1,14 +1,14 @@
 package com.coinflow.handler.binance;
 
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.DATA;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.EVENT_TIME;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.PRICE;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.QUANTITY;
-import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.SYMBOL;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.DATA;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.EVENT_TIME;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.PRICE;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.QUANTITY;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.SYMBOL;
 
-import com.coinflow.event.TickRawEvent;
+import com.coinflow.domain.tick.event.TickRawEvent;
 import com.coinflow.handler.TickMessageHandler;
-import com.coinflow.publisher.TickPublisher;
+import com.coinflow.domain.tick.publisher.TickPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;

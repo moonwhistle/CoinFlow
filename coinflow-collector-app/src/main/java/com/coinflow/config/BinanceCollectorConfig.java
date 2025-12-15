@@ -6,19 +6,13 @@ import com.coinflow.client.binance.support.BinanceStreamUrlBuilder;
 import com.coinflow.config.properties.BinanceWebSocketProperties;
 import com.coinflow.handler.TickMessageHandler;
 import com.coinflow.handler.binance.BinanceTradeMessageHandler;
-import com.coinflow.publisher.LoggingTickPublisher;
-import com.coinflow.publisher.TickPublisher;
+import com.coinflow.domain.tick.publisher.TickPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class BinanceCollectorConfig {
-
-    @Bean
-    public TickPublisher tickPublisher() {
-        return new LoggingTickPublisher();
-    }
 
     @Bean
     public TickMessageHandler tickMessageHandler(

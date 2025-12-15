@@ -2,5 +2,7 @@
 
 ## 📚 Changes
 
+## 📝 Note
+
 ## 📌 Related Issue
 - Closes #
