@@ -1,4 +1,4 @@
-package com.coinflow.event;
+package com.coinflow.domain.tick.event;
 
 import java.math.BigDecimal;
 import java.time.Instant;
