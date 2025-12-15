@@ -6,9 +6,9 @@ import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.PRI
 import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.QUANTITY;
 import static com.coinflow.handler.binance.support.BinanceTradeMessageFields.SYMBOL;
 
-import com.coinflow.event.TickRawEvent;
+import com.coinflow.domain.tick.event.TickRawEvent;
 import com.coinflow.handler.TickMessageHandler;
-import com.coinflow.publisher.TickPublisher;
+import com.coinflow.domain.tick.publisher.TickPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
