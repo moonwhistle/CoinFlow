@@ -2,6 +2,7 @@ package com.coinflow.config;
 
 import com.coinflow.config.properties.TickConsumerProperties;
 import com.coinflow.consumer.TickRawEventConsumer;
+import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -24,6 +25,8 @@ public class RedisConsumerConfig {
     private final TickRawEventConsumer consumer;
     private final TickConsumerProperties properties;
 
+    private StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
+
     @Bean
     public StreamMessageListenerContainer<String, MapRecord<String, String, String>> tickStreamContainer() {
         StreamMessageListenerContainerOptions<String, MapRecord<String, String, String>> options =
@@ -31,9 +34,7 @@ public class RedisConsumerConfig {
                         .pollTimeout(Duration.ofSeconds(2))
                         .build();
 
-        StreamMessageListenerContainer<String, MapRecord<String, String, String>> container =
-                StreamMessageListenerContainer.create(connectionFactory, options);
-
+        container = StreamMessageListenerContainer.create(connectionFactory, options);
         container.receive(
                 Consumer.from(properties.group(), properties.consumerName()),
                 StreamOffset.create(properties.streamKey(), ReadOffset.lastConsumed()),
@@ -42,5 +43,12 @@ public class RedisConsumerConfig {
         container.start();
 
         return container;
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        if (container != null && container.isRunning()) {
+            container.stop();
+        }
     }
 }
