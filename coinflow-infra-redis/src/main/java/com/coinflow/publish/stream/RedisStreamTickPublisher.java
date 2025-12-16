@@ -36,7 +36,14 @@ public class RedisStreamTickPublisher implements TickPublisher {
             RecordId recordId = redisTemplate.opsForStream()
                     .add(RAW_TICK_STREAM, fields);
 
-            assert recordId != null;
+            if (recordId == null) {
+                throw new PublishException(
+                        PublishErrorCode.REDIS_PUBLISH_FAILED,
+                        "RecordId is null after publishing to Redis Stream",
+                        null
+                );
+            }
+
             log.debug(
                     "Published tick event. stream={}, recordId={}, symbol={}",
                     RAW_TICK_STREAM, recordId.getValue(), event.symbol()

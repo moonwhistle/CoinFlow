@@ -14,13 +14,25 @@ public class TickProcessService {
     private final OhlcService ohlcService;
 
     public void process(TickRawEvent event) {
-        ohlcService.process(event);
-
-        log.debug(
-                "tick. symbol={}, price={}, time={}",
+        log.info(
+                "[Consumer] Processing tick event - symbol={}, price={}, eventTime={}",
                 event.symbol(),
                 event.price(),
                 event.eventTime()
         );
+
+        try {
+            ohlcService.process(event);
+            log.debug("[Consumer] Successfully processed tick event - symbol={}", event.symbol());
+        } catch (Exception e) {
+            log.error(
+                    "[Consumer] Failed to process tick event - symbol={}, price={}",
+                    event.symbol(),
+                    event.price(),
+                    e
+            );
+
+            throw e;
+        }
     }
 }
