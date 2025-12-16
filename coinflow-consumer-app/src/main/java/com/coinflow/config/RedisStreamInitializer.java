@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -25,8 +26,13 @@ public class RedisStreamInitializer implements ApplicationRunner {
                     ReadOffset.latest(),
                     properties.group()
             );
-        } catch (Exception e) {
-            log.info("Already Exist Redis Consumer Group");
+        } catch (RedisSystemException e) {
+            if (e.getCause() != null && e.getCause().getMessage().contains("BUSYGROUP")) {
+                log.info("Redis consumer group already exists: {}", properties.group());
+            } else {
+                log.error("Failed to create Redis consumer group: {}", properties.group(), e);
+                throw e;
+            }
         }
     }
 }
