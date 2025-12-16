@@ -23,16 +23,29 @@ public class TickRawMessageHandler {
     private final TickProcessor tickProcessor;
 
     public void handle(MapRecord<String, String, String> record) {
-
         Map<String, String> value = record.getValue();
 
-        TickRawEvent event = new TickRawEvent(
-                value.get(SYMBOL),
-                new BigDecimal(value.get(PRICE)),
-                new BigDecimal(value.get(QUANTITY)),
-                Instant.parse(value.get(EVENT_TIME))
-        );
+        String symbol = value.get(SYMBOL);
+        String priceStr = value.get(PRICE);
+        String quantityStr = value.get(QUANTITY);
+        String eventTimeStr = value.get(EVENT_TIME);
 
-        tickProcessor.process(event);
+        try {
+            TickRawEvent event = new TickRawEvent(
+                    symbol,
+                    new BigDecimal(priceStr),
+                    new BigDecimal(quantityStr),
+                    Instant.parse(eventTimeStr)
+            );
+
+            tickProcessor.process(event);
+        } catch (Exception e) {
+            // consumer가 ACK/재처리 정책 결정
+            log.error(
+                    "Malformed tick message. symbol={}, price={}, quantity={}, eventTime={}",
+                    symbol, priceStr, quantityStr, eventTimeStr, e
+            );
+            throw e;
+        }
     }
 }
