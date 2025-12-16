@@ -1,9 +1,9 @@
 package com.coinflow.stream;
 
-import static com.coinflow.stream.constant.TickStreamFields.EVENT_TIME;
-import static com.coinflow.stream.constant.TickStreamFields.PRICE;
-import static com.coinflow.stream.constant.TickStreamFields.QUANTITY;
-import static com.coinflow.stream.constant.TickStreamFields.SYMBOL;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.EVENT_TIME;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.PRICE;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.QUANTITY;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.SYMBOL;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
 import com.coinflow.domain.tick.publisher.TickPublisher;
