@@ -1,14 +1,14 @@
-package com.coinflow.stream;
+package com.coinflow.publish.stream;
 
-import static com.coinflow.stream.constant.TickStreamFields.EVENT_TIME;
-import static com.coinflow.stream.constant.TickStreamFields.PRICE;
-import static com.coinflow.stream.constant.TickStreamFields.QUANTITY;
-import static com.coinflow.stream.constant.TickStreamFields.SYMBOL;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.EVENT_TIME;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.PRICE;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.QUANTITY;
+import static com.coinflow.domain.tick.event.constant.TickStreamFields.SYMBOL;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
 import com.coinflow.domain.tick.publisher.TickPublisher;
-import com.coinflow.exception.PublishErrorCode;
-import com.coinflow.exception.PublishException;
+import com.coinflow.publish.exception.PublishErrorCode;
+import com.coinflow.publish.exception.PublishException;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +36,14 @@ public class RedisStreamTickPublisher implements TickPublisher {
             RecordId recordId = redisTemplate.opsForStream()
                     .add(RAW_TICK_STREAM, fields);
 
-            assert recordId != null;
+            if (recordId == null) {
+                throw new PublishException(
+                        PublishErrorCode.REDIS_PUBLISH_FAILED,
+                        "RecordId is null after publishing to Redis Stream",
+                        null
+                );
+            }
+
             log.debug(
                     "Published tick event. stream={}, recordId={}, symbol={}",
                     RAW_TICK_STREAM, recordId.getValue(), event.symbol()

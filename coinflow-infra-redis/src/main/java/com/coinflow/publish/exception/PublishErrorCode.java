@@ -1,4 +1,4 @@
-package com.coinflow.exception;
+package com.coinflow.publish.exception;
 
 public enum PublishErrorCode {
 
