@@ -1,10 +1,10 @@
-package com.coinflow.processor;
+package com.coinflow.domain.ohlc.service;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
 import org.springframework.stereotype.Component;
 
 @Component
-public class DefaultOhlcProcessor implements OhlcProcessor{
+public class DefaultOhlcService implements OhlcService {
 
     @Override
     public void process(TickRawEvent event) {

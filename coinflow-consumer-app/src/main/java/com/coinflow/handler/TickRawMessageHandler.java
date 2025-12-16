@@ -6,13 +6,12 @@ import static com.coinflow.domain.tick.event.constant.TickStreamFields.QUANTITY;
 import static com.coinflow.domain.tick.event.constant.TickStreamFields.SYMBOL;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
-import com.coinflow.process.TickProcessor;
+import com.coinflow.service.TickProcessService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -20,32 +19,31 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class TickRawMessageHandler {
 
-    private final TickProcessor tickProcessor;
+    private final TickProcessService tickProcessService;
 
-    public void handle(MapRecord<String, String, String> record) {
-        Map<String, String> value = record.getValue();
-
-        String symbol = value.get(SYMBOL);
-        String priceStr = value.get(PRICE);
-        String quantityStr = value.get(QUANTITY);
-        String eventTimeStr = value.get(EVENT_TIME);
-
+    /**
+     * @return true  = 정상 처리 (ACK 가능)
+     *         false = 실패 (pending 유지)
+     */
+    public boolean handle(Map<String, String> value) {
         try {
             TickRawEvent event = new TickRawEvent(
-                    symbol,
-                    new BigDecimal(priceStr),
-                    new BigDecimal(quantityStr),
-                    Instant.parse(eventTimeStr)
+                    value.get(SYMBOL),
+                    new BigDecimal(value.get(PRICE)),
+                    new BigDecimal(value.get(QUANTITY)),
+                    Instant.parse(value.get(EVENT_TIME))
             );
 
-            tickProcessor.process(event);
+            tickProcessService.process(event);
+            return true;
+
         } catch (Exception e) {
-            // consumer가 ACK/재처리 정책 결정
             log.error(
-                    "Malformed tick message. symbol={}, price={}, quantity={}, eventTime={}",
-                    symbol, priceStr, quantityStr, eventTimeStr, e
+                    "Failed to handle tick raw message. payload={}",
+                    value,
+                    e
             );
-            throw e;
+            return false;
         }
     }
 }

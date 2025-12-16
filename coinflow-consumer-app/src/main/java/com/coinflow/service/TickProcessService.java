@@ -1,20 +1,20 @@
-package com.coinflow.process;
+package com.coinflow.service;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
-import com.coinflow.processor.OhlcProcessor;
+import com.coinflow.domain.ohlc.service.OhlcService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
-@Component
+@Service
 @RequiredArgsConstructor
 @Slf4j
-public class TickProcessor {
+public class TickProcessService {
 
-    private final OhlcProcessor ohlcProcessor;
+    private final OhlcService ohlcService;
 
     public void process(TickRawEvent event) {
-        ohlcProcessor.process(event);
+        ohlcService.process(event);
 
         log.debug(
                 "tick. symbol={}, price={}, time={}",
