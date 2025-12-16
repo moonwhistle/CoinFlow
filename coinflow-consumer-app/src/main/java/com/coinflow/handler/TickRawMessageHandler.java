@@ -33,16 +33,16 @@ public class TickRawMessageHandler {
                     new BigDecimal(value.get(QUANTITY)),
                     Instant.parse(value.get(EVENT_TIME))
             );
-
             tickProcessService.process(event);
-            return true;
 
+            return true;
         } catch (Exception e) {
             log.error(
                     "Failed to handle tick raw message. payload={}",
                     value,
                     e
             );
+
             return false;
         }
     }
