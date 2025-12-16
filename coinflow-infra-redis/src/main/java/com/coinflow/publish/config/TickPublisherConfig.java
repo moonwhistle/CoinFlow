@@ -1,7 +1,7 @@
-package com.coinflow.config;
+package com.coinflow.publish.config;
 
 import com.coinflow.domain.tick.publisher.TickPublisher;
-import com.coinflow.stream.RedisStreamTickPublisher;
+import com.coinflow.publish.stream.RedisStreamTickPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;

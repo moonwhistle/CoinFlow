@@ -7,9 +7,9 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 @SpringBootApplication(
         exclude = DataSourceAutoConfiguration.class
 )
-public class CollectorApplication {
+public class ConsumerApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(CollectorApplication.class, args);
+        SpringApplication.run(ConsumerApplication.class, args);
     }
 }
