@@ -1,0 +1,6 @@
+redis:
+  stream:
+    tick:
+      stream-key: tick:raw
+      group: tick-consumer-group
+      consumer-name: consumer-1
