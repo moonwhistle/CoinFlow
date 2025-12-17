@@ -19,7 +19,7 @@ public class Ohlc1mService {
     private final Ohlc1mRepository ohlc1mRepository;
 
     @Transactional
-    public void save(Symbol symbol, LocalDateTime bucketTime, Ohlc1mAccumulator acc) {
+    public void applyAndSave(Symbol symbol, LocalDateTime bucketTime, Ohlc1mAccumulator acc) {
         Ohlc1m saved = Ohlc1m.builder()
                 .symbol(symbol)
                 .bucketTime(bucketTime)
