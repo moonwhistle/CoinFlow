@@ -1,10 +1,14 @@
 package com.coinflow.domain.ohlc.service;
 
+import com.coinflow.common.exception.CoreErrorCode;
+import com.coinflow.common.exception.CoreException;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
+import com.coinflow.process.aggregate.Ohlc1mAccumulator;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,16 +19,24 @@ public class Ohlc1mService {
     private final Ohlc1mRepository ohlc1mRepository;
 
     @Transactional
-    public Ohlc1m findOrCreateForUpdate(Symbol symbol, LocalDateTime bucketTime) {
-        return ohlc1mRepository.findForUpdate(symbol, bucketTime)
-                .orElseGet(() -> Ohlc1m.builder()
-                        .symbol(symbol)
-                        .bucketTime(bucketTime)
-                        .build());
-    }
+    public void save(Symbol symbol, LocalDateTime bucketTime, Ohlc1mAccumulator acc) {
+        Ohlc1m saved = Ohlc1m.builder()
+                .symbol(symbol)
+                .bucketTime(bucketTime)
+                .build();
 
-    @Transactional
-    public Ohlc1m save(Ohlc1m ohlc1m) {
-        return ohlc1mRepository.save(ohlc1m);
+        saved.apply(
+                acc.getOpen(),
+                acc.getHigh(),
+                acc.getLow(),
+                acc.getClose(),
+                acc.getVolume()
+        );
+
+        try {
+            ohlc1mRepository.save(saved);
+        } catch (DataIntegrityViolationException e) {
+            throw new CoreException(CoreErrorCode.DUPLICATE_OHLC_1M);
+        }
     }
 }

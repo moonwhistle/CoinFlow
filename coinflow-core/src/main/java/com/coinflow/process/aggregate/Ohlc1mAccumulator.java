@@ -7,11 +7,10 @@ import lombok.Getter;
 @Getter
 public class Ohlc1mAccumulator {
 
-    private BigDecimal open;
+    private final BigDecimal open;
     private BigDecimal high;
     private BigDecimal low;
     private BigDecimal close;
-
     private long volume;
 
     /** close 결정용 (late tick 보정) */

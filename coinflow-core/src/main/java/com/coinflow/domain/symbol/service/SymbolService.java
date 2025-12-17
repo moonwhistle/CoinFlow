@@ -15,8 +15,8 @@ public class SymbolService {
     private final SymbolRepository symbolRepository;
 
     @Transactional(readOnly = true)
-    public Symbol findBySymbol(String symbol) {
-        return symbolRepository.findBySymbol(symbol)
+    public Symbol findSymbol(Long symbolId) {
+        return symbolRepository.findById(symbolId)
                 .orElseThrow(() -> new CoreException(CoreErrorCode.NOT_FOUND_SYMBOL));
     }
 }
