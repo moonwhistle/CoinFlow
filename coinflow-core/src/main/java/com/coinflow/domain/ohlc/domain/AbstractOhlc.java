@@ -70,7 +70,11 @@ public abstract class AbstractOhlc {
      * Tick 반영
      */
     public void applyTick(BigDecimal price, long volume) {
-        if (this.openPrice == null) {
+        if (price == null) {
+            return;
+        }
+
+        if (openPrice == null) {
             this.openPrice = price;
             this.highPrice = price;
             this.lowPrice = price;
@@ -79,9 +83,15 @@ public abstract class AbstractOhlc {
             return;
         }
 
-        this.highPrice = this.highPrice.max(price);
-        this.lowPrice = this.lowPrice.min(price);
+        if (highPrice == null || price.compareTo(highPrice) > 0) {
+            this.highPrice = price;
+        }
+
+        if (lowPrice == null || price.compareTo(lowPrice) < 0) {
+            this.lowPrice = price;
+        }
+
         this.closePrice = price;
-        this.volume += volume;
+        this.volume = (this.volume == null ? 0L : this.volume) + volume;
     }
 }

@@ -1,7 +1,7 @@
 package com.coinflow.service;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
-import com.coinflow.domain.ohlc.service.OhlcService;
+import com.coinflow.process.facade.OhlcFacade;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class TickProcessService {
 
-    private final OhlcService ohlcService;
+    private final OhlcFacade ohlcFacade;
 
     public void process(TickRawEvent event) {
         log.info(
@@ -22,7 +22,7 @@ public class TickProcessService {
         );
 
         try {
-            ohlcService.process(event);
+            ohlcFacade.process(event);
             log.debug("[Consumer] Successfully processed tick event - symbol={}", event.symbol());
         } catch (Exception e) {
             log.error(
