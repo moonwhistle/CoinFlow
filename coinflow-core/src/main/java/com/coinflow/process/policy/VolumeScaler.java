@@ -14,15 +14,13 @@ public final class VolumeScaler {
 
     private static final int SCALE = 8; // 8자리 고정
     private static final RoundingMode ROUNDING = RoundingMode.DOWN;
-    private static final BigDecimal SCALE_FACTOR = BigDecimal.TEN
-            .pow(SCALE);
+    private static final BigDecimal SCALE_FACTOR = BigDecimal.TEN.pow(SCALE);
 
     private VolumeScaler() {
     }
 
     public static long toLong(BigDecimal quantity) {
         validate(quantity);
-
         BigDecimal scaled = quantity.multiply(SCALE_FACTOR)
                 .setScale(0, ROUNDING);
 
@@ -37,6 +35,7 @@ public final class VolumeScaler {
         if (quantity == null) {
             throw new CoreException(CoreErrorCode.TICK_INVALID_QUANTITY);
         }
+
         if (quantity.signum() < 0) {
             throw new CoreException(CoreErrorCode.TICK_INVALID_QUANTITY);
         }
