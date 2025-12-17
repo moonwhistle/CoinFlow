@@ -4,5 +4,6 @@ public enum MarketType {
 
     EQUITY, // 주식
     ETF,    // ETF
-    INDEX   // 지수
+    INDEX,  // 지수
+    SPOT
 }
