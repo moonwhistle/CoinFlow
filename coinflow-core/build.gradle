@@ -7,5 +7,9 @@ plugins {
 dependencies {
     implementation project(':coinflow-common')
 
+    // jpa
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // postgre
+    implementation 'org.postgresql:postgresql'
 }
