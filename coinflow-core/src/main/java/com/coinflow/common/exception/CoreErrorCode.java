@@ -6,7 +6,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum CoreErrorCode implements BaseErrorCode {
 
-    TICK_INVALID_QUANTITY("CORE-001", "Tick quantity must be non-null and non-negative", 500),
+    // policy
+    TICK_INVALID_QUANTITY("POLICY-001", "Tick quantity must be non-null and non-negative", 500),
+
+    // domain - symbol
+    NOT_FOUND_SYMBOL("SYM-001", "Not Found Symbol", 404),
     ;
 
     private final String code;
