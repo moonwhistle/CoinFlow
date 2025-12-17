@@ -65,33 +65,4 @@ public abstract class AbstractOhlc {
     protected void preUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
-
-    /**
-     * Tick 반영
-     */
-    public void applyTick(BigDecimal price, long volume) {
-        if (price == null) {
-            return;
-        }
-
-        if (openPrice == null) {
-            this.openPrice = price;
-            this.highPrice = price;
-            this.lowPrice = price;
-            this.closePrice = price;
-            this.volume = volume;
-            return;
-        }
-
-        if (highPrice == null || price.compareTo(highPrice) > 0) {
-            this.highPrice = price;
-        }
-
-        if (lowPrice == null || price.compareTo(lowPrice) < 0) {
-            this.lowPrice = price;
-        }
-
-        this.closePrice = price;
-        this.volume = (this.volume == null ? 0L : this.volume) + volume;
-    }
 }
