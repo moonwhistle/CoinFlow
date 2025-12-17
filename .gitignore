@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Spring local consumer config (DB credentials)
+**/application-consumer.yml
