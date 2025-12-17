@@ -11,6 +11,9 @@ public enum CoreErrorCode implements BaseErrorCode {
 
     // domain - symbol
     NOT_FOUND_SYMBOL("SYM-001", "Not Found Symbol", 404),
+
+    // domain - ohlc
+    DUPLICATE_OHLC_1M("O1M-001", "Duplicated row", 400)
     ;
 
     private final String code;

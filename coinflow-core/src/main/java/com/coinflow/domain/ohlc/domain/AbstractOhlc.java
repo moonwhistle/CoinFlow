@@ -65,4 +65,18 @@ public abstract class AbstractOhlc {
     protected void preUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+
+    public void apply(
+            BigDecimal openPrice,
+            BigDecimal highPrice,
+            BigDecimal lowPrice,
+            BigDecimal closePrice,
+            Long volume
+    ) {
+        this.openPrice = openPrice;
+        this.highPrice = highPrice;
+        this.lowPrice = lowPrice;
+        this.closePrice = closePrice;
+        this.volume = volume;
+    }
 }
