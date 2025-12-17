@@ -19,4 +19,10 @@ public class SymbolService {
         return symbolRepository.findById(symbolId)
                 .orElseThrow(() -> new CoreException(CoreErrorCode.NOT_FOUND_SYMBOL));
     }
+
+    @Transactional(readOnly = true)
+    public Symbol findBySymbol(String symbol) {
+        return symbolRepository.findBySymbol(symbol)
+                .orElseThrow(() -> new CoreException(CoreErrorCode.NOT_FOUND_SYMBOL));
+    }
 }
