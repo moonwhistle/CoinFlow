@@ -8,11 +8,13 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class Ohlc1mFlushScheduler {
 
     private static final ZoneOffset UTC = ZoneOffset.UTC;
@@ -38,7 +40,13 @@ public class Ohlc1mFlushScheduler {
                 continue;
             }
 
-            flushService.flush(key, acc);
+            try {
+                flushService.flush(key, acc);
+            } catch (Exception e) {
+                log.error("Failed to flush bucket: symbol={}, bucket={}",
+                        key.symbolId(), key.bucket(), e);
+                // TODO: 실패한 버킷을 별도 큐에 적재하여 재시도 로직 구현 고려
+            }
         }
     }
 
