@@ -1,4 +1,4 @@
-package com.coinflow.process.facade;
+package com.coinflow.process.service;
 
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-public class OhlcFacade {
+public class Ohlc1mAggregationService {
 
     private final Ohlc1mAggregationStore ohlc1MAggregationStore;
     private final SymbolService symbolService;
