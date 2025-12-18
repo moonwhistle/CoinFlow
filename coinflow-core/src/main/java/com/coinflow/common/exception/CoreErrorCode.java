@@ -18,8 +18,10 @@ public enum CoreErrorCode implements BaseErrorCode {
     // domain - rollup
     ROLLUP_INVALID_INTERVAL("ROLLUP-001", "Invalid rollup interval", 500),
     ROLLUP_CHECKPOINT_BACKWARD("ROLLUP-002", "Rollup checkpoint cannot move backwards", 500),
-    ROLLUP_TIME_RANGE_ERROR("ROLLUP-003", "Invalid rollup time range", 500)
+    ROLLUP_TIME_RANGE_ERROR("ROLLUP-003", "Invalid rollup time range", 500),
+    ROLLUP_INSUFFICIENT_SOURCE_DATA("ROLLUP-004", "Insufficent data", 500)
     ;
+
 
     private final String code;
     private final String message;
