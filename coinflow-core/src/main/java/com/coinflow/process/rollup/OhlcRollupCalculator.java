@@ -1,6 +1,5 @@
 package com.coinflow.process.rollup;
 
-import static com.coinflow.common.exception.CoreErrorCode.ROLLUP_INSUFFICIENT_SOURCE_DATA;
 import static com.coinflow.common.exception.CoreErrorCode.ROLLUP_TIME_RANGE_ERROR;
 
 import com.coinflow.common.exception.CoreException;
@@ -10,59 +9,43 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
+import java.util.Optional;
 
-/**
- * OHLC 캔들(1m/5m/30m) 목록을 더 큰 버킷(5m/30m/1d)으로 롤업한다.
- */
 public final class OhlcRollupCalculator {
 
-    private OhlcRollupCalculator() {
-    }
+    private OhlcRollupCalculator() {}
 
-    public static <T extends OhlcCandle> OhlcRollup rollup(List<T> candles, OhlcInterval sourceInterval,
-                                                           OhlcInterval targetInterval, LocalDateTime bucketStart) {
-        validateInput(candles, sourceInterval, targetInterval, bucketStart);
-
-        List<T> sorted = sortByBucketTime(candles);
-
-        validateCandleCount(sorted, sourceInterval, targetInterval);
-        validateBucketRange(sorted, targetInterval, bucketStart);
-
-        return calculate(sorted);
-    }
-
-    private static <T extends OhlcCandle> void validateInput(List<T> candles, OhlcInterval sourceInterval,
-                                                             OhlcInterval targetInterval, LocalDateTime bucketStart) {
-        if (candles == null || candles.isEmpty()) {
-            throw new CoreException(ROLLUP_INSUFFICIENT_SOURCE_DATA);
+    public static <T extends OhlcCandle> Optional<OhlcRollup> tryRollup(List<T> candles, OhlcInterval sourceInterval, OhlcInterval targetInterval, LocalDateTime bucketStart) {
+        if (!isReady(candles, sourceInterval, targetInterval, bucketStart)) {
+            return Optional.empty();
         }
 
+        return Optional.of(calculate(sortedCopy(candles)));
+    }
+
+    private static <T extends OhlcCandle> boolean isReady(List<T> candles, OhlcInterval sourceInterval, OhlcInterval targetInterval, LocalDateTime bucketStart) {
+        if (candles == null || candles.isEmpty()) {
+            return false; // 아직 데이터 부족
+        }
         if (sourceInterval == null || targetInterval == null || bucketStart == null) {
             throw new CoreException(ROLLUP_TIME_RANGE_ERROR);
         }
-    }
 
-    private static <T extends OhlcCandle> void validateCandleCount(List<T> candles, OhlcInterval sourceInterval,
-                                                                   OhlcInterval targetInterval) {
         int expected = targetInterval.requiredCandleCount(sourceInterval);
-
         if (candles.size() < expected) {
-            throw new CoreException(ROLLUP_INSUFFICIENT_SOURCE_DATA);
+            return false; // 아직 미완성
         }
-    }
 
-    private static <T extends OhlcCandle> void validateBucketRange(List<T> candles, OhlcInterval targetInterval,
-                                                                   LocalDateTime bucketStart) {
         LocalDateTime bucketEnd = bucketStart.plus(targetInterval.duration());
+        for (OhlcCandle c : candles) {
+            LocalDateTime t = c.getBucketTime();
 
-        for (OhlcCandle candle : candles) {
-            LocalDateTime time = candle.getBucketTime();
-
-            if (time == null || time.isBefore(bucketStart) || !time.isBefore(bucketEnd)) {
+            if (t.isBefore(bucketStart) || !t.isBefore(bucketEnd)) {
                 throw new CoreException(ROLLUP_TIME_RANGE_ERROR);
             }
         }
+
+        return true;
     }
 
     private static <T extends OhlcCandle> OhlcRollup calculate(List<T> sorted) {
@@ -80,15 +63,13 @@ public final class OhlcRollupCalculator {
                 .orElse(open);
 
         long volume = sorted.stream()
-                .map(OhlcCandle::getVolume)
-                .filter(Objects::nonNull)
-                .mapToLong(Long::longValue)
+                .mapToLong(OhlcCandle::getVolume)
                 .sum();
 
         return new OhlcRollup(open, high, low, close, volume);
     }
 
-    private static <T extends OhlcCandle> List<T> sortByBucketTime(List<T> candles) {
+    private static <T extends OhlcCandle> List<T> sortedCopy(List<T> candles) {
         return candles.stream()
                 .sorted(Comparator.comparing(OhlcCandle::getBucketTime))
                 .toList();
