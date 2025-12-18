@@ -7,6 +7,7 @@ import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.process.aggregate.OhlcAccumulator;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -38,5 +39,10 @@ public class Ohlc1mService {
         } catch (DataIntegrityViolationException e) {
             throw new CoreException(CoreErrorCode.DUPLICATE_OHLC_1M);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<Ohlc1m> findCandlesInBucketRange(LocalDateTime startInclusive, LocalDateTime endExclusive) {
+        return ohlc1mRepository.findAllByBucketTimeBetween(startInclusive, endExclusive);
     }
 }
