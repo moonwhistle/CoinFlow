@@ -1,5 +1,8 @@
 package com.coinflow.domain.rollup.domain.vo;
 
+import static com.coinflow.common.exception.CoreErrorCode.ROLLUP_INVALID_INTERVAL;
+
+import com.coinflow.common.exception.CoreException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
@@ -17,6 +20,21 @@ public enum OhlcInterval {
 
     public Duration duration() {
         return duration;
+    }
+
+    public int requiredCandleCount(OhlcInterval sourceInterval) {
+        if (sourceInterval == null) {
+            throw new CoreException(ROLLUP_INVALID_INTERVAL);
+        }
+
+        long targetMinutes = this.duration.toMinutes();
+        long sourceMinutes = sourceInterval.duration.toMinutes();
+
+        if (sourceMinutes <= 0 || targetMinutes <= 0 || targetMinutes % sourceMinutes != 0) {
+            throw new CoreException(ROLLUP_INVALID_INTERVAL);
+        }
+
+        return (int) (targetMinutes / sourceMinutes);
     }
 
     public LocalDateTime nextBucket(LocalDateTime current) {
