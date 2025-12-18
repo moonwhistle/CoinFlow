@@ -13,7 +13,12 @@ public enum CoreErrorCode implements BaseErrorCode {
     NOT_FOUND_SYMBOL("SYM-001", "Not Found Symbol", 404),
 
     // domain - ohlc
-    DUPLICATE_OHLC_1M("O1M-001", "Duplicated row", 400)
+    DUPLICATE_OHLC_1M("O1M-001", "Duplicated row", 400),
+
+    // domain - rollup
+    ROLLUP_INVALID_INTERVAL("ROLLUP-001", "Invalid rollup interval", 500),
+    ROLLUP_CHECKPOINT_BACKWARD("ROLLUP-002", "Rollup checkpoint cannot move backwards", 500),
+    ROLLUP_TIME_RANGE_ERROR("ROLLUP-003", "Invalid rollup time range", 500)
     ;
 
     private final String code;
