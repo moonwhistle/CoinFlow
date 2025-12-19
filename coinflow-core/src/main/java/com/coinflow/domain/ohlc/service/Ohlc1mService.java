@@ -43,6 +43,6 @@ public class Ohlc1mService {
 
     @Transactional(readOnly = true)
     public List<Ohlc1m> findCandlesInBucketRange(LocalDateTime startInclusive, LocalDateTime endExclusive) {
-        return ohlc1mRepository.findAllByBucketTimeBetween(startInclusive, endExclusive);
+        return ohlc1mRepository.findCandlesInBucketRange(startInclusive, endExclusive);
     }
 }
