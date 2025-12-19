@@ -13,6 +13,7 @@ public interface Ohlc1mRepository extends JpaRepository<Ohlc1m, Long> {
             from Ohlc1m o
             where o.bucketTime >= :start
               and o.bucketTime < :end
+              order by o.bucketTime asc
             """)
     List<Ohlc1m> findCandlesInBucketRange(LocalDateTime start, LocalDateTime end);
 }
