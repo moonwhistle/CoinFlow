@@ -31,7 +31,7 @@ public final class OhlcRollupCalculator {
      */
     private static <T extends OhlcCandle> boolean canRollup(List<T> candles, OhlcInterval targetInterval,
                                                             LocalDateTime bucketStart) {
-        if (candles == null || candles.isEmpty()) {
+        if (candles == null || candles.isEmpty() || targetInterval == null || bucketStart == null) {
             return false;
         }
 
