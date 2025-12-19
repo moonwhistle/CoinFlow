@@ -10,7 +10,7 @@ services:
       [
         "redis-server",
         "--bind", "0.0.0.0",
-        "--appendonly", "yes",
+        "--appendonly", "no",
         "--protected-mode", "no"
       ]
     restart: always
