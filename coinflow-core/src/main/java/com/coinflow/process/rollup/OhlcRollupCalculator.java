@@ -7,7 +7,6 @@ import com.coinflow.domain.ohlc.domain.OhlcCandle;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,7 +23,7 @@ public final class OhlcRollupCalculator {
 
         validateRange(candles, targetInterval, bucketStart);
 
-        return Optional.of(calculate(sortedCopy(candles)));
+        return Optional.of(calculate(candles));
     }
 
     /**
@@ -58,6 +57,9 @@ public final class OhlcRollupCalculator {
         }
     }
 
+    /**
+     * @param sorted bucketTime 기준 오름차순 정렬된 데이터
+     */
     private static <T extends OhlcCandle> OhlcRollup calculate(List<T> sorted) {
         BigDecimal open = sorted.get(0).getOpenPrice();
         BigDecimal close = sorted.get(sorted.size() - 1).getClosePrice();
@@ -77,11 +79,5 @@ public final class OhlcRollupCalculator {
                 .sum();
 
         return new OhlcRollup(open, high, low, close, volume);
-    }
-
-    private static <T extends OhlcCandle> List<T> sortedCopy(List<T> candles) {
-        return candles.stream()
-                .sorted(Comparator.comparing(OhlcCandle::getBucketTime))
-                .toList();
     }
 }
