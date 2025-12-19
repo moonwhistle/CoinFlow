@@ -1,0 +1,22 @@
+# Local development only
+
+services:
+  redis:
+    image: redis:7.2
+    container_name: redis-local
+    ports:
+      - "6379:6379"
+    command:
+      [
+        "redis-server",
+        "--bind", "0.0.0.0",
+        "--appendonly", "yes",
+        "--protected-mode", "no"
+      ]
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s

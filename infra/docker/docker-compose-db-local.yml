@@ -1,0 +1,19 @@
+# Local development only
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ohlc-postgres-local
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ohlc
+      POSTGRES_USER: ohlc_user
+      POSTGRES_PASSWORD: ohlc_pass
+      TZ: Asia/Seoul
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+
