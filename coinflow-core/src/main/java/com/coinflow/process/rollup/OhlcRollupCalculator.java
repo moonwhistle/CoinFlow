@@ -76,7 +76,7 @@ public final class OhlcRollupCalculator {
 
         long volume = sorted.stream()
                 .mapToLong(OhlcCandle::getVolume)
-                .sum();
+                .reduce(0L, Math::addExact);
 
         return new OhlcRollup(open, high, low, close, volume);
     }
