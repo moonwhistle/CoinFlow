@@ -4,8 +4,14 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Getter;
 
+/**
+ * 시간 버킷(1m/5m/30m/...) 단위의 OHLC 누적기.
+ *
+ * <p>open은 최초 가격, close는 가장 늦은 eventTime을 가진 가격으로 결정한다.</p>
+ * <p>volume은 고정 소수점 스케일링된 long(VolumeScaler)을 누적한다.</p>
+ */
 @Getter
-public class Ohlc1mAccumulator {
+public class OhlcAccumulator {
 
     private final BigDecimal open;
     private BigDecimal high;
@@ -13,20 +19,19 @@ public class Ohlc1mAccumulator {
     private BigDecimal close;
     private long volume;
 
-    /** close 결정용 (late tick 보정) */
     private Instant closeTime;
 
-    private Ohlc1mAccumulator(BigDecimal price, long volume, Instant eventTime) {
-        this.open = price;
-        this.high = price;
-        this.low = price;
-        this.close = price;
+    private OhlcAccumulator(BigDecimal open, long volume, Instant eventTime) {
+        this.open = open;
+        this.high = open;
+        this.low = open;
+        this.close = open;
         this.volume = volume;
         this.closeTime = eventTime;
     }
 
-    public static Ohlc1mAccumulator first(BigDecimal price, long volume, Instant eventTime) {
-        return new Ohlc1mAccumulator(price, volume, eventTime);
+    public static OhlcAccumulator first(BigDecimal price, long volume, Instant eventTime) {
+        return new OhlcAccumulator(price, volume, eventTime);
     }
 
     public void apply(BigDecimal price, long vol, Instant eventTime) {
@@ -37,13 +42,13 @@ public class Ohlc1mAccumulator {
             low = price;
         }
 
-        // late tick 보정
+        // late tick 보정 (더 늦은 eventTime의 가격을 close로)
         if (eventTime.isAfter(closeTime)) {
             closeTime = eventTime;
             close = price;
         }
 
-        // volume overflow
+        // volume overflow 검증
         volume = Math.addExact(volume, vol);
     }
 }

@@ -22,7 +22,7 @@ import lombok.NoArgsConstructor;
 @MappedSuperclass
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
-public abstract class AbstractOhlc {
+public abstract class AbstractOhlc implements OhlcCandle {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
