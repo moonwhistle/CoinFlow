@@ -50,5 +50,3 @@ public abstract class BaseOhlcAggregationStore implements OhlcAggregationStore {
         return store.get(key);
     }
 }
-
-
