@@ -27,7 +27,7 @@ public class Ohlc5mRollupService {
     private final BucketCloseChecker bucketCloseChecker;
 
     public void rollupIfClosed(Long symbolId, LocalDateTime bucketStart) {
-        if (!bucketCloseChecker.isClosed(INTERVAL, bucketStart)) {
+        if (bucketCloseChecker.isOpen(INTERVAL, bucketStart)) {
             return;
         }
 
