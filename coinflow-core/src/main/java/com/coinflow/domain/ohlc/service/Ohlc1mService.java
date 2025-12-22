@@ -42,7 +42,7 @@ public class Ohlc1mService {
     }
 
     @Transactional(readOnly = true)
-    public List<Ohlc1m> findCandlesInBucketRange(LocalDateTime startInclusive, LocalDateTime endExclusive) {
-        return ohlc1mRepository.findCandlesInBucketRange(startInclusive, endExclusive);
+    public List<Ohlc1m> findCandlesInBucketRange(Long symbolId, LocalDateTime startInclusive, LocalDateTime endExclusive) {
+        return ohlc1mRepository.findCandlesInBucketRange(symbolId, startInclusive, endExclusive);
     }
 }

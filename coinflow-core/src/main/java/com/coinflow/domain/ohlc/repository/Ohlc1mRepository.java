@@ -5,15 +5,21 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface Ohlc1mRepository extends JpaRepository<Ohlc1m, Long> {
 
     @Query("""
             select o
             from Ohlc1m o
-            where o.bucketTime >= :start
+            where o.symbol.id = :symbolId
+              and o.bucketTime >= :start
               and o.bucketTime < :end
-              order by o.bucketTime asc
+            order by o.bucketTime asc
             """)
-    List<Ohlc1m> findCandlesInBucketRange(LocalDateTime start, LocalDateTime end);
+    List<Ohlc1m> findCandlesInBucketRange(
+            @Param("symbolId") Long symbolId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 }
