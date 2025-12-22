@@ -15,8 +15,8 @@ public class BucketCloseChecker {
 
     private final BucketTimeProvider timeProvider;
 
-    public boolean isClosed(OhlcInterval interval, LocalDateTime bucketStart) {
+    public boolean isOpen(OhlcInterval interval, LocalDateTime bucketStart) {
         LocalDateTime now = timeProvider.nowUtc();
-        return !now.isBefore(bucketStart.plus(interval.duration()));
+        return now.isBefore(bucketStart.plus(interval.duration()));
     }
 }
