@@ -13,7 +13,6 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -27,14 +26,13 @@ public class Ohlc5mRollupService {
     private final SymbolService symbolService;
     private final BucketCloseChecker bucketCloseChecker;
 
-    @Transactional
     public void rollupIfClosed(Long symbolId, LocalDateTime bucketStart) {
         if (!bucketCloseChecker.isClosed(INTERVAL, bucketStart)) {
             return;
         }
 
         LocalDateTime endExclusive = bucketStart.plus(INTERVAL.duration());
-        List<Ohlc1m> candles = ohlc1mService.findCandlesInBucketRange(bucketStart, endExclusive);
+        List<Ohlc1m> candles = ohlc1mService.findCandlesInBucketRange(symbolId, bucketStart, endExclusive);
 
         if (candles.isEmpty()) {
             return;
@@ -43,13 +41,13 @@ public class Ohlc5mRollupService {
         Symbol symbol = symbolService.findSymbol(symbolId);
         OhlcRollupCalculator.rollup(candles)
                 .ifPresent(rollup -> {
+                    ohlc5mService.upsert(symbol, bucketStart, rollup);
                     log.info(
                             "5m rollup upsert. symbol={}, bucketStart={}, count={}",
                             symbolId,
                             bucketStart,
                             candles.size()
                     );
-                    ohlc5mService.upsert(symbol, bucketStart, rollup);
                 });
     }
 }
