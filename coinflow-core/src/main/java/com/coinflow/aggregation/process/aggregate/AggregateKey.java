@@ -1,4 +1,4 @@
-package com.coinflow.process.aggregate;
+package com.coinflow.aggregation.process.aggregate;
 
 import java.time.LocalDateTime;
 
