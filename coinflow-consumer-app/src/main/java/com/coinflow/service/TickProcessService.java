@@ -14,13 +14,6 @@ public class TickProcessService {
     private final Ohlc1mAggregationService ohlc1MAggregationService;
 
     public void process(TickRawEvent event) {
-        /*log.info(
-                "[Consumer] Processing tick event - symbol={}, price={}, eventTime={}",
-                event.symbol(),
-                event.price(),
-                event.eventTime()
-        );*/
-
         try {
             ohlc1MAggregationService.process(event);
             log.debug("[Consumer] Successfully processed tick event - symbol={}", event.symbol());

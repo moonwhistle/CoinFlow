@@ -31,14 +31,13 @@ public class Ohlc1mFlushScheduler {
             }
 
             OhlcAccumulator acc = store.peek(key);
-
             if (acc == null) {
+                store.remove(key);
                 continue;
             }
 
             try {
                 flushService.flush(key, acc);
-                store.remove(key);
             } catch (Exception e) {
                 log.error(
                         "Failed to flush bucket: symbol={}, bucket={}",
@@ -46,6 +45,8 @@ public class Ohlc1mFlushScheduler {
                         key.bucket(),
                         e
                 );
+            } finally {
+                store.remove(key);
             }
         }
     }

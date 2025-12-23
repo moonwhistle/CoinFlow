@@ -21,16 +21,7 @@ public class Ohlc1mFlushService {
     @Transactional
     public void flush(AggregateKey key, OhlcAccumulator acc) {
         Symbol symbol = symbolService.findSymbol(key.symbolId());
-
-        ohlc1mService.applyAndSave(
-                symbol,
-                key.bucket(),
-                acc
-        );
-
-        eventPublisher.publishAfterCommit(
-                symbol.getId(),
-                key.bucket()
-        );
+        ohlc1mService.applyAndSave(symbol, key.bucket(), acc);
+        eventPublisher.publish(symbol.getId(), key.bucket());
     }
 }
