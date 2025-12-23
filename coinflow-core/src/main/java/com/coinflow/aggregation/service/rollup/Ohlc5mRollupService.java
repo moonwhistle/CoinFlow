@@ -30,9 +30,9 @@ public class Ohlc5mRollupService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void rollupInNewTransaction(Long symbolId, LocalDateTime bucketStart1m) {
-        LocalDateTime bucketStart5m = OhlcInterval.M5.resolveBucketStart(bucketStart1m);
+        LocalDateTime bucketStart5m = INTERVAL.resolveBucketStart(bucketStart1m);
         rollupIfClosed(symbolId, bucketStart5m);
-        rollupIfClosed(symbolId, bucketStart5m.minusMinutes(5));
+        rollupIfClosed(symbolId, bucketStart5m.minus(INTERVAL.duration()));
     }
 
     private void rollupIfClosed(Long symbolId, LocalDateTime bucketStart) {
