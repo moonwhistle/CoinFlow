@@ -3,7 +3,7 @@ package com.coinflow.domain.ohlc.service;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
-import com.coinflow.process.aggregate.OhlcAccumulator;
+import com.coinflow.aggregation.process.aggregate.OhlcAccumulator;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

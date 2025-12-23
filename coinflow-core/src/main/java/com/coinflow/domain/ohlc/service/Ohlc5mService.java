@@ -3,7 +3,7 @@ package com.coinflow.domain.ohlc.service;
 import com.coinflow.domain.ohlc.domain.Ohlc5m;
 import com.coinflow.domain.ohlc.repository.Ohlc5mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
-import com.coinflow.process.rollup.OhlcRollup;
+import com.coinflow.aggregation.process.rollup.OhlcRollup;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
