@@ -35,8 +35,7 @@ public class Ohlc5mRollupService {
         rollupIfClosed(symbolId, bucketStart5m.minusMinutes(5));
     }
 
-    @Transactional
-    protected void rollupIfClosed(Long symbolId, LocalDateTime bucketStart) {
+    private void rollupIfClosed(Long symbolId, LocalDateTime bucketStart) {
         if (bucketCloseChecker.isOpen(INTERVAL, bucketStart)) {
             return;
         }
