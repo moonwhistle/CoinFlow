@@ -1,4 +1,4 @@
-package com.coinflow.process.util;
+package com.coinflow.aggregation.process.time;
 
 import java.time.Instant;
 import java.time.LocalDate;

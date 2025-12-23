@@ -3,7 +3,7 @@ package com.coinflow.domain.ohlc.service;
 import com.coinflow.domain.ohlc.domain.Ohlc5m;
 import com.coinflow.domain.ohlc.repository.Ohlc5mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
-import com.coinflow.process.rollup.OhlcRollup;
+import com.coinflow.aggregation.process.rollup.OhlcRollup;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,8 +16,8 @@ public class Ohlc5mService {
     private final Ohlc5mRepository ohlc5mRepository;
 
     @Transactional
-    public void upsert(Symbol symbol, LocalDateTime bucketTime, OhlcRollup rollup) {
-        Ohlc5m candle = ohlc5mRepository.findBySymbolAndBucketTime(symbol, bucketTime)
+    public void upsert(Long symbolId, Symbol symbol, LocalDateTime bucketTime, OhlcRollup rollup) {
+        Ohlc5m candle = ohlc5mRepository.findBySymbolIdAndBucketTime(symbolId, bucketTime)
                 .orElseGet(() -> Ohlc5m.builder()
                         .symbol(symbol)
                         .bucketTime(bucketTime)

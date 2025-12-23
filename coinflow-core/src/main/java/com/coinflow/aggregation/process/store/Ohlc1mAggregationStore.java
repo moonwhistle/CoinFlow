@@ -1,7 +1,7 @@
-package com.coinflow.process.store;
+package com.coinflow.aggregation.process.store;
 
 import com.coinflow.domain.tick.event.TickRawEvent;
-import com.coinflow.process.util.TimeBucket;
+import com.coinflow.aggregation.process.time.TimeBucket;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 

@@ -1,4 +1,4 @@
-package com.coinflow.process.rollup;
+package com.coinflow.aggregation.process.rollup;
 
 import java.math.BigDecimal;
 
