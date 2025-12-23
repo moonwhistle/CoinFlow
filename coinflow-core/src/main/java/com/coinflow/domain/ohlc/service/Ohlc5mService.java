@@ -16,8 +16,8 @@ public class Ohlc5mService {
     private final Ohlc5mRepository ohlc5mRepository;
 
     @Transactional
-    public void upsert(Symbol symbol, LocalDateTime bucketTime, OhlcRollup rollup) {
-        Ohlc5m candle = ohlc5mRepository.findBySymbolAndBucketTime(symbol, bucketTime)
+    public void upsert(Long symbolId, Symbol symbol, LocalDateTime bucketTime, OhlcRollup rollup) {
+        Ohlc5m candle = ohlc5mRepository.findBySymbolIdAndBucketTime(symbolId, bucketTime)
                 .orElseGet(() -> Ohlc5m.builder()
                         .symbol(symbol)
                         .bucketTime(bucketTime)
