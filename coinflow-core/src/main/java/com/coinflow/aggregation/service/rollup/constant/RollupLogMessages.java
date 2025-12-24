@@ -5,5 +5,5 @@ public final class RollupLogMessages {
     private RollupLogMessages() {
     }
 
-    public static final String ROLLUP_UPSERT = "rollup upsert. interval={}, symbol={}, bucketStart={}, count={}";
+    public static final String ROLLUP_UPSERT = "interval={}, symbol={}, bucketStart={}, count={}";
 }
