@@ -16,6 +16,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+/**
+ * 1분봉(OHLC 1m)을 소스로 상위 interval OHLC를 집계하는 실행기.
+ *
+ * <p>이 클래스는 롤업 흐름을 조율만 하며,
+ * 실제 저장은 interval에 맞는 {@link OhlcRollupUpserter}에 위임한다.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
