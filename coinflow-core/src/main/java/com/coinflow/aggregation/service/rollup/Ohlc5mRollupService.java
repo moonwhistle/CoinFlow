@@ -22,6 +22,7 @@ public class Ohlc5mRollupService {
      * <p>
      * - 현재 버킷: 정상적으로 닫혔을 때 rollup 수행
      * - 직전 버킷: 지연 도착(늦게 flush 된 1분 봉)이 직전 버킷에 영향을 줄 수 있어 재계산
+     * </p>
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void rollupInNewTransaction(Long symbolId, LocalDateTime bucketStart1m) {
