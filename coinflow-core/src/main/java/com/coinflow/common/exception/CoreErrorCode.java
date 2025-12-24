@@ -19,7 +19,11 @@ public enum CoreErrorCode implements BaseErrorCode {
     ROLLUP_INVALID_INTERVAL("ROLLUP-001", "Invalid rollup interval", 500),
     ROLLUP_CHECKPOINT_BACKWARD("ROLLUP-002", "Rollup checkpoint cannot move backwards", 500),
     ROLLUP_TIME_RANGE_ERROR("ROLLUP-003", "Invalid rollup time range", 400),
-    ROLLUP_INSUFFICIENT_SOURCE_DATA("ROLLUP-004", "Insufficent data", 503)
+    ROLLUP_INSUFFICIENT_SOURCE_DATA("ROLLUP-004", "Insufficent data", 503),
+
+    // aggregation - rollup / registry
+    ROLLUP_UPSERTER_NOT_FOUND("ROLLUP-005", "No rollup upserter registered for interval", 500),
+    ROLLUP_UPSERTER_DUPLICATED("ROLLUP-006", "Duplicate rollup upserter registered for same interval", 500),
     ;
 
 
