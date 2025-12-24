@@ -1,62 +1,32 @@
 package com.coinflow.aggregation.service.rollup;
 
+import com.coinflow.aggregation.service.rollup.executor.OhlcRollupExecutor;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
-import com.coinflow.domain.ohlc.domain.Ohlc1m;
-import com.coinflow.domain.ohlc.service.Ohlc1mService;
-import com.coinflow.domain.ohlc.service.Ohlc5mService;
-import com.coinflow.domain.symbol.domain.Symbol;
-import com.coinflow.domain.symbol.service.SymbolService;
-import com.coinflow.aggregation.process.rollup.OhlcRollupCalculator;
-import com.coinflow.aggregation.process.time.BucketCloseChecker;
 import java.time.LocalDateTime;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class Ohlc5mRollupService {
 
     private static final OhlcInterval INTERVAL = OhlcInterval.M5;
 
-    private final Ohlc1mService ohlc1mService;
-    private final Ohlc5mService ohlc5mService;
-    private final SymbolService symbolService;
-    private final BucketCloseChecker bucketCloseChecker;
+    private final OhlcRollupExecutor rollupExecutor;
 
+    /**
+     * 1분 봉 flush 이벤트(버킷 시작 시각)가 도착했을 때,
+     * 해당 1분 봉이 속한 5분 버킷과 직전 5분 버킷을 재계산한다.
+     * <p>
+     * - 현재 버킷: 정상적으로 닫혔을 때 rollup 수행
+     * - 직전 버킷: 지연 도착(늦게 flush 된 1분 봉)이 직전 버킷에 영향을 줄 수 있어 재계산
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void rollupInNewTransaction(Long symbolId, LocalDateTime bucketStart1m) {
         LocalDateTime bucketStart5m = INTERVAL.resolveBucketStart(bucketStart1m);
-        rollupIfClosed(symbolId, bucketStart5m);
-        rollupIfClosed(symbolId, bucketStart5m.minus(INTERVAL.duration()));
-    }
-
-    private void rollupIfClosed(Long symbolId, LocalDateTime bucketStart) {
-        if (bucketCloseChecker.isOpen(INTERVAL, bucketStart)) {
-            return;
-        }
-
-        LocalDateTime endExclusive = bucketStart.plus(INTERVAL.duration());
-        List<Ohlc1m> candles = ohlc1mService.findCandlesInBucketRange(symbolId, bucketStart, endExclusive);
-
-        if (candles.isEmpty()) {
-            return;
-        }
-
-        Symbol symbol = symbolService.findSymbol(symbolId);
-        OhlcRollupCalculator.rollup(candles)
-                .ifPresent(rollup -> {
-                    ohlc5mService.upsert(symbolId, symbol, bucketStart, rollup);
-                    log.info(
-                            "5m rollup upsert. symbol={}, bucketStart={}, count={}",
-                            symbolId,
-                            bucketStart,
-                            candles.size()
-                    );
-                });
+        rollupExecutor.rollupFrom1mIfClosed(symbolId, INTERVAL, bucketStart5m);
+        rollupExecutor.rollupFrom1mIfClosed(symbolId, INTERVAL, bucketStart5m.minus(INTERVAL.duration()));
     }
 }
