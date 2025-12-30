@@ -38,3 +38,6 @@ out/
 
 # Spring local consumer config (DB credentials)
 **/application-consumer.yml
+
+# Spring local api config (DB credentials)
+**/application-api.yml
