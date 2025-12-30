@@ -1,7 +1,6 @@
-package com.coinflow.aggregation.process.time;
+package com.coinflow.util;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
@@ -36,13 +35,6 @@ public final class TimeBucket {
     /** 1분 봉 기준 > 30분 봉 */
     public static LocalDateTime to30m(LocalDateTime bucket1m) {
         return truncateToMinuteBucket(bucket1m, THIRTY_MINUTE_BUCKET);
-    }
-
-    /** 1분 봉 기준 > 일봉 시작 시각 */
-    public static LocalDateTime to1d(LocalDateTime bucket1m) {
-        LocalDate date = bucket1m.toLocalDate();
-
-        return date.atStartOfDay();
     }
 
     private static LocalDateTime truncateToMinute(LocalDateTime time) {
