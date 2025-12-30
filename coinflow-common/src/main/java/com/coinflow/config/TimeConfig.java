@@ -1,4 +1,4 @@
-package com.coinflow.common.config;
+package com.coinflow.config;
 
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
