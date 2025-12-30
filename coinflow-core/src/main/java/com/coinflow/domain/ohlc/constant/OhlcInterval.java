@@ -9,7 +9,7 @@ public enum OhlcInterval {
     M1(Duration.ofMinutes(1)),
     M5(Duration.ofMinutes(5)),
     M30(Duration.ofMinutes(30)),
-    D1(Duration.ofDays(1));
+    ;
 
     private final Duration duration;
 
@@ -32,10 +32,6 @@ public enum OhlcInterval {
 
         if (this == M30) {
             return TimeBucket.to30m(bucketStart1m);
-        }
-
-        if (this == D1) {
-            return TimeBucket.to1d(bucketStart1m);
         }
 
         throw new IllegalStateException("Unsupported OhlcInterval: " + this);
