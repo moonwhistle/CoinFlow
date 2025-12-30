@@ -1,6 +1,6 @@
 package com.coinflow.domain.ohlc.constant;
 
-import com.coinflow.aggregation.process.time.TimeBucket;
+import com.coinflow.util.TimeBucket;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
