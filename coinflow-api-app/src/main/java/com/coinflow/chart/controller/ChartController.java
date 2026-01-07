@@ -32,7 +32,7 @@ public class ChartController {
 
         return ResponseEntity.ok(new OhlcChartResponse(
                 symbolId,
-                OhlcInterval.M1,
+                interval,
                 snapshots
         ));
     }
