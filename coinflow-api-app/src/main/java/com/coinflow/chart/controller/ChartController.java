@@ -1,7 +1,7 @@
 package com.coinflow.chart.controller;
 
 import com.coinflow.chart.controller.response.OhlcChartResponse;
-import com.coinflow.chart.service.Ohlc1mChartService;
+import com.coinflow.chart.service.OhlcChartService;
 import com.coinflow.common.path.chart.ChartPath;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
@@ -20,7 +20,7 @@ public class ChartController {
     private static final String DEFAULT_INTERVAL = "M1";
     public static final String DEFAULT_CANDLES_STR = "120";
 
-    private final Ohlc1mChartService ohlc1mChartService;
+    private final OhlcChartService ohlc1mChartService;
 
     @GetMapping(ChartPath.OHLC)
     public ResponseEntity<OhlcChartResponse> showOhlcChart(
@@ -28,7 +28,7 @@ public class ChartController {
             @RequestParam(defaultValue = DEFAULT_INTERVAL) OhlcInterval interval,
             @RequestParam(defaultValue = DEFAULT_CANDLES_STR) int candles
     ) {
-        List<OhlcCandleSnapshot> snapshots = ohlc1mChartService.show(symbolId);
+        List<OhlcCandleSnapshot> snapshots = ohlc1mChartService.show(symbolId, interval, candles);
 
         return ResponseEntity.ok(new OhlcChartResponse(
                 symbolId,
