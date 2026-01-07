@@ -11,13 +11,15 @@ public interface OhlcChartStore {
     Optional<List<OhlcCandleSnapshot>> get(
             Long symbolId,
             OhlcInterval interval,
+            int candles,
             LocalDateTime endExclusive
     );
 
     void put(
             Long symbolId,
             OhlcInterval interval,
+            int candles,
             LocalDateTime endExclusive,
-            List<OhlcCandleSnapshot> candles
+            List<OhlcCandleSnapshot> snapshots
     );
 }
