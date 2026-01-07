@@ -5,6 +5,7 @@ import com.coinflow.domain.ohlc.repository.Ohlc5mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.aggregation.process.rollup.OhlcRollup;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,5 +33,10 @@ public class Ohlc5mService {
         );
 
         ohlc5mRepository.save(candle);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Ohlc5m> findCandlesInBucketRange(Long symbolId, LocalDateTime startInclusive, LocalDateTime endExclusive) {
+        return ohlc5mRepository.findCandlesInBucketRange(symbolId, startInclusive, endExclusive);
     }
 }
