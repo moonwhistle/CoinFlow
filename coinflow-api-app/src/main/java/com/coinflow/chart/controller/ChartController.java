@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ChartController {
 
-    private static final String DEFAULT_INTERVAL = "1m";
+    private static final String DEFAULT_INTERVAL = "M1";
     public static final String DEFAULT_CANDLES_STR = "120";
 
     private final Ohlc1mChartService ohlc1mChartService;
@@ -25,7 +25,7 @@ public class ChartController {
     @GetMapping(ChartPath.OHLC)
     public ResponseEntity<OhlcChartResponse> showOhlcChart(
             @PathVariable Long symbolId,
-            @RequestParam(defaultValue = DEFAULT_INTERVAL) String interval,
+            @RequestParam(defaultValue = DEFAULT_INTERVAL) OhlcInterval interval,
             @RequestParam(defaultValue = DEFAULT_CANDLES_STR) int candles
     ) {
         List<OhlcCandleSnapshot> snapshots = ohlc1mChartService.show(symbolId);

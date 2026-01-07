@@ -27,21 +27,20 @@ public class RedisOhlcChartStore implements OhlcChartStore {
     public Optional<List<OhlcCandleSnapshot>> get(
             Long symbolId,
             OhlcInterval interval,
+            int candles,
             LocalDateTime endExclusive
     ) {
-        String key = OhlcCacheKey.recent(symbolId, interval, endExclusive);
-        String data = redisTemplate.opsForValue()
-                .get(key);
+        String key = OhlcCacheKey.chartKey(symbolId, interval, candles, endExclusive);
+        String raw = redisTemplate.opsForValue().get(key);
 
-        if (data == null) {
+        if (raw == null) {
             return Optional.empty();
         }
 
         try {
-            return Optional.of(deserialize(data));
+            return Optional.of(deserialize(raw));
         } catch (Exception e) {
-            redisTemplate.delete(key);
-
+            redisTemplate.delete(key); // 캐시 오염 제거
             return Optional.empty();
         }
     }
@@ -50,17 +49,17 @@ public class RedisOhlcChartStore implements OhlcChartStore {
     public void put(
             Long symbolId,
             OhlcInterval interval,
+            int candles,
             LocalDateTime endExclusive,
-            List<OhlcCandleSnapshot> candles
+            List<OhlcCandleSnapshot> snapshots
     ) {
-        String key = OhlcCacheKey.recent(symbolId, interval, endExclusive);
+        String key = OhlcCacheKey.chartKey(symbolId, interval, candles, endExclusive);
 
         try {
-            String value = serialize(candles);
             redisTemplate.opsForValue()
-                    .set(key, value, TTL);
+                    .set(key, serialize(snapshots), TTL);
         } catch (Exception ignored) {
-            // 캐시 실패해도 다시 재조회 함
+            // 캐시 실패는 무시 (read path 보호)
         }
     }
 
@@ -72,7 +71,7 @@ public class RedisOhlcChartStore implements OhlcChartStore {
         );
     }
 
-    private String serialize(List<OhlcCandleSnapshot> candles) throws JsonProcessingException {
-        return objectMapper.writeValueAsString(candles);
+    private String serialize(List<OhlcCandleSnapshot> snapshots) throws JsonProcessingException {
+        return objectMapper.writeValueAsString(snapshots);
     }
 }
