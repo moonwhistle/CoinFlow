@@ -1,12 +1,12 @@
 package com.coinflow.publish.stream;
 
-import static com.coinflow.domain.tick.event.constant.TickStreamFields.EVENT_TIME;
-import static com.coinflow.domain.tick.event.constant.TickStreamFields.PRICE;
-import static com.coinflow.domain.tick.event.constant.TickStreamFields.QUANTITY;
-import static com.coinflow.domain.tick.event.constant.TickStreamFields.SYMBOL;
+import static com.coinflow.tick.event.constant.TickStreamFields.EVENT_TIME;
+import static com.coinflow.tick.event.constant.TickStreamFields.PRICE;
+import static com.coinflow.tick.event.constant.TickStreamFields.QUANTITY;
+import static com.coinflow.tick.event.constant.TickStreamFields.SYMBOL;
 
-import com.coinflow.domain.tick.event.TickRawEvent;
-import com.coinflow.domain.tick.publisher.TickPublisher;
+import com.coinflow.tick.event.TickRawEvent;
+import com.coinflow.tick.publisher.TickPublisher;
 import com.coinflow.publish.exception.PublishErrorCode;
 import com.coinflow.publish.exception.PublishException;
 import java.util.Map;
