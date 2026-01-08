@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class Ohlc30mRollupUpserter implements OhlcRollupUpserter{
+public class Ohlc30mRollupUpserter implements OhlcRollupUpserter {
 
     private final Ohlc30mService ohlc30mService;
 
@@ -21,6 +21,15 @@ public class Ohlc30mRollupUpserter implements OhlcRollupUpserter{
 
     @Override
     public void upsert(Long symbolId, Symbol symbol, LocalDateTime bucketTime, OhlcRollup rollup) {
-        ohlc30mService.upsert(symbolId, symbol, bucketTime, rollup);
+        ohlc30mService.upsert(
+                symbolId,
+                symbol,
+                bucketTime,
+                rollup.open(),
+                rollup.high(),
+                rollup.low(),
+                rollup.close(),
+                rollup.volume()
+        );
     }
 }

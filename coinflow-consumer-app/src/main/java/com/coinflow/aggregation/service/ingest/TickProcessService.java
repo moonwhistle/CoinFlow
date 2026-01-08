@@ -1,7 +1,7 @@
 package com.coinflow.aggregation.service.ingest;
 
 import com.coinflow.aggregation.service.flush.Ohlc1mAggregationService;
-import com.coinflow.domain.tick.event.TickRawEvent;
+import com.coinflow.tick.event.TickRawEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

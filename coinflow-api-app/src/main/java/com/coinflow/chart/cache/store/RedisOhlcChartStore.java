@@ -1,6 +1,6 @@
-package com.coinflow.cache.store;
+package com.coinflow.chart.cache.store;
 
-import com.coinflow.cache.ohlc.OhlcCacheKey;
+import com.coinflow.chart.cache.ohlc.OhlcCacheKey;
 import com.coinflow.domain.ohlc.cache.OhlcChartStore;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;

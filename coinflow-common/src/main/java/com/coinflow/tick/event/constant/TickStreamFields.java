@@ -1,4 +1,4 @@
-package com.coinflow.domain.tick.event.constant;
+package com.coinflow.tick.event.constant;
 
 public final class TickStreamFields {
 
