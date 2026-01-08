@@ -6,7 +6,7 @@ import com.coinflow.client.binance.support.BinanceStreamUrlBuilder;
 import com.coinflow.config.properties.BinanceWebSocketProperties;
 import com.coinflow.handler.TickMessageHandler;
 import com.coinflow.handler.binance.BinanceTradeMessageHandler;
-import com.coinflow.domain.tick.publisher.TickPublisher;
+import com.coinflow.tick.publisher.TickPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

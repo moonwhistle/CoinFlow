@@ -2,7 +2,7 @@ package com.coinflow.aggregation.process.store;
 
 import com.coinflow.aggregation.process.aggregate.OhlcAccumulator;
 import com.coinflow.domain.symbol.domain.Symbol;
-import com.coinflow.domain.tick.event.TickRawEvent;
+import com.coinflow.tick.event.TickRawEvent;
 import com.coinflow.aggregation.process.aggregate.AggregateKey;
 import java.util.Set;
 

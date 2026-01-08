@@ -21,6 +21,15 @@ public class Ohlc5mRollupUpserter implements OhlcRollupUpserter {
 
     @Override
     public void upsert(Long symbolId, Symbol symbol, LocalDateTime bucketTime, OhlcRollup rollup) {
-        ohlc5mService.upsert(symbolId, symbol, bucketTime, rollup);
+        ohlc5mService.upsert(
+                symbolId,
+                symbol,
+                bucketTime,
+                rollup.open(),
+                rollup.high(),
+                rollup.low(),
+                rollup.close(),
+                rollup.volume()
+        );
     }
 }
