@@ -1,4 +1,4 @@
-package com.coinflow.cache.ohlc;
+package com.coinflow.chart.cache.ohlc;
 
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import java.time.LocalDateTime;

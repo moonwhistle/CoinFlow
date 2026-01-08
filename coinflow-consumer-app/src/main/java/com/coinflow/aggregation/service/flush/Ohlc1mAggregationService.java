@@ -2,7 +2,7 @@ package com.coinflow.aggregation.service.flush;
 
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
-import com.coinflow.domain.tick.event.TickRawEvent;
+import com.coinflow.tick.event.TickRawEvent;
 import com.coinflow.aggregation.process.store.Ohlc1mAggregationStore;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
