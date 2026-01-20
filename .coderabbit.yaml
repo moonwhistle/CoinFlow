@@ -62,6 +62,25 @@ reviews:
         1. **테스트의 의도**: DisplayName이 명확한지, BDD 구조를 준수하는지 확인하세요.
         2. **엣지 케이스**: 예외 상황 테스트가 누락되지 않았는지 체크하세요.
 
+    - path: "frontend/**"
+      instructions: |
+        당신은 시니어 프론트엔드 엔지니어로서 다음 기준에 따라 리뷰하세요.
+  
+        1. **컴포넌트 책임 분리**
+           - UI와 비즈니스 로직이 명확히 분리되어 있는가?
+  
+        2. **상태 관리 적절성**
+           - 이 상태는 로컬/서버/전역 중 어디가 가장 적절한가?
+  
+        3. **렌더링 성능**
+           - 불필요한 리렌더링 가능성은 없는가?
+  
+        4. **TypeScript 타입 안정성**
+           - any 사용 여부, 타입 책임이 명확한가?
+  
+        5. **유지보수성**
+           - 컴포넌트 크기, 네이밍, 재사용 가능성은 적절한가?
+
 # ---------------------------------------------------------------- #
 #  채팅 기능 설정
 # ---------------------------------------------------------------- #
@@ -78,7 +97,8 @@ knowledge_base:
   code_guidelines:
     enabled: true
     filePatterns:
-      - docs/convention/code-convention.md
+      - docs/convention/back-code-convention.md
+      - docs/convention/front-code-convention.md
 
   learnings:
     scope: local
