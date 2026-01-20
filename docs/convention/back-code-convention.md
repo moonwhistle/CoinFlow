@@ -1,6 +1,6 @@
-# Curricraft Backend Code Convention
+# Coinflow Backend Code Convention
 
-이 문서는 Curricraft 프로젝트의 백엔드 개발 시 준수해야 할 코드 컨벤션을 정의합니다.
+이 문서는 Coinflow  프로젝트의 백엔드 개발 시 준수해야 할 코드 컨벤션을 정의합니다.
 CodeRabbit AI 및 동료 리뷰어는 이 규칙을 기반으로 코드 리뷰를 진행합니다.
 
 ## 1. Naming Conventions (명명 규칙)
