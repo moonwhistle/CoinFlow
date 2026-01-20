@@ -1,9 +1,24 @@
+### General ###
 HELP.md
-../.gradle
+
+### Gradle ###
+.gradle/
+backend/.gradle/
+backend/gradle/
+
 build/
-!gradle/wrapper/gradle-wrapper.jar
+backend/**/build/
+
+# Gradle Wrapper (commit)
+!backend/gradle/wrapper/gradle-wrapper.jar
+
+# Allow build dirs only under src (rare but safe)
 !**/src/main/**/build/
 !**/src/test/**/build/
+
+# Gradle execution / cache artifacts
+**/*.bin
+**/*.lock
 
 ### STS ###
 .apt_generated
@@ -18,7 +33,7 @@ bin/
 !**/src/test/**/bin/
 
 ### IntelliJ IDEA ###
-.idea
+.idea/
 *.iws
 *.iml
 *.ipr
@@ -36,8 +51,6 @@ out/
 ### VS Code ###
 .vscode/
 
-# Spring local consumer config (DB credentials)
+### Spring local config (DO NOT COMMIT SECRETS) ###
 **/application-consumer.yml
-
-# Spring local api config (DB credentials)
 **/application-api.yml
