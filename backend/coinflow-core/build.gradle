@@ -13,3 +13,7 @@ dependencies {
     // postgre
     implementation 'org.postgresql:postgresql'
 }
+
+bootJar { enabled = false }
+jar { enabled = true }
+
