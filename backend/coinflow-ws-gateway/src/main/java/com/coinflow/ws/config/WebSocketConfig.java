@@ -12,14 +12,15 @@ import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAd
 @Configuration
 public class WebSocketConfig {
 
+    private static final String WS_PATH = "/ws/v1/coinflow";
+
     @Bean
     public HandlerMapping webSocketHandlerMapping(CoinflowWebSocketHandler handler) {
-        Map<String, WebSocketHandler> map = Map.of(
-                "/ws/v1/coinflow", handler);
-
+        Map<String, WebSocketHandler> map = Map.of(WS_PATH, handler);
         SimpleUrlHandlerMapping mapping = new SimpleUrlHandlerMapping();
         mapping.setUrlMap(map);
         mapping.setOrder(1); // Higher precedence
+
         return mapping;
     }
 
