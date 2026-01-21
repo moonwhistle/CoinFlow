@@ -19,7 +19,14 @@ public class WebSocketConfig {
         Map<String, WebSocketHandler> map = Map.of(WS_PATH, handler);
         SimpleUrlHandlerMapping mapping = new SimpleUrlHandlerMapping();
         mapping.setUrlMap(map);
-        mapping.setOrder(1); // Higher precedence
+        mapping.setOrder(-1); // Before other mappings
+
+        // Allow all origins (for development)
+        /*
+         * CorsConfiguration corsProperties = new CorsConfiguration();
+         * corsProperties.addAllowedOriginPattern("*");
+         * mapping.setCorsConfigurations(Map.of("*", corsProperties));
+         */
 
         return mapping;
     }
