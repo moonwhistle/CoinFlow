@@ -43,6 +43,18 @@ public class RedisStreamConfig {
         StreamMessageListenerContainer<String, MapRecord<String, String, String>> container = StreamMessageListenerContainer
                 .create(factory, options);
 
+        // Create Consumer Group if not exists
+        try {
+            factory.getConnection().streamCommands()
+                    .xGroupCreate(TICK_STREAM_KEY.getBytes(), CONSUMER_GROUP, ReadOffset.from("0-0"), true);
+        } catch (Exception e) {
+            // Check if group already exists (NOGROUP or BUSYGROUP) or other error
+            // BUSYGROUP Consumer Group name already exists - Ignore
+            // If error is unrelated to existence, it might be an issue, but usually safe to
+            // proceed or log
+            log.debug("Consumer group exists or failed to create: {}", e.getMessage());
+        }
+
         // Unique Consumer Name: Hostname + Random or UUID (to allow multiple gateway
         // instances)
         String consumerName = InetAddress.getLocalHost().getHostName() + "-" + System.currentTimeMillis();
@@ -53,6 +65,7 @@ public class RedisStreamConfig {
                 streamListener);
 
         container.start();
+
         return subscription;
     }
 }
