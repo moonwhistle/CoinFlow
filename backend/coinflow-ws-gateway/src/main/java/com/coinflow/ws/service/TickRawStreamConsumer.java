@@ -10,6 +10,7 @@ import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @Slf4j
 @Service
@@ -26,7 +27,7 @@ public class TickRawStreamConsumer implements StreamListener<String, MapRecord<S
             // In a real scenario, we might map this to a DTO (TickRawEvent)
             String jsonPayload = objectMapper.writeValueAsString(body);
 
-            log.debug("[Redis] Received tick: {}", jsonPayload);
+            log.info("[Redis] Received tick: {}", jsonPayload);
 
             // Broadcast to ALL connected sessions (Naive implementation)
             // Ideally, we should filter by subscription (e.g., symbol)
@@ -37,10 +38,10 @@ public class TickRawStreamConsumer implements StreamListener<String, MapRecord<S
                             return session.send(Flux.just(wsMessage))
                                     .onErrorResume(e -> {
                                         log.warn("Failed to send message to session {}", session.getId(), e);
-                                        return Flux.empty();
+                                        return Mono.empty();
                                     });
                         }
-                        return Flux.empty();
+                        return Mono.empty();
                     })
                     .subscribe();
 
