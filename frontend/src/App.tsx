@@ -1,8 +1,10 @@
-import { Home } from './pages/Home';
+import { LiveTicker } from './components/LiveTicker';
 
 function App() {
   return (
-    <Home />
+    <>
+      <LiveTicker />
+    </>
   );
 }
 

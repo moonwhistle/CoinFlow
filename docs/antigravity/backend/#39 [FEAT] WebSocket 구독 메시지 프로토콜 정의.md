@@ -30,7 +30,6 @@ Defined and implemented the WebSocket message protocol to allow clients to subsc
     *   Python 스크립트를 사용하여 클라이언트 구독 시나리오(SUBSCRIBE -> Redis Data Injection -> Receive)를 성공적으로 검증했습니다.
     *   구독하지 않은 심볼의 데이터는 수신되지 않음을 확인했습니다.
 
-## 📝 Note
 ## 🔄 Logical Flow & Architecture
 
 The following diagram illustrates how a Client subscribes to a topic and receives data.
