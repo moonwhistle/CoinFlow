@@ -21,6 +21,5 @@ public class WsRequest {
     @NoArgsConstructor
     public static class WsSubscription {
         private String symbol;
-        private String interval; // Optional, placeholder for now
     }
 }
