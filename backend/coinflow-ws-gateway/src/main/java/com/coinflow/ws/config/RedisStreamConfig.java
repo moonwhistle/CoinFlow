@@ -54,8 +54,7 @@ public class RedisStreamConfig {
             log.debug("Consumer group exists or failed to create: {}", e.getMessage());
         }
 
-        // Unique Consumer Name: Hostname + Random or UUID (to allow multiple gateway
-        // instances)
+        // Unique Consumer Name: Hostname + Random or UUID (to allow multiple gateway instances)
         String consumerName = InetAddress.getLocalHost().getHostName() + "-" + System.currentTimeMillis();
 
         Subscription subscription = container.receive(
