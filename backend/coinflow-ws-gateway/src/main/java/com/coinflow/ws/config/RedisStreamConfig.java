@@ -13,7 +13,6 @@ import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
-import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 import org.springframework.data.redis.stream.Subscription;
 
@@ -55,8 +54,7 @@ public class RedisStreamConfig {
             log.debug("Consumer group exists or failed to create: {}", e.getMessage());
         }
 
-        // Unique Consumer Name: Hostname + Random or UUID (to allow multiple gateway
-        // instances)
+        // Unique Consumer Name: Hostname + Random or UUID (to allow multiple gateway instances)
         String consumerName = InetAddress.getLocalHost().getHostName() + "-" + System.currentTimeMillis();
 
         Subscription subscription = container.receive(
