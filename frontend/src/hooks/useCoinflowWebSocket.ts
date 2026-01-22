@@ -8,6 +8,7 @@ export const useCoinflowWebSocket = (url: string) => {
     const [lastMessage, setLastMessage] = useState<TickData | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const timerRef = useRef<number | null>(null);
+    const connectRef = useRef<() => void>(null);
 
     const connect = useCallback(() => {
         if (wsRef.current) return; // Prevent multiple connections
@@ -41,7 +42,9 @@ export const useCoinflowWebSocket = (url: string) => {
             // Auto-reconnect
             timerRef.current = setTimeout(() => {
                 console.log('[WS] Attempting to reconnect...');
-                connect();
+                if (connectRef.current) {
+                    connectRef.current();
+                }
             }, RECONNECT_INTERVAL);
         };
 
@@ -50,6 +53,11 @@ export const useCoinflowWebSocket = (url: string) => {
             ws.close(); // Ensure close is triggered to start reconnection logic
         };
     }, [url]);
+
+    // Keep the ref updated with the latest connect function
+    useEffect(() => {
+        connectRef.current = connect;
+    }, [connect]);
 
     const disconnect = useCallback(() => {
         if (timerRef.current) {
