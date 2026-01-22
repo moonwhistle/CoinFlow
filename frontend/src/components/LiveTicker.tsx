@@ -8,7 +8,7 @@ export const LiveTicker = () => {
 
     useEffect(() => {
         if (isConnected) {
-            subscribe('BTC/KRW');
+            subscribe('btcusdt');
         }
     }, [isConnected, subscribe]);
 
@@ -19,9 +19,9 @@ export const LiveTicker = () => {
 
             {isConnected && (
                 <div style={{ marginTop: '10px' }}>
-                    <button onClick={() => subscribe('BTC/KRW')}>Subscribe BTC/KRW</button>
-                    <button onClick={() => unsubscribe('BTC/KRW')} style={{ marginLeft: '10px' }}>
-                        Unsubscribe BTC/KRW
+                    <button onClick={() => subscribe('btcusdt')}>Subscribe btcusdt</button>
+                    <button onClick={() => unsubscribe('btcusdt')} style={{ marginLeft: '10px' }}>
+                        Unsubscribe btcusdt
                     </button>
                 </div>
             )}
