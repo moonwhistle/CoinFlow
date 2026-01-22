@@ -31,5 +31,48 @@ Defined and implemented the WebSocket message protocol to allow clients to subsc
     *   구독하지 않은 심볼의 데이터는 수신되지 않음을 확인했습니다.
 
 ## 📝 Note
-*   구독 요청 시 `interval` 필드는 현재 사용되지 않아 제거했습니다 (모든 틱 데이터 전송).
-*   이전의 단순 브로드캐스팅 방식에서 **Pub/Sub 기반의 필터링 브로드캐스팅**으로 고도화되었습니다.
+## 🔄 Logical Flow & Architecture
+
+The following diagram illustrates how a Client subscribes to a topic and receives data.
+
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Handler as WS Handler
+    participant Manager as Subscription Manager
+    participant Consumer as Redis Consumer
+    participant Redis
+
+    %% 1. Connection & Subscription
+    Client->>Handler: Connect (WebSocket)
+    Handler->>Manager: Add Session
+    
+    Client->>Handler: SEND {type: "SUBSCRIBE", topics:[{symbol: "BTC/KRW"}]}
+    Note over Handler: Parse JSON
+    Handler->>Manager: subscribe(sessionId, "BTC/KRW")
+    Note over Manager: Map: "BTC/KRW" -> [sessionId]
+    
+    %% 2. Data Ingestion & Distribution
+    Redis->>Consumer: XREAD (tick:raw)
+    Note over Consumer: Received Tick {symbol: "BTC/KRW", price: 50000}
+    
+    Consumer->>Manager: getSubscribers("BTC/KRW")
+    Manager-->>Consumer: Returns [sessionId]
+    
+    loop For each subscriber
+        Consumer->>Client: Send JSON {symbol: "BTC/KRW" ...}
+    end
+    
+    %% 3. Unsubscription / Filtering
+    Redis->>Consumer: XREAD {symbol: "ETH/KRW"}
+    Consumer->>Manager: getSubscribers("ETH/KRW")
+    Manager-->>Consumer: Returns [] (Empty)
+    Note over Consumer: No subscribers, discard message
+```
+
+### Class Roles
+1.  **`CoinflowWebSocketHandler`**: 입구(Entry point). 클라이언트의 요청(`SUBSCRIBE`)을 해석하고 매니저에게 등록을 위임합니다.
+2.  **`SubscriptionSessionManager`**: 저장소(Registry). "누가(Session) 무엇을(Symbol) 보고 있는지"를 메모리에 관리합니다. `ConcurrentHashMap`을 사용하여 `Symbol ->  Set<SessionId>` 조회가 즉각적으로 가능합니다.
+3.  **`TickRawStreamConsumer`**: 배달부(Courier). Redis에서 물건(Tick)을 가져오면, 매니저에게 "이거 볼 사람 누구니?" 물어보고, 명단에 있는 사람에게만 배달합니다.
