@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { WsCommandType, WsRequest, TickData } from '../types/websocket';
+import { WsCommandType, type WsRequest, type TickData } from '../types/websocket';
 
 const RECONNECT_INTERVAL = 3000; // 3 seconds
 
