@@ -5,6 +5,30 @@ import './LiveTicker.css';
 const WS_URL = 'ws://localhost:8080/ws/v1/coinflow';
 const SYMBOL = 'btcusdt';
 
+// --- Optimization: Formatter instances reused ---
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
+
+const formatPrice = (priceStr: string | undefined): string => {
+    if (!priceStr) return '---';
+    const price = parseFloat(priceStr);
+    return currencyFormatter.format(price);
+};
+
+const formatQuantity = (qtyStr: string | undefined): string => {
+    if (!qtyStr) return '---';
+    return parseFloat(qtyStr).toFixed(6);
+};
+
+const formatTime = (timeStr: string | undefined): string => {
+    if (!timeStr) return '---';
+    return new Date(timeStr).toLocaleTimeString();
+};
+
 export const LiveTicker = () => {
     const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket(WS_URL);
     const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
@@ -29,27 +53,6 @@ export const LiveTicker = () => {
             prevPriceRef.current = currentPrice;
         }
     }, [lastMessage]);
-
-    const formatPrice = (priceStr: string | undefined) => {
-        if (!priceStr) return '---';
-        const price = parseFloat(priceStr);
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(price);
-    };
-
-    const formatQuantity = (qtyStr: string | undefined) => {
-        if (!qtyStr) return '---';
-        return parseFloat(qtyStr).toFixed(6);
-    };
-
-    const formatTime = (timeStr: string | undefined) => {
-        if (!timeStr) return '---';
-        return new Date(timeStr).toLocaleTimeString();
-    };
 
     return (
         <div className="ticker-container">

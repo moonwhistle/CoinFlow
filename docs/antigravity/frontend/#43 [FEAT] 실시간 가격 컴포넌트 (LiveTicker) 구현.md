@@ -12,6 +12,7 @@ WebSocket을 통해 실시간으로 비트코인(BTC/USDT) 가격 데이터를 �
     - 이전 가격과 비교하여 가격 상승(Green)/하락(Red) 색상 변경 로직 추가
     - 수량(Quantity), 체결 시간(Time), 연결 상태(Status) 표시 추가
     - `Intl.NumberFormat`을 사용한 통화 포맷팅 적용
+    - **Performance Optimization**: 포맷팅 함수 및 `Intl.NumberFormat` 인스턴스를 컴포넌트 외부로 분리하여 불필요한 리렌더링 및 객체 생성 방지
 
 - **`src/components/LiveTicker.css` (New)**
     - Dark Mode 기반의 전문 트레이딩 UI 디자인 적용
