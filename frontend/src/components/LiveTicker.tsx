@@ -1,39 +1,108 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
+import './LiveTicker.css';
 
 const WS_URL = 'ws://localhost:8080/ws/v1/coinflow';
+const SYMBOL = 'btcusdt';
+
+// --- Optimization: Formatter instances reused ---
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
+
+const formatPrice = (priceStr: string | undefined): string => {
+    if (!priceStr) return '---';
+    const price = parseFloat(priceStr);
+    return currencyFormatter.format(price);
+};
+
+const formatQuantity = (qtyStr: string | undefined): string => {
+    if (!qtyStr) return '---';
+    return parseFloat(qtyStr).toFixed(6);
+};
+
+const formatTime = (timeStr: string | undefined): string => {
+    if (!timeStr) return '---';
+    return new Date(timeStr).toLocaleTimeString();
+};
 
 export const LiveTicker = () => {
-    const { isConnected, lastMessage, subscribe, unsubscribe } = useCoinflowWebSocket(WS_URL);
+    const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket(WS_URL);
+    const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
+    const prevPriceRef = useRef<number | null>(null);
 
     useEffect(() => {
         if (isConnected) {
-            subscribe('BTC/KRW');
+            subscribe(SYMBOL);
         }
     }, [isConnected, subscribe]);
 
-    return (
-        <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
-            <h2>Live Ticker</h2>
-            <p>Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}</p>
+    useEffect(() => {
+        if (lastMessage?.price) {
+            const currentPrice = parseFloat(lastMessage.price);
+            if (prevPriceRef.current !== null) {
+                if (currentPrice > prevPriceRef.current) {
+                    setPriceColor('up');
+                } else if (currentPrice < prevPriceRef.current) {
+                    setPriceColor('down');
+                }
+            }
+            prevPriceRef.current = currentPrice;
+        }
+    }, [lastMessage]);
 
-            {isConnected && (
-                <div style={{ marginTop: '10px' }}>
-                    <button onClick={() => subscribe('BTC/KRW')}>Subscribe BTC/KRW</button>
-                    <button onClick={() => unsubscribe('BTC/KRW')} style={{ marginLeft: '10px' }}>
-                        Unsubscribe BTC/KRW
-                    </button>
+    return (
+        <div className="ticker-container">
+            <div className="header">
+                <div className="symbol">
+                    <img
+                        src="https://cryptologos.cc/logos/bitcoin-btc-logo.svg?v=040"
+                        alt="BTC"
+                        style={{ width: '24px', height: '24px' }}
+                    />
+                    BTC / USDT
+                </div>
+                <div className={`status-dot ${isConnected ? 'connected' : ''}`} title={isConnected ? 'Connected' : 'Disconnected'} />
+            </div>
+
+            <div className="price-container">
+                <div className={`price ${priceColor}`}>
+                    {formatPrice(lastMessage?.price)}
+                </div>
+            </div>
+
+            <div className="details">
+                <div className="detail-item">
+                    <span className="detail-label">24h Change</span>
+                    <span className="detail-value" style={{ color: 'var(--text-secondary)' }}>
+                        {/* Placeholder as we don't have 24h stats yet */}
+                        +0.00%
+                    </span>
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Quantity</span>
+                    <span className="detail-value">{formatQuantity(lastMessage?.quantity)}</span>
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Time</span>
+                    <span className="detail-value">{formatTime(lastMessage?.eventTime)}</span>
+                </div>
+                <div className="detail-item">
+                    <span className="detail-label">Status</span>
+                    <span className="detail-value" style={{ color: isConnected ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
+                        {isConnected ? 'Market Open' : 'Connecting...'}
+                    </span>
+                </div>
+            </div>
+
+            {!lastMessage && isConnected && (
+                <div className="footer">
+                    <p className="loading-text">Waiting for tick data...</p>
                 </div>
             )}
-
-            <div style={{ marginTop: '20px' }}>
-                <h3>Last Tick Data:</h3>
-                {lastMessage ? (
-                    <pre>{JSON.stringify(lastMessage, null, 2)}</pre>
-                ) : (
-                    <p>No data received yet...</p>
-                )}
-            </div>
         </div>
     );
 };

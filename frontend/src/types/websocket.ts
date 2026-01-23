@@ -17,6 +17,8 @@ export interface WsRequest {
 export interface TickData {
     symbol: string;
     price: string;
-    volume: string;
-    [key: string]: string; // For flexibility
+    quantity: string;
+    eventTime: string;
+    volume?: string;
+    [key: string]: string | undefined; // For flexibility
 }
