@@ -1,24 +1,48 @@
-
 import { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
-import type { Time, LogicalRange, IChartApi } from 'lightweight-charts';
+import type { Time, LogicalRange, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { Settings, Camera, Maximize, BarChart2 } from 'lucide-react';
+import { useCoinflowWebSocket } from '../../hooks/useCoinflowWebSocket';
 import './TradingChart.css';
+
+interface ChartCandle {
+    time: Time;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+}
+
+interface VolumeBar {
+    time: Time;
+    value: number;
+    color: string;
+}
 
 export const TradingChart = () => {
     const mainContainerRef = useRef<HTMLDivElement>(null);
     const volumeContainerRef = useRef<HTMLDivElement>(null);
 
+    // Refs for chart APIs to access inside effects/callbacks without re-rendering
     const mainChartRef = useRef<IChartApi | null>(null);
     const volumeChartRef = useRef<IChartApi | null>(null);
+    const mainSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+    const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
     const [activeTimeframe, setActiveTimeframe] = useState('1m');
 
-    // --- Chart Initialization with Sync ---
+    // WebSocket Hook
+    const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket('ws://localhost:8080/ws/connect');
+
+    // State to track the current accumulating candle
+    const currentCandleRef = useRef<ChartCandle | null>(null);
+    const currentVolumeRef = useRef<VolumeBar | null>(null);
+
+    // --- Chart Initialization ---
     useEffect(() => {
         if (!mainContainerRef.current || !volumeContainerRef.current) return;
 
-        // 1. Initialize Main Chart (Price) - Top 75%
+        // 1. Initialize Main Chart (Price)
         const mainChart = createChart(mainContainerRef.current, {
             layout: {
                 background: { type: ColorType.Solid, color: 'transparent' },
@@ -31,15 +55,12 @@ export const TradingChart = () => {
             width: mainContainerRef.current.clientWidth,
             height: mainContainerRef.current.clientHeight,
             timeScale: {
-                visible: false, // Hide X-axis on main chart (shared with volume)
+                visible: false,
                 minBarSpacing: 5,
             },
             rightPriceScale: {
                 borderColor: '#2B2B43',
-                minimumWidth: 100, // Increased to accommodate long price strings (e.g. 90000.00)
-            },
-            leftPriceScale: {
-                visible: false,
+                minimumWidth: 100,
             },
         });
 
@@ -51,7 +72,7 @@ export const TradingChart = () => {
             wickDownColor: '#ef5350',
         });
 
-        // 2. Initialize Volume Chart - Bottom 25%
+        // 2. Initialize Volume Chart
         const volumeChart = createChart(volumeContainerRef.current, {
             layout: {
                 background: { type: ColorType.Solid, color: 'transparent' },
@@ -71,7 +92,7 @@ export const TradingChart = () => {
             },
             rightPriceScale: {
                 borderColor: '#2B2B43',
-                minimumWidth: 100, // Match main chart width exactly
+                minimumWidth: 100,
             },
             leftPriceScale: {
                 visible: false,
@@ -83,20 +104,22 @@ export const TradingChart = () => {
             priceFormat: { type: 'volume' },
         });
 
-        // 3. Generate Data
+        // 3. Generate Mock Data (ending at current time for smooth transition)
         const generateMockData = () => {
-            const candleData = [];
-            const volumeData = [];
-            let time = Math.floor(Date.now() / 1000) - 6000;
+            const candleData: ChartCandle[] = [];
+            const volumeData: VolumeBar[] = [];
+
+            // End 1 minute ago so live data takes over
+            let time = Math.floor(Date.now() / 1000) - (60 * 100);
             let value = 90000;
 
-            for (let i = 0; i < 150; i++) {
+            for (let i = 0; i < 100; i++) {
                 const open = value;
-                const change = (Math.random() - 0.5) * 200;
+                const change = (Math.random() - 0.5) * 50;
                 const close = open + change;
-                const high = Math.max(open, close) + Math.random() * 50;
-                const low = Math.min(open, close) - Math.random() * 50;
-                const volume = Math.random() * 100 + 50;
+                const high = Math.max(open, close) + Math.random() * 10;
+                const low = Math.min(open, close) - Math.random() * 10;
+                const volume = Math.random() * 10 + 5;
                 const isUp = close >= open;
                 const timePoint = Math.floor(time / 60) * 60 as Time;
 
@@ -116,14 +139,22 @@ export const TradingChart = () => {
         mainSeries.setData(candleData);
         volumeSeries.setData(volumeData);
 
+        // Set Refs
         mainChartRef.current = mainChart;
         volumeChartRef.current = volumeChart;
+        mainSeriesRef.current = mainSeries;
+        volumeSeriesRef.current = volumeSeries;
 
-        // 4. Synchronization (Range + Crosshair)
+        // Initialize current candle ref with the last mock candle to allow continuation
+        const lastCandle = candleData[candleData.length - 1];
+        const lastVol = volumeData[volumeData.length - 1];
+        currentCandleRef.current = lastCandle;
+        currentVolumeRef.current = lastVol;
+
+        // 4. Sync
         const mainTimeScale = mainChart.timeScale();
         const volTimeScale = volumeChart.timeScale();
 
-        // 4.1 Range Sync
         const syncVolRange = (range: LogicalRange | null) => {
             if (range) volTimeScale.setVisibleLogicalRange(range);
         };
@@ -134,42 +165,26 @@ export const TradingChart = () => {
         mainTimeScale.subscribeVisibleLogicalRangeChange(syncVolRange);
         volTimeScale.subscribeVisibleLogicalRangeChange(syncMainRange);
 
-        // 4.2 Crosshair Sync (The Cursor)
-        // When hovering main, show on volume
+        // Crosshair Sync
         mainChart.subscribeCrosshairMove((param) => {
             if (param.time) {
-                // Pass NaN as price to hide horizontal line on target, only show vertical (time)
-                // Note: Types might require number, but specific library versions handle this differently.
-                // We'll try to find the y coordinate or just pass a dummy if needed.
-                // Actually, avoiding 'series' arg might allow just time? 
-                // v4+ API: setCrosshairPosition(price, time, series)
-
-                // Hack: Pass a dummy value. The volume bar is usually low, so 0 might be visible.
-                // Ideally we want only vertical line. 
-                // Let's use the actual volume series data? Too complex to lookup.
-                // We'll accept the horizontal line at 0 for now or update it to be hidden via options if possible.
                 volumeChart.setCrosshairPosition(0, param.time, volumeSeries);
             } else {
                 volumeChart.clearCrosshairPosition();
             }
         });
 
-        // When hovering volume, show on main
         volumeChart.subscribeCrosshairMove((param) => {
             if (param.time) {
-                const dataPoint = param.seriesData.get(volumeSeries);
-                // We can try to get the 'close' price from main series if we really wanted perfect horizontal sync
-                // But for now, just syncing time is the goal.
                 mainChart.setCrosshairPosition(0, param.time, mainSeries);
             } else {
                 mainChart.clearCrosshairPosition();
             }
         });
 
-        // Initial fit
         mainChart.timeScale().fitContent();
 
-        // 5. Resize Logic
+        // 5. Resize
         const handleResize = () => {
             if (mainChartRef.current && mainContainerRef.current) {
                 mainChartRef.current.applyOptions({
@@ -184,10 +199,8 @@ export const TradingChart = () => {
                 });
             }
         };
-
         const resizeObserver = new ResizeObserver(() => handleResize());
         resizeObserver.observe(mainContainerRef.current);
-        // Assuming both resize together, but observing main is usually enough if wrapper is flex
 
         return () => {
             resizeObserver.disconnect();
@@ -195,16 +208,79 @@ export const TradingChart = () => {
             volTimeScale.unsubscribeVisibleLogicalRangeChange(syncMainRange);
             mainChart.remove();
             volumeChart.remove();
-            mainChartRef.current = null;
-            volumeChartRef.current = null;
         };
     }, []);
 
+    // --- Real-time Data Handling ---
+    useEffect(() => {
+        if (isConnected) {
+            console.log("Subscribing to BTCUSDT...");
+            subscribe('BTCUSDT');
+        }
+    }, [isConnected, subscribe]);
+
+    useEffect(() => {
+        if (!lastMessage) return;
+        if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
+
+        const tick = lastMessage;
+        const price = parseFloat(tick.price);
+        const quantity = parseFloat(tick.quantity);
+        const timestamp = parseInt(tick.eventTime); // raw ms timestamp
+
+        // Round to 1-minute candle time (seconds)
+        const candleTime = (Math.floor(timestamp / 60000) * 60) as Time;
+
+        let currentCandle = currentCandleRef.current;
+        let currentVol = currentVolumeRef.current;
+
+        // Check if we moved to a new minute
+        if (!currentCandle || candleTime > currentCandle.time) {
+            // New Candle
+            currentCandle = {
+                time: candleTime,
+                open: price,
+                high: price,
+                low: price,
+                close: price,
+            };
+            currentVol = {
+                time: candleTime,
+                value: quantity,
+                color: 'rgba(38, 166, 154, 0.5)', // Default Green
+            };
+        } else {
+            // Update Existing Candle
+            currentCandle.high = Math.max(currentCandle.high, price);
+            currentCandle.low = Math.min(currentCandle.low, price);
+            currentCandle.close = price;
+
+            // Accumulate volume
+            if (currentVol) {
+                currentVol.value += quantity;
+                // Determine color based on candle direction
+                const isUp = currentCandle.close >= currentCandle.open;
+                currentVol.color = isUp ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)';
+            }
+        }
+
+        // Apply Update
+        mainSeriesRef.current.update(currentCandle);
+        if (currentVol) {
+            volumeSeriesRef.current.update(currentVol);
+        }
+
+        // Update Refs
+        currentCandleRef.current = currentCandle;
+        currentVolumeRef.current = currentVol;
+
+    }, [lastMessage]);
+
     return (
         <div className="chart-wrapper">
-            {/* Toolbar Header */}
             <div className="chart-toolbar">
                 <div className="time-frame-selector">
+                    {/* Temporarily disabled real switching for now, just UI */}
                     {['1m', '15m', '1h', '4h', '1D', '1W'].map((tf) => (
                         <button
                             key={tf}
@@ -216,6 +292,9 @@ export const TradingChart = () => {
                     ))}
                 </div>
                 <div className="chart-tools-right">
+                    <span style={{ fontSize: 12, marginRight: 10, color: isConnected ? '#4caf50' : '#f44336' }}>
+                        {isConnected ? '● Connected' : '○ Disconnected'}
+                    </span>
                     <BarChart2 size={18} className="tool-icon" />
                     <Settings size={18} className="tool-icon" />
                     <Camera size={18} className="tool-icon" />
@@ -223,14 +302,12 @@ export const TradingChart = () => {
                 </div>
             </div>
 
-            {/* Main Chart (Price) */}
             <div
                 ref={mainContainerRef}
                 className="chart-container"
                 style={{ flex: 3, borderBottom: '1px solid var(--border-color)' }}
             />
 
-            {/* Volume Chart */}
             <div
                 ref={volumeContainerRef}
                 className="chart-volume-container"
@@ -239,4 +316,3 @@ export const TradingChart = () => {
         </div>
     );
 };
-
