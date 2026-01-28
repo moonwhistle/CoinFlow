@@ -1,147 +1,193 @@
-:root {
-    --bg-color: #0d0e12;
-    --card-bg: #15161b;
-    --text-primary: #ffffff;
-    --text-secondary: #848e9c;
-    --accent-green: #0ecb81;
-    --accent-red: #f6465d;
-    --border-color: #2b3139;
-    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-body {
-    margin: 0;
-    background-color: var(--bg-color);
-    font-family: var(--font-family);
-    color: var(--text-primary);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-}
-
 .ticker-container {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 32px;
-    width: 400px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    position: relative;
-    overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.ticker-container::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent-green), var(--accent-red));
-    opacity: 0.5;
-}
-
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-}
-
-.symbol {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: var(--text-secondary);
-    box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
-    transition: background-color 0.3s ease;
-}
-
-.status-dot.connected {
-    background-color: var(--accent-green);
-    box-shadow: 0 0 8px var(--accent-green);
-}
-
-.price-container {
-    margin-bottom: 24px;
-}
-
-.price {
-    font-size: 48px;
-    font-weight: 700;
-    letter-spacing: -1px;
-    transition: color 0.15s ease;
-}
-
-.price.up {
-    color: var(--accent-green);
-}
-
-.price.down {
-    color: var(--accent-red);
-}
-
-.details {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    border-top: 1px solid var(--border-color);
-    padding-top: 16px;
-}
-
-.detail-item {
+    height: 100%;
     display: flex;
     flex-direction: column;
+    padding: 24px;
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
+    /* Removed card styles (border-radius, box-shadow) as it's now a full panel */
+}
+
+/* --- Segment 1: Symbol Header --- */
+.ticker-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 32px;
+}
+
+.symbol-info {
+    display: flex;
+    gap: 12px;
+}
+
+.coin-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+
+.symbol-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.symbol-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.symbol-sub-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+.live-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     gap: 4px;
 }
 
-.detail-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--accent-green);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent-green);
+    animation: pulse-green 2s infinite;
 }
 
-.detail-value {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    font-feature-settings: "tnum";
+.live-text {
+    font-size: 10px;
+    color: var(--accent-green);
+    font-weight: 600;
 }
 
-.footer {
-    margin-top: 24px;
+/* --- Segment 2: Big Price --- */
+.ticker-price-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 40px;
     text-align: center;
 }
 
-.loading-text {
-    color: var(--text-secondary);
-    font-size: 14px;
-    font-style: italic;
-    animation: pulse 1.5s infinite;
+.price-display {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+    transition: color 0.2s ease;
 }
 
-@keyframes pulse {
+.price-display.up {
+    color: var(--accent-green);
+}
+
+.price-display.down {
+    color: var(--accent-red);
+}
+
+.price-display.neutral {
+    color: var(--text-primary);
+}
+
+.price-change-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.price-change-pill.up {
+    background-color: var(--accent-green-transparent);
+    color: var(--accent-green);
+}
+
+.price-change-pill.down {
+    background-color: var(--accent-red-transparent);
+    color: var(--accent-red);
+}
+
+/* --- Segment 3: Stats Grid --- */
+.stats-grid {
+    display: grid;
+    flex: 1;
+    /* Take up available space */
+    align-content: start;
+    /* Don't stretch rows */
+    gap: 24px;
+    border-top: 1px dashed var(--border-color);
+    padding-top: 24px;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.stat-value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-feature-settings: "tnum";
+}
+
+/* --- Segment 4: Footer --- */
+.ticker-footer {
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.footer-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.status-badge.connected {
+    color: var(--accent-green);
+}
+
+@keyframes pulse-green {
     0% {
-        opacity: 0.5;
+        box-shadow: 0 0 0 0 rgba(14, 203, 129, 0.4);
     }
 
-    50% {
-        opacity: 1;
+    70% {
+        box-shadow: 0 0 0 6px rgba(14, 203, 129, 0);
     }
 
     100% {
-        opacity: 0.5;
+        box-shadow: 0 0 0 0 rgba(14, 203, 129, 0);
     }
 }
