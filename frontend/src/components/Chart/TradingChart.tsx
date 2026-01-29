@@ -1,42 +1,62 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, ColorType, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
 import type { Time, LogicalRange, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { Settings, Camera, Maximize, BarChart2 } from 'lucide-react';
 import { useCoinflowWebSocket } from '../../hooks/useCoinflowWebSocket';
+import { CHART_COLORS, CHART_CONFIG } from '../../constants/chart';
+import { aggregateTickToCandle, generateMockData } from '../../utils/chartHelpers';
+import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
+import type { TickData } from '../../types/websocket';
 import './TradingChart.css';
-
-interface ChartCandle {
-    time: Time;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-}
-
-interface VolumeBar {
-    time: Time;
-    value: number;
-    color: string;
-}
 
 export const TradingChart = () => {
     const mainContainerRef = useRef<HTMLDivElement>(null);
     const volumeContainerRef = useRef<HTMLDivElement>(null);
 
     // Refs for chart APIs to access inside effects/callbacks without re-rendering
+    // Using useRef instead of useState to prevent re-renders on high-frequency data updates (100+ ticks/sec)
     const mainChartRef = useRef<IChartApi | null>(null);
     const volumeChartRef = useRef<IChartApi | null>(null);
     const mainSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
-    const [activeTimeframe, setActiveTimeframe] = useState('1m');
-
-    // WebSocket Hook
-    const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket('ws://localhost:8080/ws/connect');
+    const [activeTimeframe, setActiveTimeframe] = useState(CHART_CONFIG.DEFAULT_TIMEFRAME);
 
     // State to track the current accumulating candle
     const currentCandleRef = useRef<ChartCandle | null>(null);
     const currentVolumeRef = useRef<VolumeBar | null>(null);
+
+    // --- Real-time Data Handling (Performance Optimized) ---
+    // Use useCallback to keep the function reference stable across renders.
+    // Logic extracted to aggregateTickToCandle for SRP and reusability.
+    const handleTick = useCallback((tick: TickData) => {
+        if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
+
+        const { candle, volume } = aggregateTickToCandle(
+            tick,
+            currentCandleRef.current,
+            currentVolumeRef.current,
+            CHART_COLORS.UP_TRANSPARENT,
+            CHART_COLORS.DOWN_TRANSPARENT
+        );
+
+        if (candle && volume) {
+            // Apply Update Direct to Chart (No React Render)
+            mainSeriesRef.current.update(candle);
+            volumeSeriesRef.current.update(volume);
+
+            // Update Refs
+            currentCandleRef.current = candle;
+            currentVolumeRef.current = volume;
+        }
+    }, []);
+
+    // WebSocket Hook with Callback
+    // Pass handleTick to avoid state updates on every tick
+    const { isConnected, subscribe } = useCoinflowWebSocket(
+        'ws://localhost:8080/ws/connect',
+        { onMessage: handleTick }
+    );
 
     // --- Chart Initialization ---
     useEffect(() => {
@@ -45,54 +65,54 @@ export const TradingChart = () => {
         // 1. Initialize Main Chart (Price)
         const mainChart = createChart(mainContainerRef.current, {
             layout: {
-                background: { type: ColorType.Solid, color: 'transparent' },
-                textColor: '#9CA3AF',
+                background: { type: ColorType.Solid, color: CHART_COLORS.BACKGROUND },
+                textColor: CHART_COLORS.TEXT,
             },
             grid: {
-                vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
-                horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
+                vertLines: { color: CHART_COLORS.GRID },
+                horzLines: { color: CHART_COLORS.GRID },
             },
             width: mainContainerRef.current.clientWidth,
             height: mainContainerRef.current.clientHeight,
             timeScale: {
                 visible: false,
-                minBarSpacing: 5,
+                minBarSpacing: CHART_CONFIG.MIN_BAR_SPACING,
             },
             rightPriceScale: {
-                borderColor: '#2B2B43',
-                minimumWidth: 100,
+                borderColor: CHART_COLORS.BORDER,
+                minimumWidth: CHART_CONFIG.PRICE_SCALE_WIDTH,
             },
         });
 
         const mainSeries = mainChart.addSeries(CandlestickSeries, {
-            upColor: '#26a69a',
-            downColor: '#ef5350',
+            upColor: CHART_COLORS.UP,
+            downColor: CHART_COLORS.DOWN,
             borderVisible: false,
-            wickUpColor: '#26a69a',
-            wickDownColor: '#ef5350',
+            wickUpColor: CHART_COLORS.UP,
+            wickDownColor: CHART_COLORS.DOWN,
         });
 
         // 2. Initialize Volume Chart
         const volumeChart = createChart(volumeContainerRef.current, {
             layout: {
-                background: { type: ColorType.Solid, color: 'transparent' },
-                textColor: '#9CA3AF',
+                background: { type: ColorType.Solid, color: CHART_COLORS.BACKGROUND },
+                textColor: CHART_COLORS.TEXT,
             },
             grid: {
-                vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
-                horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
+                vertLines: { color: CHART_COLORS.GRID },
+                horzLines: { color: CHART_COLORS.GRID },
             },
             width: volumeContainerRef.current.clientWidth,
             height: volumeContainerRef.current.clientHeight,
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: '#2B2B43',
-                minBarSpacing: 5,
+                borderColor: CHART_COLORS.BORDER,
+                minBarSpacing: CHART_CONFIG.MIN_BAR_SPACING,
             },
             rightPriceScale: {
-                borderColor: '#2B2B43',
-                minimumWidth: 100,
+                borderColor: CHART_COLORS.BORDER,
+                minimumWidth: CHART_CONFIG.PRICE_SCALE_WIDTH,
             },
             leftPriceScale: {
                 visible: false,
@@ -100,42 +120,13 @@ export const TradingChart = () => {
         });
 
         const volumeSeries = volumeChart.addSeries(HistogramSeries, {
-            color: '#26a69a',
+            color: CHART_COLORS.UP,
             priceFormat: { type: 'volume' },
         });
 
-        // 3. Generate Mock Data (ending at current time for smooth transition)
-        const generateMockData = () => {
-            const candleData: ChartCandle[] = [];
-            const volumeData: VolumeBar[] = [];
-
-            // End 1 minute ago so live data takes over
-            let time = Math.floor(Date.now() / 1000) - (60 * 100);
-            let value = 90000;
-
-            for (let i = 0; i < 100; i++) {
-                const open = value;
-                const change = (Math.random() - 0.5) * 50;
-                const close = open + change;
-                const high = Math.max(open, close) + Math.random() * 10;
-                const low = Math.min(open, close) - Math.random() * 10;
-                const volume = Math.random() * 10 + 5;
-                const isUp = close >= open;
-                const timePoint = Math.floor(time / 60) * 60 as Time;
-
-                candleData.push({ time: timePoint, open, high, low, close });
-                volumeData.push({
-                    time: timePoint,
-                    value: volume,
-                    color: isUp ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
-                });
-                value = close;
-                time += 60;
-            }
-            return { candleData, volumeData };
-        };
-
-        const { candleData, volumeData } = generateMockData();
+        // 3. Generate Mock Data 
+        // Note: Used for initial prototype. Will be replaced by Historical Data API.
+        const { candleData, volumeData } = generateMockData(100);
         mainSeries.setData(candleData);
         volumeSeries.setData(volumeData);
 
@@ -146,10 +137,10 @@ export const TradingChart = () => {
         volumeSeriesRef.current = volumeSeries;
 
         // Initialize current candle ref with the last mock candle to allow continuation
-        const lastCandle = candleData[candleData.length - 1];
-        const lastVol = volumeData[volumeData.length - 1];
-        currentCandleRef.current = lastCandle;
-        currentVolumeRef.current = lastVol;
+        if (candleData.length > 0 && volumeData.length > 0) {
+            currentCandleRef.current = candleData[candleData.length - 1];
+            currentVolumeRef.current = volumeData[volumeData.length - 1];
+        }
 
         // 4. Sync
         const mainTimeScale = mainChart.timeScale();
@@ -186,6 +177,8 @@ export const TradingChart = () => {
 
         // 5. Resize
         const handleResize = () => {
+            // ... resize logic ...
+            // Simplified for brevity, same logic as before
             if (mainChartRef.current && mainContainerRef.current) {
                 mainChartRef.current.applyOptions({
                     width: mainContainerRef.current.clientWidth,
@@ -211,70 +204,13 @@ export const TradingChart = () => {
         };
     }, []);
 
-    // --- Real-time Data Handling ---
+    // --- WebSocket Subscription ---
     useEffect(() => {
         if (isConnected) {
             console.log("Subscribing to BTCUSDT...");
             subscribe('BTCUSDT');
         }
     }, [isConnected, subscribe]);
-
-    useEffect(() => {
-        if (!lastMessage) return;
-        if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
-
-        const tick = lastMessage;
-        const price = parseFloat(tick.price);
-        const quantity = parseFloat(tick.quantity);
-        const timestamp = parseInt(tick.eventTime); // raw ms timestamp
-
-        // Round to 1-minute candle time (seconds)
-        const candleTime = (Math.floor(timestamp / 60000) * 60) as Time;
-
-        let currentCandle = currentCandleRef.current;
-        let currentVol = currentVolumeRef.current;
-
-        // Check if we moved to a new minute
-        if (!currentCandle || candleTime > currentCandle.time) {
-            // New Candle
-            currentCandle = {
-                time: candleTime,
-                open: price,
-                high: price,
-                low: price,
-                close: price,
-            };
-            currentVol = {
-                time: candleTime,
-                value: quantity,
-                color: 'rgba(38, 166, 154, 0.5)', // Default Green
-            };
-        } else {
-            // Update Existing Candle
-            currentCandle.high = Math.max(currentCandle.high, price);
-            currentCandle.low = Math.min(currentCandle.low, price);
-            currentCandle.close = price;
-
-            // Accumulate volume
-            if (currentVol) {
-                currentVol.value += quantity;
-                // Determine color based on candle direction
-                const isUp = currentCandle.close >= currentCandle.open;
-                currentVol.color = isUp ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)';
-            }
-        }
-
-        // Apply Update
-        mainSeriesRef.current.update(currentCandle);
-        if (currentVol) {
-            volumeSeriesRef.current.update(currentVol);
-        }
-
-        // Update Refs
-        currentCandleRef.current = currentCandle;
-        currentVolumeRef.current = currentVol;
-
-    }, [lastMessage]);
 
     return (
         <div className="chart-wrapper">
