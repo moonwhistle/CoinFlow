@@ -1,0 +1,69 @@
+.chart-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-main);
+    overflow: hidden;
+}
+
+.chart-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 48px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-main);
+}
+
+.time-frame-selector {
+    display: flex;
+    gap: 4px;
+}
+
+.tf-btn {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    transition: all 0.2s;
+}
+
+.tf-btn:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.tf-btn.active {
+    color: var(--text-primary);
+    background-color: #2962ff;
+    /* TradingView Blue */
+}
+
+.chart-tools-right {
+    display: flex;
+    gap: 12px;
+    color: var(--text-secondary);
+}
+
+.tool-icon {
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.tool-icon:hover {
+    color: var(--text-primary);
+}
+
+.chart-container {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+}
