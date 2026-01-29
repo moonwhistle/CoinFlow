@@ -3,12 +3,18 @@ import { WsCommandType, type WsRequest, type TickData } from '../types/websocket
 
 const RECONNECT_INTERVAL = 3000; // 3 seconds
 
-export const useCoinflowWebSocket = (url: string) => {
+export const useCoinflowWebSocket = (url: string, options?: { onMessage?: (data: TickData) => void }) => {
     const [isConnected, setIsConnected] = useState(false);
     const [lastMessage, setLastMessage] = useState<TickData | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const timerRef = useRef<number | null>(null);
     const connectRef = useRef<() => void>(null);
+
+    // Keep latest options ref to avoid reconnection on options change
+    const optionsRef = useRef(options);
+    useEffect(() => {
+        optionsRef.current = options;
+    }, [options]);
 
     const connect = useCallback(() => {
         if (wsRef.current) return; // Prevent multiple connections
@@ -29,7 +35,13 @@ export const useCoinflowWebSocket = (url: string) => {
         ws.onmessage = (event) => {
             try {
                 const data: TickData = JSON.parse(event.data);
-                setLastMessage(data);
+
+                // PERFORMANCE: If callback provided, use it and skip state update (avoid re-render)
+                if (optionsRef.current?.onMessage) {
+                    optionsRef.current.onMessage(data);
+                } else {
+                    setLastMessage(data);
+                }
             } catch (err) {
                 console.error('[WS] Failed to parse message:', err);
             }

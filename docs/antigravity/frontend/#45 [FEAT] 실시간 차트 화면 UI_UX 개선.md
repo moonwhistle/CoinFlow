@@ -25,6 +25,11 @@ Improved the trading chart component to support real-time updates, separated sca
         - **Update**: 현재 분(Minute)의 캔들이라면 High/Low/Close 가격을 갱신하고 거래량을 누적합니다.
         - **Create**: 새로운 분(Minute)이 시작되면 즉시 새로운 캔들 객체를 생성하여 차트에 추가합니다.
 
+5. **코드 품질 및 아키텍처 개선 (Scalability Refactoring)**
+    - **상수화 (Tokenization)**: 차트 색상, 설정 값(Grid Color, Minimum Width 등)을 `constants/chart.ts` 로 분리하여 매직 넘버를 제거하고 유지보수성을 확보했습니다.
+    - **로직 분리 (SRP)**: 실시간 틱 집계 로직(`aggregateTickToCandle`)과 Mock 데이터 생성 로직을 `utils/chartHelpers.ts` 로 분리하여 컴포넌트 복잡도를 낮추고 테스트 용이성을 높였습니다.
+    - **성능 최적화 (Performance)**: WebSocket 데이터 수신 시 `useState` 대신 `useRef`와 콜백 패턴을 사용하여 리액트 렌더링 사이클을 우회, 고빈도 데이터 업데이트 시의 프레임 저하를 방지했습니다.
+
 ## 🔄 Logical Flow
 
 ### Real-time Chart Architecture
