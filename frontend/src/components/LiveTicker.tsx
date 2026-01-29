@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
+import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
 import './LiveTicker.css';
 
 const WS_URL = 'ws://localhost:8080/ws/v1/coinflow';
 const SYMBOL = 'btcusdt';
 
-// --- Optimization: Formatter instances reused ---
+// --- Formatters ---
 const currencyFormatter = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -13,20 +14,17 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
 });
 
-const formatPrice = (priceStr: string | undefined): string => {
-    if (!priceStr) return '---';
-    const price = parseFloat(priceStr);
-    return currencyFormatter.format(price);
-};
+const volumeFormatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
 
-const formatQuantity = (qtyStr: string | undefined): string => {
-    if (!qtyStr) return '---';
-    return parseFloat(qtyStr).toFixed(6);
-};
-
-const formatTime = (timeStr: string | undefined): string => {
-    if (!timeStr) return '---';
-    return new Date(timeStr).toLocaleTimeString();
+// Mock Data for 24h Stats (Since backend doesn't support them yet)
+const MOCK_STATS = {
+    high: 89800.00,
+    low: 88900.00,
+    volume: 45231.05,
+    changePercent: 2.45
 };
 
 export const LiveTicker = () => {
@@ -54,55 +52,101 @@ export const LiveTicker = () => {
         }
     }, [lastMessage]);
 
+    // Formatters using current or mock data
+    const displayPrice = lastMessage?.price
+        ? currencyFormatter.format(parseFloat(lastMessage.price))
+        : '---';
+
+    const displayQuantity = lastMessage?.quantity
+        ? parseFloat(lastMessage.quantity).toFixed(6)
+        : '---';
+
+    const displayTime = lastMessage?.eventTime
+        ? new Date(lastMessage.eventTime).toLocaleTimeString()
+        : '--:--:--';
+
     return (
         <div className="ticker-container">
-            <div className="header">
-                <div className="symbol">
+            {/* 1. Header Section */}
+            <div className="ticker-header">
+                <div className="symbol-info">
                     <img
                         src="https://cryptologos.cc/logos/bitcoin-btc-logo.svg?v=040"
                         alt="BTC"
-                        style={{ width: '24px', height: '24px' }}
+                        className="coin-icon"
                     />
-                    BTC / USDT
+                    <div className="symbol-text">
+                        <span className="symbol-name">BTC / USDT</span>
+                        <span className="symbol-sub-name">Bitcoin Tether US</span>
+                    </div>
                 </div>
-                <div className={`status-dot ${isConnected ? 'connected' : ''}`} title={isConnected ? 'Connected' : 'Disconnected'} />
+                <div className="live-indicator">
+                    <div className={`pulse-dot ${isConnected ? 'active' : ''}`} />
+                    <span className="live-text">Live</span>
+                </div>
             </div>
 
-            <div className="price-container">
-                <div className={`price ${priceColor}`}>
-                    {formatPrice(lastMessage?.price)}
+            {/* 2. Big Price Display */}
+            <div className="ticker-price-section">
+                <div className={`price-display ${priceColor}`}>
+                    {displayPrice}
+                </div>
+                <div className="price-change-pill up">
+                    ↑ {MOCK_STATS.changePercent}% (24h)
                 </div>
             </div>
 
-            <div className="details">
-                <div className="detail-item">
-                    <span className="detail-label">24h Change</span>
-                    <span className="detail-value" style={{ color: 'var(--text-secondary)' }}>
-                        {/* Placeholder as we don't have 24h stats yet */}
-                        +0.00%
+            {/* 3. Stats Grid */}
+            <div className="stats-grid">
+                <StatRow
+                    icon={<Activity size={14} />}
+                    label="24h High"
+                    value={volumeFormatter.format(MOCK_STATS.high)}
+                />
+                <StatRow
+                    icon={<Activity size={14} style={{ transform: 'scaleY(-1)' }} />}
+                    label="24h Low"
+                    value={volumeFormatter.format(MOCK_STATS.low)}
+                />
+                <StatRow
+                    icon={<BarChart2 size={14} />}
+                    label="24h Volume"
+                    value={`${volumeFormatter.format(MOCK_STATS.volume)} BTC`}
+                />
+                <StatRow
+                    icon={<Hash size={14} />}
+                    label="Quantity"
+                    value={displayQuantity}
+                />
+            </div>
+
+            {/* 4. Footer */}
+            <div className="ticker-footer">
+                <div className="footer-item">
+                    <span className="stat-label">
+                        <Clock size={14} /> Time
+                    </span>
+                    <span className="stat-value">{displayTime}</span>
+                </div>
+                <div className="footer-item">
+                    <span className="stat-label">
+                        <Zap size={14} /> Status
+                    </span>
+                    <span className={`status-badge ${isConnected ? 'connected' : ''}`}>
+                        {isConnected ? '● Connected' : '○ Connecting...'}
                     </span>
                 </div>
-                <div className="detail-item">
-                    <span className="detail-label">Quantity</span>
-                    <span className="detail-value">{formatQuantity(lastMessage?.quantity)}</span>
-                </div>
-                <div className="detail-item">
-                    <span className="detail-label">Time</span>
-                    <span className="detail-value">{formatTime(lastMessage?.eventTime)}</span>
-                </div>
-                <div className="detail-item">
-                    <span className="detail-label">Status</span>
-                    <span className="detail-value" style={{ color: isConnected ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
-                        {isConnected ? 'Market Open' : 'Connecting...'}
-                    </span>
-                </div>
             </div>
-
-            {!lastMessage && isConnected && (
-                <div className="footer">
-                    <p className="loading-text">Waiting for tick data...</p>
-                </div>
-            )}
         </div>
     );
 };
+
+// Helper Component for consistent rows
+const StatRow = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) => (
+    <div className="stat-row">
+        <span className="stat-label">
+            {icon} {label}
+        </span>
+        <span className="stat-value">{value}</span>
+    </div>
+);
