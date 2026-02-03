@@ -29,6 +29,13 @@
 - [ ] **Write-Behind Caching**: 메모리의 Accumulator 상태를 '현재 진행 중(Current)' 상태로 간주하고, API 요청 시 **DB(Historical) + Memory(Real-time)** 데이터를 병합(Merge)하여 반환하도록 개선.
 - [ ] **Periodic Snapshot Flush**: 버킷이 닫히지 않았더라도 일정 주기(예: 1초)마다 DB에 `UPSERT` 하도록 변경하여 데이터 내구성(Durability) 확보.
 
+#### 🛡️ Verification & Risk Management
+- **Verification**:
+    - **Integration Test**: API 호출 시 반환되는 마지막 캔들의 시간과 현재 시간의 차이가 1초 이내인지 검증.
+    - **Visual Test**: 차트 새로고침 시 캔들이 끊김 없이 이어지는지 육안 확인.
+- **Risk**:
+    - **Data Inconsistency**: DB와 Memory 데이터 병합 시 중복 카운팅 주의 (Idempotency 보장).
+
 ---
 
 ### 2.2 Concurrency & Synchronization (CS: OS/Thread)
@@ -50,6 +57,13 @@
 - [ ] **Lock-Free/Wait-Free**: `OhlcAccumulator` 내부 필드를 `LongAdder`(Volume)나 `AtomicReference`(Price)로 변경하여 CAS(Compare-And-Swap) 기반의 Non-blocking 알고리즘 적용.
 - [ ] **Lock Granularity**: `synchronized` 블록 범위를 최소화하거나 `StampedLock`(Read/Write 분리 및 Optimistic Read 지원) 도입 검토.
 
+#### 🛡️ Verification & Risk Management
+- **Verification**:
+    - **JMH Benchmark**: `Throughput` 및 `SampleTime`(Latency) 측정하여 기존 코드 대비 성능 향상 수치화.
+    - **Concurrency Test**: `jcstress` 도구를 사용하여 Race Condition 발생 여부 검증.
+- **Risk**:
+    - **Complexity**: Lock-Free 알고리즘 구현 난이도로 인한 버그 발생 가능성 (철저한 단위 테스트 필요).
+
 ---
 
 ### 2.3 Data Structures & Memory (CS: Data Structure)
@@ -64,6 +78,13 @@
 #### 🚀 Optimization Strategy
 - [ ] **Primitive Collections**: `Eclipse Collections`나 `Trove` 라이브러리를 사용하여 Boxing/Unboxing 오버헤드 제거.
 - [ ] **Ring Buffer (Disruptor)**: LMAX Disruptor 패턴을 적용하여 GC 없이 배열(Array)을 재사용하는 구조로 변경.
+
+#### 🛡️ Verification & Risk Management
+- **Verification**:
+    - **Heap Dump Analysis**: 개선 전후 Heap Memory 사용량 및 객체 수 비교 (VisualVM, Eclipse MAT).
+    - **GC Log Analysis**: Minor GC 빈도 및 STW(Stop-The-World) 시간 측정.
+- **Risk**:
+    - **Memory Leak**: 객체 재사용(Pooling) 시 초기화 누락으로 인한 Dirty Data 오염 주의.
 
 ---
 
@@ -112,6 +133,13 @@
 #### 🚀 Optimization Strategy
 - [ ] **JDBC Batch Update**: JPA의 `saveAll()`이나 JDBC Template의 `batchUpdate()`를 사용하여 여러 건의 데이터를 한 번의 Network Call로 처리.
 - [ ] **Flush Strategy**: 일정 개수(예: 1000개)나 일정 시간(예: 500ms) 단위로 묶어서 처리하는 **Bulk Insert** 도입.
+
+#### 🛡️ Verification & Risk Management
+- **Verification**:
+    - **DB Monitoring**: 초당 Transaction 수(TPS) 및 Active Connection 수 변화 모니터링.
+    - **Latency Check**: `FlushScheduler` 실행 시간 측정 (Before vs After).
+- **Risk**:
+    - **Transaction Timeout**: 한 트랜잭션의 크기가 너무 커지면 Lock 대기 시간 증가 및 Deadlock 가능성 (적절한 Chunk Size 설정 필요).
 
 ---
 
