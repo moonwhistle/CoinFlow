@@ -4,8 +4,10 @@ import type { Time, LogicalRange, IChartApi, ISeriesApi } from 'lightweight-char
 import { Settings, Camera, Maximize, BarChart2 } from 'lucide-react';
 import { useCoinflowWebSocket } from '../../hooks/useCoinflowWebSocket';
 import { CHART_COLORS, CHART_CONFIG } from '../../constants/chart';
-import { aggregateTickToCandle, generateMockData } from '../../utils/chartHelpers';
+import { aggregateTickToCandle } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
+import { getOhlcData } from '../../api/ohlcApi';
+import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
 import type { TickData } from '../../types/websocket';
 import './TradingChart.css';
 
@@ -14,21 +16,20 @@ export const TradingChart = () => {
     const volumeContainerRef = useRef<HTMLDivElement>(null);
 
     // Refs for chart APIs to access inside effects/callbacks without re-rendering
-    // Using useRef instead of useState to prevent re-renders on high-frequency data updates (100+ ticks/sec)
     const mainChartRef = useRef<IChartApi | null>(null);
     const volumeChartRef = useRef<IChartApi | null>(null);
     const mainSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
-    const [activeTimeframe, setActiveTimeframe] = useState(CHART_CONFIG.DEFAULT_TIMEFRAME);
+    // Default to M1 as per req
+    const [activeTimeframe, setActiveTimeframe] = useState<OhlcInterval>('M1');
+    const [isLoading, setIsLoading] = useState(true);
 
     // State to track the current accumulating candle
     const currentCandleRef = useRef<ChartCandle | null>(null);
     const currentVolumeRef = useRef<VolumeBar | null>(null);
 
     // --- Real-time Data Handling (Performance Optimized) ---
-    // Use useCallback to keep the function reference stable across renders.
-    // Logic extracted to aggregateTickToCandle for SRP and reusability.
     const handleTick = useCallback((tick: TickData) => {
         if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
 
@@ -37,7 +38,8 @@ export const TradingChart = () => {
             currentCandleRef.current,
             currentVolumeRef.current,
             CHART_COLORS.UP_TRANSPARENT,
-            CHART_COLORS.DOWN_TRANSPARENT
+            CHART_COLORS.DOWN_TRANSPARENT,
+            activeTimeframe
         );
 
         if (candle && volume) {
@@ -52,13 +54,12 @@ export const TradingChart = () => {
     }, []);
 
     // WebSocket Hook with Callback
-    // Pass handleTick to avoid state updates on every tick
     const { isConnected, subscribe } = useCoinflowWebSocket(
-        'ws://localhost:8080/ws/connect',
+        'ws://localhost:8080/ws/v1/coinflow',
         { onMessage: handleTick }
     );
 
-    // --- Chart Initialization ---
+    // --- Chart Initialization & Data Loading ---
     useEffect(() => {
         if (!mainContainerRef.current || !volumeContainerRef.current) return;
 
@@ -124,11 +125,54 @@ export const TradingChart = () => {
             priceFormat: { type: 'volume' },
         });
 
-        // 3. Generate Mock Data 
-        // Note: Used for initial prototype. Will be replaced by Historical Data API.
-        const { candleData, volumeData } = generateMockData(100);
-        mainSeries.setData(candleData);
-        volumeSeries.setData(volumeData);
+        // 3. Initial Data Load
+        const loadInitialData = async () => {
+            setIsLoading(true);
+            try {
+                // TODO: Symbol ID is hardcoded to 1 for now (assuming BTCUSDT = 1)
+                const response = await getOhlcData(1, activeTimeframe, 120);
+
+                const candles: ChartCandle[] = [];
+                const volumes: VolumeBar[] = [];
+
+                response.snapshots.forEach((snap: OhlcCandleSnapshot) => {
+                    const time = (new Date(snap.bucketTime).getTime() / 1000) as Time;
+
+                    candles.push({
+                        time,
+                        open: snap.openPrice,
+                        high: snap.highPrice,
+                        low: snap.lowPrice,
+                        close: snap.closePrice
+                    });
+
+                    volumes.push({
+                        time,
+                        value: snap.volume,
+                        color: snap.closePrice >= snap.openPrice ? CHART_COLORS.UP_TRANSPARENT : CHART_COLORS.DOWN_TRANSPARENT
+                    });
+                });
+
+                // Sort by time
+                candles.sort((a, b) => (a.time as number) - (b.time as number));
+                volumes.sort((a, b) => (a.time as number) - (b.time as number));
+
+                mainSeries.setData(candles);
+                volumeSeries.setData(volumes);
+
+                // Update refs for real-time updates
+                if (candles.length > 0) {
+                    currentCandleRef.current = candles[candles.length - 1];
+                    currentVolumeRef.current = volumes[volumes.length - 1];
+                }
+            } catch (err) {
+                console.error("Failed to load chart data", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadInitialData();
 
         // Set Refs
         mainChartRef.current = mainChart;
@@ -136,13 +180,7 @@ export const TradingChart = () => {
         mainSeriesRef.current = mainSeries;
         volumeSeriesRef.current = volumeSeries;
 
-        // Initialize current candle ref with the last mock candle to allow continuation
-        if (candleData.length > 0 && volumeData.length > 0) {
-            currentCandleRef.current = candleData[candleData.length - 1];
-            currentVolumeRef.current = volumeData[volumeData.length - 1];
-        }
-
-        // 4. Sync
+        // 4. Synchronization
         const mainTimeScale = mainChart.timeScale();
         const volTimeScale = volumeChart.timeScale();
 
@@ -175,10 +213,8 @@ export const TradingChart = () => {
 
         mainChart.timeScale().fitContent();
 
-        // 5. Resize
+        // 5. Resize Handling
         const handleResize = () => {
-            // ... resize logic ...
-            // Simplified for brevity, same logic as before
             if (mainChartRef.current && mainContainerRef.current) {
                 mainChartRef.current.applyOptions({
                     width: mainContainerRef.current.clientWidth,
@@ -202,7 +238,7 @@ export const TradingChart = () => {
             mainChart.remove();
             volumeChart.remove();
         };
-    }, []);
+    }, [activeTimeframe]);
 
     // --- WebSocket Subscription ---
     useEffect(() => {
@@ -216,12 +252,12 @@ export const TradingChart = () => {
         <div className="chart-wrapper">
             <div className="chart-toolbar">
                 <div className="time-frame-selector">
-                    {/* Temporarily disabled real switching for now, just UI */}
-                    {['1m', '15m', '1h', '4h', '1D', '1W'].map((tf) => (
+                    {(['M1', 'M5', 'M30'] as OhlcInterval[]).map((tf) => (
                         <button
                             key={tf}
                             className={`tf-btn ${activeTimeframe === tf ? 'active' : ''}`}
                             onClick={() => setActiveTimeframe(tf)}
+                            disabled={isLoading}
                         >
                             {tf}
                         </button>
