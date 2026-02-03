@@ -28,7 +28,7 @@ export const getOhlcData = async (
         }
 
         const data: OhlcChartResponse = await response.json();
-        console.log(`[ohlcApi] Success. Snapshots: ${data.snapshots.length}`);
+        console.log(`[ohlcApi] Success. Candles: ${data.candles.length}`);
         return data;
     } catch (error) {
         console.error('Failed to fetch OHLC data:', error);
