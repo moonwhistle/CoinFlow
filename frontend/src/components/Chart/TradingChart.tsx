@@ -135,7 +135,7 @@ export const TradingChart = () => {
                 const candles: ChartCandle[] = [];
                 const volumes: VolumeBar[] = [];
 
-                response.snapshots.forEach((snap: OhlcCandleSnapshot) => {
+                response.candles.forEach((snap: OhlcCandleSnapshot) => {
                     const time = (new Date(snap.bucketTime).getTime() / 1000) as Time;
 
                     candles.push({

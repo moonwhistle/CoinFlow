@@ -12,5 +12,5 @@ export interface OhlcCandleSnapshot {
 export interface OhlcChartResponse {
     symbolId: number;
     interval: OhlcInterval;
-    snapshots: OhlcCandleSnapshot[];
+    candles: OhlcCandleSnapshot[];
 }
