@@ -1,5 +1,6 @@
 import type { Time } from 'lightweight-charts';
 import type { TickData } from '../types/websocket';
+import type { OhlcInterval } from '../types/chart';
 
 export interface ChartCandle {
     time: Time;
@@ -24,14 +25,25 @@ export const aggregateTickToCandle = (
     currentCandle: ChartCandle | null,
     currentVolume: VolumeBar | null,
     upColor: string,
-    downColor: string
+    downColor: string,
+    interval: OhlcInterval = 'M1'
 ) => {
     const price = parseFloat(tick.price);
     const quantity = parseFloat(tick.quantity);
     const timestamp = parseInt(tick.eventTime);
 
-    // Round to 1-minute candle time (seconds)
-    const candleTime = (Math.floor(timestamp / 60000) * 60) as Time;
+    // Determine duration in seconds based on interval
+    let duration = 60;
+    if (interval === 'M5') duration = 300;
+    else if (interval === 'M30') duration = 1800;
+
+    // Round to nearest interval start time
+    // timestamp is in ms, so divide by 1000 first, or convert duration to ms
+    // Logic: Floor(timestamp_ms / duration_ms) * duration_seconds_converted_to_chart_time
+    // Wait, chart uses Seconds.
+
+    const timestampSec = Math.floor(timestamp / 1000);
+    const candleTime = (Math.floor(timestampSec / duration) * duration) as Time;
 
     let nextCandle = currentCandle ? { ...currentCandle } : null;
     let nextVolume = currentVolume ? { ...currentVolume } : null;
@@ -51,7 +63,7 @@ export const aggregateTickToCandle = (
         nextVolume = {
             time: candleTime,
             value: quantity,
-            color: upColor, // Default to Up color for start
+            color: upColor,
         };
     } else {
         // Update Existing Candle
