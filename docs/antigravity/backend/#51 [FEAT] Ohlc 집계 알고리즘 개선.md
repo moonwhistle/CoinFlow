@@ -74,3 +74,60 @@
 1.  **문서화**: 현재 로직 분석 완료 및 문서 작성. (완료)
 2.  **구현**: `Ohlc1mService`에 Memory Store 조회 로직 주입 및 Merge 구현.
 3.  **검증**: API 호출 테스트를 통해 Data Gap(누락된 30초) 해결 확인.
+
+## 5. OhlcAccumulator 동시성 테스트 리포트 (Concurrency Test Report)
+
+**테스트 목적**: `OhlcAccumulator` 객체가 멀티스레드 환경에서 데이터 유실 없이 안전하게 집계되는지 검증.
+
+### 5.1 테스트 방법론 (Methodology)
+- **환경**: JUnit 5, ExecutorService (FixedThreadPool)
+- **부하 조건**:
+    - **Thread Count**: 10개
+    - **Action per Thread**: 1,000회 Accumulate 실행
+    - **Total Operations**: 10,000회
+- **검증 대상**: `volume` 필드 (단순 덧셈 연산으로 Race Condition 확인이 가장 용이함)
+
+### 5.2 테스트 코드 (Snippet)
+```java
+@Test
+void accumulateVolume_Concurrency_Test() throws InterruptedException {
+    // ... setup ...
+    int threadCount = 10;
+    int additionsPerThread = 1000;
+    
+    // 10개의 스레드가 동시에 같은 accumulator 객체를 업데이트
+    for (int i = 0; i < threadCount; i++) {
+        executorService.submit(() -> {
+            for (int j = 0; j < additionsPerThread; j++) {
+                accumulator.apply(price, 1L, time);
+            }
+        });
+    }
+    // ... wait and assert ...
+    assertEquals(10000L, accumulator.getVolume());
+}
+```
+
+### 5.3 테스트 결과 (Results)
+
+#### 1차 시기: 동시성 제어 미적용 (Failure)
+- **상태**: `synchronized` 키워드 없음.
+- **결과**: **실패 (Failed)**
+- **로그**:
+    ```
+    OhlcAccumulatorTest > Concurrency: accumulate volume correctly in multi-threaded environment FAILED
+    expected: <10000> but was: <8542>
+    ```
+- **분석**: 여러 스레드가 동시에 `volume` 값을 읽고 쓰는 과정에서 연산이 덮어씌워져 데이터 유실 발생 (Lost Update Problem).
+
+#### 2차 시기: 동시성 제어 적용 (Success)
+- **조치**: `apply` 메서드에 `synchronized` 키워드 선언.
+    ```java
+    public synchronized void apply(BigDecimal price, long vol, Instant eventTime) { ... }
+    ```
+- **결과**: **성공 (Passed)**
+- **로그**:
+    ```
+    OhlcAccumulatorTest > Concurrency: accumulate volume correctly in multi-threaded environment PASSED
+    ```
+- **결론**: `synchronized`를 통해 모니터 락(Monitor Lock)을 획득한 하나의 스레드만 메서드에 진입하도록 제한함으로써 데이터 정합성 보장.
