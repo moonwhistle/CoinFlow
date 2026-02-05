@@ -131,3 +131,56 @@ void accumulateVolume_Concurrency_Test() throws InterruptedException {
     OhlcAccumulatorTest > Concurrency: accumulate volume correctly in multi-threaded environment PASSED
     ```
 - **결론**: `synchronized`를 통해 모니터 락(Monitor Lock)을 획득한 하나의 스레드만 메서드에 진입하도록 제한함으로써 데이터 정합성 보장.
+
+## 6. Memory + DB Merge 구현 리포트 (Implementation Report)
+
+**구현 목적**: DB에 아직 저장되지 않은 실시간(In-Memory) 데이터를 조회 시점에 병합하여 데이터 누락(Data Gap) 현상을 해결.
+
+### 6.1 기존 상태 (As-Is)
+- **구조**: API는 DB(`ohlc_1m`)만 조회함.
+- **문제점**:
+    - 누적기(`Accumulator`)가 매 1초마다 Flush를 시도하지만, **"완료된 버킷"**만 저장함.
+    - 예: 12:00:30초에 요청 시, DB에는 11:59분 데이터까지만 존재.
+    - 결과적으로 사용자는 0~59초 동안의 최신 가격 변화를 볼 수 없음.
+
+### 6.2 구현 내용 (To-Be)
+- **개선 전략**: **[DB 조회 결과] + [Memory 조회 결과]** 를 합쳐서 반환.
+- **아키텍처 변경 (DIP 적용)**:
+    - `Core` 모듈은 `Consumer` 모듈을 의존할 수 없음 (Circular Dependency).
+    - 해결책: `Core`에 `RealTimeOhlcProvider` 인터페이스를 정의하고, `Consumer`가 이를 구현(`RealTimeOhlcAggregationProvider`)하도록 역전시킴.
+
+### 6.3 상세 구현 (Implementation Detail)
+
+#### A. Interface Definition (Core)
+```java
+public interface RealTimeOhlcProvider {
+    Optional<Ohlc1m> getRealTimeCandle(Long symbolId, LocalDateTime bucketTime);
+}
+```
+
+#### B. Provider Implementation (Consumer)
+- `Ohlc1mAggregationStore`에서 현재 누적 중인 `OhlcAccumulator`를 조회.
+- 이를 `Ohlc1m` 엔티티 객체로 변환하여 반환.
+
+#### C. Merge Logic (Service)
+```java
+// 1. DB에서 과거 데이터 조회
+List<Ohlc1m> candles = ohlc1mRepository.findCandlesInBucketRange(...);
+
+// 2. 실시간 데이터 Provider 조회 (현재 시간 버킷)
+realTimeOhlcProvider.ifPresent(provider -> {
+    provider.getRealTimeCandle(symbolId, lastBucketTime).ifPresent(realTimeCandle -> {
+        // 3. 리스트에 병합 (없으면 추가, 있으면 덮어쓰기)
+        mergeOrAdd(candles, realTimeCandle);
+    });
+});
+```
+
+### 6.4 검증 결과 (Verification)
+- **테스트**: `Ohlc1mServiceTest`
+- **시나리오**:
+    - DB에 `12:00 ~ 12:03` 데이터 존재.
+    - Memory에 `12:04` 데이터 존재.
+- **결과**:
+    - `findCandlesInBucketRange` 호출 시 총 5개(`12:00 ~ 12:04`) 데이터 반환 확인.
+    - **성공 (Passed)**
