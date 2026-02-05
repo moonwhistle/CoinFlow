@@ -12,6 +12,9 @@ dependencies {
 
     // postgre
     implementation 'org.postgresql:postgresql'
+
+    testImplementation 'org.mockito:mockito-core'
+    testImplementation 'org.mockito:mockito-junit-jupiter'
 }
 
 bootJar { enabled = false }
