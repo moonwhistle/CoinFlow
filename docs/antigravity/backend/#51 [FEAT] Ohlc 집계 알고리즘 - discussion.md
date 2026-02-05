@@ -94,3 +94,30 @@
     - **Chart Visualization**: 차트는 추세를 보여주는 **시각화 도구(Derived View)**입니다. 현재가가 정확하다면 차트의 막대가 0.X초 늦게 그려지거나 미세한 오차가 있어도 트레이딩에 치명적이지 않습니다.
     - **결론**: 서버는 "Tick Broadcasting 속도"에 집중하고, 무거운 "Charting"은 각 클라이언트(Frontend)에 위임하여 서버 부하를 줄이고 반응 속도를 극대화하는 것이 정답입니다.
 
+
+---
+
+## 📅 Implementation Task Breakdown
+
+### Phase 1: Core Data Structure (Memory Store)
+- [ ] **Define OhlcMemoryStore Interface**: Define methods for addTick, getCurrentCandle, flush.
+- [ ] **Implement In-Memory Storage**: Use ConcurrentHashMap to store valid CandidateOhlc per symbol.
+- [ ] **Tick Aggregation Logic**: Implement logic to update High/Low/Close/Volume in memory when a new tick arrives.
+
+### Phase 2: Persistence & Reliability (Hybrid Approach)
+- [ ] **Implement Scheduled Flusher**: Create a @Scheduled task running every 10s to UPSERT memory state to DB.
+- [ ] **Implement Graceful Shutdown**: Add @PreDestroy hook to flush remaining data to DB on server stop.
+- [ ] **DB Repository Optimization**: Ensure UPSERT (Merge) query is efficient.
+
+### Phase 3: Read API (Memory Merge)
+- [ ] **Refactor OhlcService.getCandles()**:
+    - Fetch history from logical DB (Redis/RDB).
+    - Fetch current forming candle from OhlcMemoryStore.
+    - Combine list and return.
+
+### Phase 4: Real-time Convergence (WebSocket)
+- [ ] **Verify Tick Broadcasting**: Ensure raw ticks are sent via WS immediately.
+- [ ] **Implement Candle Close Event**:
+    - Detect when minute changes (00s).
+    - Broadcast CandleClosed event with final values.
+    - Clear/Reset memory bucket for next minute.
