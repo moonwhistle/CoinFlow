@@ -1,6 +1,37 @@
 # #51 [FEAT] Ohlc 집계 알고리즘 개선
 
-## 1. 개요 (Overview)
+## 📌 Summary
+Tick 기반의 OHLC(Open-High-Low-Close) 집계 로직을 개선하여 **실시간 차트 데이터 누락(Data Gap) 문제를 해결**하고, **`OhlcAccumulator`의 동시성 이슈를 수정**했습니다.
+
+## 📚 Changes
+
+### 1. `OhlcAccumulator` 동시성 개선
+- **문제**: 멀티스레드 환경에서 `Accumulator` 객체에 접근 시 데이터 유실(Lost Update) 발생 가능성 확인.
+- **수정**: `apply()` 메서드에 `synchronized` 키워드를 추가하여 Thread-Safe 하게 변경. (10 Concurrent Threads Test 통과)
+
+### 2. [Memory + DB] Merge Strategy 도입 (Core & Consumer)
+- **문제**: API 요청 시점(예: `12:00:30`)에 DB에 저장된 `11:59:00` 데이터만 반환되어, 현재 진행 중인 30초 간의 데이터가 누락됨.
+- **수정**:
+   - `coinflow-core`: `RealTimeOhlcProvider` 인터페이스 정의 및 `Ohlc1mService`에서 병합 로직 구현. (DB 조회 결과 + In-Memory 조회 결과)
+   - `coinflow-consumer-app`: `RealTimeOhlcAggregationProvider` 구현체 추가. `Ohlc1mAggregationStore`에서 실시간 데이터 조회.
+   - **Refactoring**: `RealTimeOhlcAggregationProvider`에서 `SymbolRepository` 대신 `SymbolService`를 사용하도록 리팩토링.
+
+### 3. Verification
+- `OhlcAccumulatorTest`: 동시성 테스트 케이스 추가 및 검증 완료.
+- `Ohlc1mServiceTest`: Data Merge 및 Override 로직 단위 테스트(Unit Test) 작성 및 검증 완료.
+
+## 📝 Note
+- **DIP(Dependency Inversion Principle)**: `Core` 모듈이 `Consumer`의 세부 구현에 의존하지 않도록 인터페이스(`RealTimeOhlcProvider`)를 도입하여 의존성을 역전시켰습니다.
+- **Data Consistency**: 서버 재시작 시에도 데이터 정합성을 유지하기 위한 Snapshot Flush 전략은 추후 과제로 남겨두었습니다. (현재는 실시간 조회만 보완)
+
+## 📌 Related Issue
+- Closes #51
+
+---
+
+## 1. 상세 기술 리포트 (Detailed Technical Report)
+
+### 1.1 개요 (Overview)
 현재 구현된 Tick 기반 OHLC 집계 로직의 구조를 상세히 분석하고, 실시간성(Real-time consistency)과 데이터 정합성(Consisteny) 문제를 해결하기 위한 개선 방안을 정의한다.
 
 ---
