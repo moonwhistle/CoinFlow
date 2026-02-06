@@ -23,20 +23,27 @@ public class Ohlc1mService {
         public void applyAndSave(Symbol symbol, LocalDateTime bucketTime, BigDecimal open, BigDecimal high,
                         BigDecimal low,
                         BigDecimal close, long volume) {
-                Ohlc1m candle = ohlc1mRepository.findBySymbolIdAndBucketTime(symbol.getId(), bucketTime)
-                                .orElseGet(() -> Ohlc1m.builder()
-                                                .symbol(symbol)
-                                                .bucketTime(bucketTime)
-                                                .build());
+                Optional<Ohlc1m> optionalCandle = ohlc1mRepository.findBySymbolIdAndBucketTime(symbol.getId(),
+                                bucketTime);
 
-                candle.apply(
-                                open,
-                                high,
-                                low,
-                                close,
-                                volume);
-
-                ohlc1mRepository.save(candle);
+                if (optionalCandle.isPresent()) {
+                        // Existing candle: Merge (Accumulate volume, Expand High/Low)
+                        Ohlc1m candle = optionalCandle.get();
+                        candle.merge(open, high, low, close, volume);
+                        ohlc1mRepository.save(candle);
+                } else {
+                        // New candle: Create directly
+                        Ohlc1m candle = Ohlc1m.builder()
+                                        .symbol(symbol)
+                                        .bucketTime(bucketTime)
+                                        .open(open)
+                                        .high(high)
+                                        .low(low)
+                                        .close(close)
+                                        .volume(volume)
+                                        .build();
+                        ohlc1mRepository.save(candle);
+                }
         }
 
         @Transactional(readOnly = true)
