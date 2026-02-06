@@ -26,7 +26,7 @@ public class CandleClosedStreamConsumer implements MessageListener {
     public void onMessage(Message message, byte[] pattern) {
         try {
             CandleClosedEvent event = objectMapper.readValue(message.getBody(), CandleClosedEvent.class);
-            String symbolCode = event.getSymbolCode();
+            String symbolCode = event.symbolCode();
 
             if (symbolCode == null) {
                 log.warn("Received CandleClosedEvent without symbolCode");
