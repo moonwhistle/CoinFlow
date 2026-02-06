@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { WsCommandType, type WsRequest, type TickData } from '../types/websocket';
+import { WsCommandType, type WsRequest, type WsMessage } from '../types/websocket';
 
 const RECONNECT_INTERVAL = 3000; // 3 seconds
 
-export const useCoinflowWebSocket = (url: string, options?: { onMessage?: (data: TickData) => void }) => {
+export const useCoinflowWebSocket = (url: string, options?: { onMessage?: (data: WsMessage) => void }) => {
     const [isConnected, setIsConnected] = useState(false);
-    const [lastMessage, setLastMessage] = useState<TickData | null>(null);
+    const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const timerRef = useRef<number | null>(null);
     const connectRef = useRef<() => void>(null);
@@ -34,12 +34,14 @@ export const useCoinflowWebSocket = (url: string, options?: { onMessage?: (data:
 
         ws.onmessage = (event) => {
             try {
-                const data: TickData = JSON.parse(event.data);
+                const data: WsMessage = JSON.parse(event.data);
 
                 // PERFORMANCE: If callback provided, use it and skip state update (avoid re-render)
                 if (optionsRef.current?.onMessage) {
                     optionsRef.current.onMessage(data);
                 } else {
+                    // We might need to handle different types here if we ever use state directly from hook
+                    // For now, casting or type narrowing in the consumer is expected if using lastMessage
                     setLastMessage(data);
                 }
             } catch (err) {
