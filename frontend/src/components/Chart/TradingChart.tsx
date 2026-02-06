@@ -8,7 +8,7 @@ import { aggregateTickToCandle } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
 import { getOhlcData } from '../../api/ohlcApi';
 import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
-import { type WsMessage, type TickDto, type CandleClosedEvent, isTickDto, isCandleClosedEvent } from '../../types/websocket';
+import { type WsMessage, isTickDto, isCandleClosedEvent } from '../../types/websocket';
 import './TradingChart.css';
 
 export const TradingChart = () => {
