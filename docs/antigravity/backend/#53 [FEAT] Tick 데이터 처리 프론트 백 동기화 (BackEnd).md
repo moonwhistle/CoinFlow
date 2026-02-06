@@ -90,4 +90,41 @@ WS Client
     *   1분 봉이 완성되어 DB에 저장되는 시점(정본 데이터 확정)에 `CandleClosedEvent`를 발행합니다.
     *   이 이벤트는 '데이터 일관성'을 맞추기 위한 기준점이 됩니다.
 3.  **CandleClosedStreamConsumer**:
-    *   Redis Channel을 구독하고 있다가 이벤트가 오면, 해당 심볼을 보고 있는 클라이언트들에게 정본 데이터를 전송합니다.
+### 5.3 WebSocket Multiplexing Strategy (Single Connection)
+
+클라이언트의 리소스 효율성을 위해 **"단일 연결, 다중 소스(Single Connection, Multi-Source)"** 방식을 채택했습니다.
+
+*   **Client View**: `/ws/v1/coinflow` 엔드포인트 하나에만 연결하면 됩니다.
+*   **Server View**: 하나의 세션(Session)에 대해 여러 컴포넌트가 데이터를 주입합니다.
+
+```text
+[Shared Component]
++--------------------------------+
+|   SubscriptionSessionManager   | <---+ (1. Get Subscribers)
++--------------------------------+     |
+| - subscribers: Map<Sym, Set>   |     |
+| + getSubscribers(symbol)       |     |
++--------------------------------+     |
+         ^                             |
+         | (2. Get Subscribers)        |
+         |                             |
++--------+---------------------+  +----+------------------------+
+|  CandleClosedStreamConsumer  |  |    TickRawStreamConsumer    |
++------------------------------+  +-----------------------------+
+| + onMessage(CandleClosed)    |  | + onMessage(RawTick)        |
+| + broadcast(Correction)      |  | + broadcast(TickDto)        |
++--------+---------------------+  +----+------------------------+
+         |                             |
+         | (Push CandleClosedEvent)    | (Push TickDto)
+         |                             |
+         v                             v
++---------------------------------------------------------------+
+|                    WebSocketSession (Client)                  |
++---------------------------------------------------------------+
+```
+
+*   **Shared Session Manager**: `SubscriptionSessionManager` 싱글톤 빈을 통해 구독 정보를 공유합니다.
+*   **Multiplexing**: 
+    1.  `TickRawStreamConsumer`는 실시간 Tick 발생 시 해당 심볼 구독자를 찾아 전송.
+    2.  `CandleClosedStreamConsumer`는 봉 마감 시 해당 심볼 구독자를 찾아 보정 데이터 전송.
+    3.  따라서 클라이언트는 별도의 연결 없이 두 종류의 메시지를 모두 수신합니다.
