@@ -121,3 +121,38 @@
     - Detect when minute changes (00s).
     - Broadcast CandleClosed event with final values.
     - Clear/Reset memory bucket for next minute.
+
+---
+
+## 🛑 Design Limitations & Trade-offs (Discussion)
+
+### 1. Concurrency Model: Synchronized vs Lock-Free
+**Q: `synchronized` 메서드는 고빈도 Tick 환경에서 스케일링 문제를 일으키지 않는가?**
+- **User Feedback**: 주식/코인 틱 데이터가 초당 수천~수만 건에 달하지 않는다면(대부분 심볼은 저빈도), `synchronized`로도 충분하지 않은가?
+- **Re-Analysis**:
+    - 맞습니다. 대다수의 '알트코인'이나 '중소형주'는 초당 1~10건 미만의 틱이 발생합니다. 이 경우 `synchronized`의 오버헤드는 무시할 수 수준(Negligible)입니다.
+    - JVM의 `synchronized`는 경합이 없을 때(Uncontended) 매우 빠르며, 경합 시에도 수천 TPS까지는 단일 서버에서 충분히 처리 가능합니다.
+- **Conclusion**:
+    - **Accept**: 현재의 `synchronized` 방식은 **"단일 서버 & 일반적인 심볼 트래픽"** 환경에서 가장 합리적인 선택입니다. (Over-engineering 방지)
+- **Why Logic-Free (Atomic) was Deferred?**:
+    - `Open/High/Low/Close`는 서로 의존적인 상태입니다(예: `High`는 `Current High`와 비교). 이를 Lock-Free로 구현하려면 CAS(Compare-And-Swap) 루프나 불변 객체 교체 방식이 필요한데, 구현 복잡도가 높고 ABA 문제 등 버그 위험이 있습니다.
+    - **Decision**: 초기 단계에서는 **데이터 정합성(Correctness)**을 최우선으로 하여 확실한 `synchronized`를 채택했습니다. 
+- **Future Improvement**: 
+    - 성능 한계 도달 시 **Disruptor Pattern** (Single-Threaded Consumer) 또는 **LongAdder + AtomicReference(Immutable State)** 구조로 리팩토링할 계획입니다.
+
+### 2. Data Consistency Boundaries (Late Arrival)
+### 2. Data Consistency Boundaries (Late Arrival)
+**Q: "마지막 버킷"만 병합하는데, 지연 도착한 Tick이 "과거 버킷"에 속한다면?**
+- **Critical Finding**: 
+    - 현재의 Flush 로직(`Ohlc1mFlushScheduler`)은 Flush 후 메모리에서 Accumulator를 삭제(`remove`)합니다.
+    - 따라서 지연 도착한 Tick(예: 12:00:59 데이터가 12:01:05 도착)은 **새로운(초기화된) Accumulator**를 생성합니다. (Volume=1, High=TickPrice)
+    - 그러나 `Ohlc1mService.applyAndSave`는 DB의 기존 데이터(Volume=1000)를 로드한 뒤, 위 **부분적인 Accumulator 값으로 덮어씁니다(Overwrite).**
+    - **결과**: 12:00분의 거래량이 1000에서 1로 줄어드는 **치명적인 데이터 정합성 오류(Data Corruption)**가 발생합니다.
+- **Why this question was raised**:
+    - "마지막 버킷 제외"가 문제가 아니라, **"이미 마감된 버킷에 대한 업데이트"** 처리 방식 자체가 잘못되어 있음을 지적하신 것으로 보입니다.
+- **Strategy (Fix)**:
+    - **API Level**: 현재처럼 "Current Candle" 병합 유지.
+    - **Persistence Level (수정 필요)**:
+        - `Ohlc1mService`가 단순히 `kyle.apply()`(Setter)를 호출하는 것이 아니라, **Merge Logic**을 수행해야 합니다.
+        - 예: `dbCandle.setVolume(dbCandle.getVolume() + newAcc.getVolume())`, `dbCandle.updateHigh(max(db, new))`
+        - 또는 `OhlcAccumulator`를 메모리에서 즉시 삭제하지 않고 일정 시간(Grace Period) 유지하는 방법도 있으나, 서버 재시작 시에는 결국 Merge 로직이 필요하므로 **Service 레벨의 Merge**가 필수적입니다.
