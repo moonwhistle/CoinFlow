@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
 import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
+import { isTickDto, isCandleClosedEvent } from '../types/websocket';
 import './LiveTicker.css';
 
 const WS_URL = 'ws://localhost:8080/ws/v1/coinflow';
@@ -39,30 +40,63 @@ export const LiveTicker = () => {
     }, [isConnected, subscribe]);
 
     useEffect(() => {
-        if (lastMessage?.price) {
-            const currentPrice = parseFloat(lastMessage.price);
-            if (prevPriceRef.current !== null) {
-                if (currentPrice > prevPriceRef.current) {
-                    setPriceColor('up');
-                } else if (currentPrice < prevPriceRef.current) {
-                    setPriceColor('down');
-                }
+        if (lastMessage) {
+            let currentPrice: number | null = null;
+
+            if (isTickDto(lastMessage)) {
+                currentPrice = lastMessage.price;
+            } else if (isCandleClosedEvent(lastMessage)) {
+                currentPrice = lastMessage.close;
             }
-            prevPriceRef.current = currentPrice;
+
+            if (currentPrice !== null) {
+                if (prevPriceRef.current !== null) {
+                    if (currentPrice > prevPriceRef.current) {
+                        setPriceColor('up');
+                    } else if (currentPrice < prevPriceRef.current) {
+                        setPriceColor('down');
+                    }
+                }
+                prevPriceRef.current = currentPrice;
+            }
         }
     }, [lastMessage]);
 
+    // Helpers to extract data safely from Union Type
+    const getPrice = () => {
+        if (!lastMessage) return null;
+        if (isTickDto(lastMessage)) return lastMessage.price;
+        if (isCandleClosedEvent(lastMessage)) return lastMessage.close;
+        return null;
+    };
+
+    const getVolume = () => {
+        if (!lastMessage) return null;
+        return lastMessage.volume; // Both types have 'volume' (number)
+    };
+
+    const getTime = () => {
+        if (!lastMessage) return null;
+        if (isTickDto(lastMessage)) return lastMessage.eventTime;
+        if (isCandleClosedEvent(lastMessage)) return new Date(lastMessage.bucketTime).getTime();
+        return null;
+    };
+
+    const currentPrice = getPrice();
+    const currentVolume = getVolume();
+    const currentTime = getTime();
+
     // Formatters using current or mock data
-    const displayPrice = lastMessage?.price
-        ? currencyFormatter.format(parseFloat(lastMessage.price))
+    const displayPrice = currentPrice
+        ? currencyFormatter.format(currentPrice)
         : '---';
 
-    const displayQuantity = lastMessage?.quantity
-        ? parseFloat(lastMessage.quantity).toFixed(6)
+    const displayQuantity = currentVolume
+        ? currentVolume.toFixed(6)
         : '---';
 
-    const displayTime = lastMessage?.eventTime
-        ? new Date(lastMessage.eventTime).toLocaleTimeString()
+    const displayTime = currentTime
+        ? new Date(currentTime).toLocaleTimeString()
         : '--:--:--';
 
     return (
