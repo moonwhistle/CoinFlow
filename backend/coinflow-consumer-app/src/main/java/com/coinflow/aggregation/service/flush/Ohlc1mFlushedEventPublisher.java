@@ -25,7 +25,7 @@ public class Ohlc1mFlushedEventPublisher {
             CandleClosedEvent event = CandleClosedEvent.builder()
                     .symbolId(symbolId)
                     .symbolCode(symbolCode)
-                    .bucketTime(bucketTime)
+                    .bucketTime(bucketTime.toString()) // ISO 8601 default for LocalDateTime.toString()
                     .open(open)
                     .high(high)
                     .low(low)
