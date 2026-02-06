@@ -215,3 +215,22 @@ realTimeOhlcProvider.ifPresent(provider -> {
 - **결과**:
     - `findCandlesInBucketRange` 호출 시 총 5개(`12:00 ~ 12:04`) 데이터 반환 확인.
     - **성공 (Passed)**
+
+## 7. Late Arrival Data Consistency Fix (Critical Bug Fix)
+
+**문제 식별**:
+- `Ohlc1mFlushScheduler`는 Flush 후 메모리에서 Accumulator를 제거함.
+- 지연 도착(Late Arrival)한 Tick이 발생하면 새로운 Accumulator(Volume=소량)가 생성됨.
+- `Ohlc1mService.applyAndSave`가 기존 DB 데이터(Volume=대량)를 불러온 뒤, 단순 `apply`(Overwrite)를 수행하여 데이터가 유실됨.
+
+**해결책 (Merge Logic 도입)**:
+- `Ohlc1m` 엔티티에 `merge()` 메서드 추가.
+    - `Volume`: 기존 값 + 새로운 값 (Accumulate)
+    - `High`: 기존 값 vs 새로운 값 중 `Max`
+    - `Low`: 기존 값 vs 새로운 값 중 `Min`
+- `Ohlc1mService` 수정:
+    - 이미 존재하는 캔들이면 `merge()` 수행, 없으면 `create()` 수행.
+
+**검증 (Test)**:
+- `Ohlc1mServiceTest.applyAndSave_Merge_Test` 추가.
+- Volume 1000인 상태에서 Volume 10인 늦은 데이터가 들어왔을 때 -> 결과가 1010이 되는지 확인 (성공).
