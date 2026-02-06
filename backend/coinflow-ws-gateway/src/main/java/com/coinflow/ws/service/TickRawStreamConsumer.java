@@ -1,5 +1,6 @@
 package com.coinflow.ws.service;
 
+import com.coinflow.ws.dto.TickDto;
 import com.coinflow.ws.session.SubscriptionSessionManager;
 import com.coinflow.ws.session.WebSocketSessionManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,16 +27,23 @@ public class TickRawStreamConsumer implements StreamListener<String, MapRecord<S
     public void onMessage(MapRecord<String, String, String> message) {
         try {
             Map<String, String> body = message.getValue();
-            String symbol = body.get("symbol"); // Assuming key is "symbol"
+            String symbol = body.get("symbol");
 
             if (symbol == null) {
                 log.debug("[Redis] Received tick without symbol, ignoring.");
                 return;
             }
 
-            // In a real scenario, we might map this to a DTO (TickRawEvent)
-            String jsonPayload = objectMapper.writeValueAsString(body);
-            log.debug("[Redis] Received tick for {}: {}", symbol, jsonPayload);
+            // Map to DTO
+            TickDto tickDto = TickDto.builder()
+                    .symbol(symbol)
+                    .price(new java.math.BigDecimal(body.get("price")))
+                    .volume(Long.parseLong(body.get("quantity")))
+                    .eventTime(Long.parseLong(body.get("eventTime")))
+                    .build();
+
+            String jsonPayload = objectMapper.writeValueAsString(tickDto);
+            log.trace("[Redis] Received tick for {}: {}", symbol, jsonPayload); // Changed to trace for high traffic
 
             // Get subscribers for this symbol
             subscriptionManager.getSubscribers(symbol).forEach(sessionId -> {

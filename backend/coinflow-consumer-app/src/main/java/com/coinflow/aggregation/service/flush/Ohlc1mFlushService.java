@@ -20,7 +20,16 @@ public class Ohlc1mFlushService {
     @Transactional
     public void flush(AggregateKey key, OhlcAccumulator acc) {
         Symbol symbol = symbolService.findSymbol(key.symbolId());
-        ohlc1mService.applyAndSave(symbol, key.bucket(), acc.getOpen(), acc.getHigh(), acc.getLow(), acc.getClose(), acc.getVolume());
-        eventPublisher.publish(symbol.getId(), key.bucket());
+        ohlc1mService.applyAndSave(symbol, key.bucket(), acc.getOpen(), acc.getHigh(), acc.getLow(), acc.getClose(),
+                acc.getVolume());
+        eventPublisher.publish(
+                symbol.getId(),
+                symbol.getSymbol(),
+                key.bucket(),
+                acc.getOpen(),
+                acc.getHigh(),
+                acc.getLow(),
+                acc.getClose(),
+                acc.getVolume());
     }
 }
