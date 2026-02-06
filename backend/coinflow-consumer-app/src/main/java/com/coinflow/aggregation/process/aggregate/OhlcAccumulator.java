@@ -7,8 +7,15 @@ import lombok.Getter;
 /**
  * 시간 버킷(1m/5m/30m/...) 단위의 OHLC 누적기.
  *
- * <p>open은 최초 가격, close는 가장 늦은 eventTime을 가진 가격으로 결정한다.</p>
- * <p>volume은 고정 소수점 스케일링된 long(VolumeScaler)을 누적한다.</p>
+ * <p>
+ * open은 최초 가격, close는 가장 늦은 eventTime을 가진 가격으로 결정한다.
+ * </p>
+ * <p>
+ * volume은 고정 소수점 스케일링된 long(VolumeScaler)을 누적한다.
+ * </p>
+ * <p>
+ * Note: 이 클래스는 Thread-Safe 합니다.
+ * </p>
  */
 @Getter
 public class OhlcAccumulator {
@@ -34,7 +41,7 @@ public class OhlcAccumulator {
         return new OhlcAccumulator(price, volume, eventTime);
     }
 
-    public void apply(BigDecimal price, long vol, Instant eventTime) {
+    public synchronized void apply(BigDecimal price, long vol, Instant eventTime) {
         if (price.compareTo(high) > 0) {
             high = price;
         }

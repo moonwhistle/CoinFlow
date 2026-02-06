@@ -35,6 +35,7 @@ subprojects {
 		annotationProcessor 'org.projectlombok:lombok:1.18.32'
 
 		testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	}
 
 	tasks.named('test') {
