@@ -90,10 +90,7 @@ export const TradingChart = () => {
     }, [activeTimeframe]);
 
     // WebSocket Hook with Callback
-    const { isConnected, subscribe } = useCoinflowWebSocket(
-        'ws://localhost:8080/ws/v1/coinflow',
-        { onMessage: handleWebSocketMessage }
-    );
+    const { isConnected, subscribe } = useCoinflowWebSocket(handleWebSocketMessage);
 
     // --- Chart Initialization & Data Loading ---
     useEffect(() => {

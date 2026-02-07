@@ -4,7 +4,7 @@ import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
 import { isTickDto, isCandleClosedEvent } from '../types/websocket';
 import './LiveTicker.css';
 
-const WS_URL = 'ws://localhost:8080/ws/v1/coinflow';
+// WS_URL removed
 const SYMBOL = 'BTCUSDT';
 
 // --- Formatters ---
@@ -29,7 +29,7 @@ const MOCK_STATS = {
 };
 
 export const LiveTicker = () => {
-    const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket(WS_URL);
+    const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket();
     const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
     const prevPriceRef = useRef<number | null>(null);
 
