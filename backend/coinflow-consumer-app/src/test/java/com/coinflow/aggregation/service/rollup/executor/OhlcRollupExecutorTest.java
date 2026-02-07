@@ -6,7 +6,7 @@ import com.coinflow.aggregation.service.rollup.upserter.OhlcRollupUpserter;
 import com.coinflow.aggregation.service.rollup.upserter.OhlcRollupUpserterRegistry;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
-import com.coinflow.domain.ohlc.domain.OhlcRollup;
+import com.coinflow.aggregation.process.rollup.OhlcRollup;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
