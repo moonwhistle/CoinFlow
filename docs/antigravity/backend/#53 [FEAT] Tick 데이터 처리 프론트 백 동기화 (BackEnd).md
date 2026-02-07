@@ -163,6 +163,9 @@ Redis Stream 기반의 **Fast-Path** 아키텍처를 도입하여 틱 시세 응
 *   **[FEAT] WebSocket Multiplexing**:
     *   `CandleClosedStreamConsumer` 구현: Redis Channel(`candle:closed`)을 구독하고 `SubscriptionSessionManager`를 통해 WebSocket 클라이언트에게 보정 메시지를 전송합니다.
     *   단일 WebSocket Endpoint (`/ws/v1/coinflow`)에서 Tick과 Event를 모두 처리하도록 개선했습니다.
+    *   **[FEAT] Multi-Interval Support**: 
+        *   `CandleClosedEvent`에 `interval` 필드를 추가 ("M1", "M5", "M30").
+        *   `OhlcRollupExecutor` 수정: 5분/30분 롤업(Rollup) 완료 시에도 보정 이벤트를 발행하도록 개선했습니다.
 
 ### Frontend (CoinFlow-Web)
 *   **[FEAT] WebSocket Type Handling**:
@@ -171,6 +174,7 @@ Redis Stream 기반의 **Fast-Path** 아키텍처를 도입하여 틱 시세 응
 *   **[FEAT] TradingChart Integration**:
     *   **Optimistic Update**: `TickDto` 수신 즉시 차트의 현재 캔들(OHLC)과 볼륨을 업데이트하여 지연 없는 사용자 경험을 제공합니다.
     *   **Server Correction**: `CandleClosedEvent` 수신 시 해당 분(Bucket)의 데이터를 서버 데이터로 강제 교체하여 데이터 불일치를 해소합니다.
+    *   **Multi-Interval Filtering**: 수신된 보정 이벤트의 `interval`이 현재 차트의 타임프레임과 일치할 때만 반영하도록 필터링 로직을 추가했습니다.
     *   `chartHelpers.ts`: `TickDto` 구조에 맞춰 데이터 집계 로직을 수정했습니다.
 *   **[FIX] LiveTicker**:
     *   변경된 `WsMessage` 타입(Union)을 안전하게 처리하도록 가드 로직(`isTickDto` 등)을 적용했습니다.

@@ -26,7 +26,8 @@ export interface TickDto {
 export interface CandleClosedEvent {
     symbolId: number;
     symbolCode: string;
-    bucketTime: string; // LocalDateTime serialized as string
+    interval: 'M1' | 'M5' | 'M30';
+    bucketTime: string; // ISO 8601 string
     open: number;
     high: number;
     low: number;

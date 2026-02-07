@@ -1,5 +1,6 @@
 package com.coinflow.aggregation.service.flush;
 
+import com.coinflow.aggregation.service.event.CandleClosedEventPublisher;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
@@ -15,7 +16,7 @@ public class Ohlc1mFlushService {
 
     private final Ohlc1mService ohlc1mService;
     private final SymbolService symbolService;
-    private final Ohlc1mFlushedEventPublisher eventPublisher;
+    private final CandleClosedEventPublisher eventPublisher;
 
     @Transactional
     public void flush(AggregateKey key, OhlcAccumulator acc) {
@@ -25,7 +26,8 @@ public class Ohlc1mFlushService {
         eventPublisher.publish(
                 symbol.getId(),
                 symbol.getSymbol(),
-                key.bucket(),
+                "M1",
+                key.bucket().toString(),
                 acc.getOpen(),
                 acc.getHigh(),
                 acc.getLow(),
