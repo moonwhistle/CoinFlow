@@ -5,7 +5,7 @@ import { isTickDto, isCandleClosedEvent } from '../types/websocket';
 import './LiveTicker.css';
 
 const WS_URL = 'ws://localhost:8080/ws/v1/coinflow';
-const SYMBOL = 'btcusdt';
+const SYMBOL = 'BTCUSDT';
 
 // --- Formatters ---
 const currencyFormatter = new Intl.NumberFormat('en-US', {
