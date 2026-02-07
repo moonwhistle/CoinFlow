@@ -39,7 +39,7 @@ public class TickRawStreamConsumer implements StreamListener<String, MapRecord<S
                     .symbol(symbol)
                     .price(new java.math.BigDecimal(body.get("price")))
                     .volume(new java.math.BigDecimal(body.get("quantity")))
-                    .eventTime(Long.parseLong(body.get("eventTime")))
+                    .eventTime(java.time.Instant.parse(body.get("eventTime")).toEpochMilli())
                     .build();
 
             String jsonPayload = objectMapper.writeValueAsString(tickDto);
