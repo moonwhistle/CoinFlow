@@ -124,6 +124,8 @@ export const TradingChart = () => {
             borderVisible: false,
             wickUpColor: CHART_COLORS.UP,
             wickDownColor: CHART_COLORS.DOWN,
+            lastValueVisible: false,
+            priceLineVisible: false,
         });
 
         // 2. Initialize Volume Chart
