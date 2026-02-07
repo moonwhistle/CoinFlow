@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { WsCommandType, WsMessage, WsRequest } from '../types/websocket';
+import type { WsRequest } from '../types/websocket';
 
 interface WebSocketContextType {
     isConnected: boolean;
@@ -18,7 +18,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     const [isConnected, setIsConnected] = useState(false);
     const [lastMessage, setLastMessage] = useState<MessageEvent<any> | null>(null);
     const ws = useRef<WebSocket | null>(null);
-    const reconnectTimeout = useRef<NodeJS.Timeout>();
+    const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const connect = useCallback(() => {
         if (ws.current?.readyState === WebSocket.OPEN) return;
