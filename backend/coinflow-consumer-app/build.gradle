@@ -29,7 +29,3 @@ dependencies {
 
 bootJar { enabled = true }
 jar { enabled = false }
-
-bootRun {
-    args = ["--spring.profiles.active=consumer"]
-}
