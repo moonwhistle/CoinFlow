@@ -129,6 +129,23 @@ WS Client
     2.  `CandleClosedStreamConsumer`는 봉 마감 시 해당 심볼 구독자를 찾아 보정 데이터 전송.
     3.  따라서 클라이언트는 별도의 연결 없이 두 종류의 메시지를 모두 수신합니다.
 
+### 5.4 향후 개선 모델: 트래픽 최적화를 위한 구독 분리 (Future Optimization)
+
+트래픽이 증가할 경우, 클라이언트에게 불필요한 데이터(보지 않는 타임프레임의 보정 데이터)를 전송하는 것은 리소스 낭비가 될 수 있습니다.
+이를 해결하기 위해 **"구독 분리(Subscription Separation)"** 모델을 도입할 수 있습니다.
+
+**방법 A (Standard - Subscription Separation)**:
+
+1.  **Client Request**: 사용자가 특정 타임프레임(예: 5분 봉)을 선택하면, 프론트엔드는 명시적인 구독 메시지를 보냅니다.
+    ```json
+    { "command": "SUBSCRIBE", "symbol": "BTC", "interval": "5m" }
+    ```
+2.  **Server Filtering**: 서버는 해당 소켓 세션에 태그(Tag)를 답니다 (예: `Session#1 -> {BTC, 5m}`).
+3.  **Selective Push**: 
+    - 1분 봉 마감 이벤트 발생 -> `1m` 구독 세션에게만 전송
+    - 5분 봉 마감 이벤트 발생 -> `5m` 구독 세션에게만 전송
+4.  **Pros**: 클라이언트는 자신이 요청한 데이터만 수신하므로 네트워크 대역폭과 클라이언트 처리 부하가 최소화됩니다.
+
 ---
 
 ## 📌 Summary
