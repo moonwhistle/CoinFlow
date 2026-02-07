@@ -38,7 +38,7 @@ public class TickRawStreamConsumer implements StreamListener<String, MapRecord<S
             TickDto tickDto = TickDto.builder()
                     .symbol(symbol)
                     .price(new java.math.BigDecimal(body.get("price")))
-                    .volume(Long.parseLong(body.get("quantity")))
+                    .volume(new java.math.BigDecimal(body.get("quantity")))
                     .eventTime(Long.parseLong(body.get("eventTime")))
                     .build();
 
