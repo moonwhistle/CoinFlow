@@ -1,0 +1,89 @@
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { WsCommandType, WsMessage, WsRequest } from '../types/websocket';
+
+interface WebSocketContextType {
+    isConnected: boolean;
+    sendMessage: (message: WsRequest) => void;
+    lastMessage: MessageEvent<any> | null;
+}
+
+const WebSocketContext = createContext<WebSocketContextType | null>(null);
+
+interface WebSocketProviderProps {
+    url: string;
+    children: React.ReactNode;
+}
+
+export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, children }) => {
+    const [isConnected, setIsConnected] = useState(false);
+    const [lastMessage, setLastMessage] = useState<MessageEvent<any> | null>(null);
+    const ws = useRef<WebSocket | null>(null);
+    const reconnectTimeout = useRef<NodeJS.Timeout>();
+
+    const connect = useCallback(() => {
+        if (ws.current?.readyState === WebSocket.OPEN) return;
+
+        console.log('[WS Provider] Connecting to', url);
+        const socket = new WebSocket(url);
+
+        socket.onopen = () => {
+            console.log('[WS Provider] Connected');
+            setIsConnected(true);
+        };
+
+        socket.onclose = () => {
+            console.log('[WS Provider] Disconnected');
+            setIsConnected(false);
+            ws.current = null;
+            // Simple reconnect logic
+            reconnectTimeout.current = setTimeout(() => {
+                console.log('[WS Provider] Attempting reconnect...');
+                connect();
+            }, 3000);
+        };
+
+        socket.onerror = (error) => {
+            console.error('[WS Provider] Error:', error);
+        };
+
+        socket.onmessage = (event) => {
+            setLastMessage(event);
+        };
+
+        ws.current = socket;
+    }, [url]);
+
+    useEffect(() => {
+        connect();
+        return () => {
+            if (ws.current) {
+                ws.current.close();
+            }
+            if (reconnectTimeout.current) {
+                clearTimeout(reconnectTimeout.current);
+            }
+        };
+    }, [connect]);
+
+    const sendMessage = useCallback((message: WsRequest) => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify(message));
+        } else {
+            console.warn('[WS Provider] Cannot send message, socket not open');
+        }
+    }, []);
+
+    return (
+        <WebSocketContext.Provider value={{ isConnected, sendMessage, lastMessage }}>
+            {children}
+        </WebSocketContext.Provider>
+    );
+};
+
+export const useWebSocketContext = () => {
+    const context = useContext(WebSocketContext);
+    if (!context) {
+        throw new Error('useWebSocketContext must be used within a WebSocketProvider');
+    }
+    return context;
+};
