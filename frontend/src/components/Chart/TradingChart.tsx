@@ -53,6 +53,11 @@ export const TradingChart = () => {
             }
         } else if (isCandleClosedEvent(msg)) {
             // 2. Server Correction (CandleClosed)
+            // Filter by active timeframe
+            if (msg.interval !== activeTimeframe) {
+                return;
+            }
+
             // Parse bucketTime (LocalDateTime string) to chart time
             const bucketTime = (new Date(msg.bucketTime).getTime() / 1000) as Time;
 

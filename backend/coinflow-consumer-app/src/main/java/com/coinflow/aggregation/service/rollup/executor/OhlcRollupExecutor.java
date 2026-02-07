@@ -12,16 +12,11 @@ import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.coinflow.aggregation.service.event.CandleClosedEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-/**
- * 1분봉(OHLC 1m)을 소스로 상위 interval OHLC를 집계하는 실행기.
- *
- * <p>이 클래스는 롤업 흐름을 조율만 하며,
- * 실제 저장은 interval에 맞는 {@link OhlcRollupUpserter}에 위임한다.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -31,12 +26,12 @@ public class OhlcRollupExecutor {
     private final SymbolService symbolService;
     private final BucketCloseChecker bucketCloseChecker;
     private final OhlcRollupUpserterRegistry upserterRegistry;
+    private final CandleClosedEventPublisher eventPublisher;
 
     public void rollupFrom1mIfClosed(
             Long symbolId,
             OhlcInterval interval,
-            LocalDateTime bucketStart
-    ) {
+            LocalDateTime bucketStart) {
         if (bucketCloseChecker.isOpen(interval, bucketStart)) {
             return;
         }
@@ -59,8 +54,18 @@ public class OhlcRollupExecutor {
                             interval,
                             symbolId,
                             bucketStart,
-                            candles.size()
-                    );
+                            candles.size());
+
+                    eventPublisher.publish(
+                            symbolId,
+                            symbol.getSymbol(),
+                            interval.name(),
+                            bucketStart.toString(),
+                            rollup.open(),
+                            rollup.high(),
+                            rollup.low(),
+                            rollup.close(),
+                            rollup.volume());
                 });
     }
 }
