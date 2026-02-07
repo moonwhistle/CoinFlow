@@ -1,0 +1,10 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: coinflow-ws-gateway
+  data:
+    redis:
+      host: localhost
+      port: 6379
