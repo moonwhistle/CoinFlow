@@ -34,6 +34,7 @@ export const TradingChart = () => {
         if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
 
         if (isTickDto(msg)) {
+            console.log("Tick Received:", msg.price, msg.volume);
             // 1. Optimistic Update (Tick)
             const { candle, volume } = aggregateTickToCandle(
                 msg,
