@@ -6,7 +6,7 @@ import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.aggregation.process.aggregate.AggregateKey;
 import com.coinflow.aggregation.process.aggregate.OhlcAccumulator;
-import com.coinflow.aggregation.process.policy.VolumeScaler;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import com.coinflow.aggregation.event.Ohlc1mFlushedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;

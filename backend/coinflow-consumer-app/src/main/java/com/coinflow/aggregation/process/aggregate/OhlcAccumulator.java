@@ -1,5 +1,6 @@
 package com.coinflow.aggregation.process.aggregate;
 
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Getter;

@@ -4,7 +4,7 @@ import com.coinflow.aggregation.process.aggregate.AggregateKey;
 import com.coinflow.aggregation.process.aggregate.OhlcAccumulator;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.tick.event.TickRawEvent;
-import com.coinflow.aggregation.process.policy.VolumeScaler;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
