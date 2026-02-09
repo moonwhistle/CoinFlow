@@ -1,8 +1,8 @@
 export const CHART_COLORS = {
-    UP: '#26a69a',
-    DOWN: '#ef5350',
-    UP_TRANSPARENT: 'rgba(38, 166, 154, 0.5)',
-    DOWN_TRANSPARENT: 'rgba(239, 83, 80, 0.5)',
+    UP: '#F23645',   // Red (Yangbong)
+    DOWN: '#3366FF', // Blue (Eumbong)
+    UP_TRANSPARENT: 'rgba(242, 54, 69, 0.5)',
+    DOWN_TRANSPARENT: 'rgba(51, 102, 255, 0.5)',
     TEXT: '#9CA3AF',
     GRID: 'rgba(42, 46, 57, 0.5)',
     BORDER: '#2B2B43',

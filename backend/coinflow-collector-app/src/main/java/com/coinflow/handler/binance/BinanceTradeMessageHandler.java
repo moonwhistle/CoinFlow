@@ -33,16 +33,14 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
                     data.get(SYMBOL).asText().toLowerCase(),
                     new BigDecimal(data.get(PRICE).asText()),
                     new BigDecimal(data.get(QUANTITY).asText()),
-                    Instant.ofEpochMilli(data.get(EVENT_TIME).asLong())
-            );
+                    Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()));
 
             publisher.publish(event);
         } catch (Exception e) {
             log.warn(
                     "Failed to parse binance trade message. message={}",
                     message,
-                    e
-            );
+                    e);
         }
     }
 }

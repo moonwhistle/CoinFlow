@@ -14,11 +14,34 @@ export interface WsRequest {
     topics: WsSubscription[];
 }
 
-export interface TickData {
+// Corresponds to Backend TickDto record
+export interface TickDto {
     symbol: string;
-    price: string;
-    quantity: string;
-    eventTime: string;
-    volume?: string;
-    [key: string]: string | undefined; // For flexibility
+    price: number;
+    volume: number;
+    eventTime: number;
 }
+
+// Corresponds to Backend CandleClosedEvent record
+export interface CandleClosedEvent {
+    symbolId: number;
+    symbolCode: string;
+    interval: 'M1' | 'M5' | 'M30';
+    bucketTime: string; // ISO 8601 string
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+}
+
+export type WsMessage = TickDto | CandleClosedEvent;
+
+// Helper Type Guard
+export const isTickDto = (msg: WsMessage): msg is TickDto => {
+    return 'price' in msg && 'eventTime' in msg;
+};
+
+export const isCandleClosedEvent = (msg: WsMessage): msg is CandleClosedEvent => {
+    return 'symbolCode' in msg && 'bucketTime' in msg;
+};

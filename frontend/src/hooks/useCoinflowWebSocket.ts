@@ -1,125 +1,55 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { WsCommandType, type WsRequest, type TickData } from '../types/websocket';
+import { useEffect, useCallback, useState } from 'react';
+import { useWebSocketContext } from '../context/WebSocketContext';
+import { WsCommandType, type WsMessage } from '../types/websocket';
 
-const RECONNECT_INTERVAL = 3000; // 3 seconds
+export const useCoinflowWebSocket = (
+    onMessage?: (message: WsMessage) => void
+) => {
+    const { isConnected, sendMessage, lastMessage } = useWebSocketContext();
 
-export const useCoinflowWebSocket = (url: string, options?: { onMessage?: (data: TickData) => void }) => {
-    const [isConnected, setIsConnected] = useState(false);
-    const [lastMessage, setLastMessage] = useState<TickData | null>(null);
-    const wsRef = useRef<WebSocket | null>(null);
-    const timerRef = useRef<number | null>(null);
-    const connectRef = useRef<() => void>(null);
+    const [parsedMessage, setParsedMessage] = useState<WsMessage | null>(null);
 
-    // Keep latest options ref to avoid reconnection on options change
-    const optionsRef = useRef(options);
+    // Handle incoming messages from context
     useEffect(() => {
-        optionsRef.current = options;
-    }, [options]);
-
-    const connect = useCallback(() => {
-        if (wsRef.current) return; // Prevent multiple connections
-
-        const ws = new WebSocket(url);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-            console.log('[WS] Connected');
-            setIsConnected(true);
-            // Clear any reconnect timers
-            if (timerRef.current) {
-                clearTimeout(timerRef.current);
-                timerRef.current = null;
-            }
-        };
-
-        ws.onmessage = (event) => {
+        if (lastMessage) {
             try {
-                const data: TickData = JSON.parse(event.data);
-
-                // PERFORMANCE: If callback provided, use it and skip state update (avoid re-render)
-                if (optionsRef.current?.onMessage) {
-                    optionsRef.current.onMessage(data);
-                } else {
-                    setLastMessage(data);
+                const data: WsMessage = JSON.parse(lastMessage.data);
+                setParsedMessage(data);
+                if (onMessage) {
+                    onMessage(data);
                 }
-            } catch (err) {
-                console.error('[WS] Failed to parse message:', err);
+            } catch (error) {
+                console.error('[useCoinflowWebSocket] Failed to parse message:', error);
             }
-        };
-
-        ws.onclose = () => {
-            console.log('[WS] Disconnected');
-            setIsConnected(false);
-            wsRef.current = null;
-            // Auto-reconnect
-            timerRef.current = setTimeout(() => {
-                console.log('[WS] Attempting to reconnect...');
-                if (connectRef.current) {
-                    connectRef.current();
-                }
-            }, RECONNECT_INTERVAL);
-        };
-
-        ws.onerror = (error) => {
-            console.error('[WS] Error:', error);
-            ws.close(); // Ensure close is triggered to start reconnection logic
-        };
-    }, [url]);
-
-    // Keep the ref updated with the latest connect function
-    useEffect(() => {
-        connectRef.current = connect;
-    }, [connect]);
-
-    const disconnect = useCallback(() => {
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-            timerRef.current = null;
         }
-        if (wsRef.current) {
-            // Prevent auto-reconnect by overwriting onclose
-            wsRef.current.onclose = null;
-            wsRef.current.close();
-            wsRef.current = null;
-        }
-        setIsConnected(false);
-    }, []);
+    }, [lastMessage, onMessage]);
 
-    const sendMessage = useCallback((message: object) => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(message));
-        } else {
-            console.warn('[WS] Cannot send message, not connected');
-        }
-    }, []);
+    // ... (subscribe/unsubscribe) ...
+
+
 
     const subscribe = useCallback((symbol: string) => {
-        const request: WsRequest = {
+        if (!isConnected) return;
+
+        sendMessage({
             type: WsCommandType.SUBSCRIBE,
-            topics: [{ symbol }],
-        };
-        sendMessage(request);
-    }, [sendMessage]);
+            topics: [{ symbol }]
+        });
+    }, [isConnected, sendMessage]);
 
     const unsubscribe = useCallback((symbol: string) => {
-        const request: WsRequest = {
-            type: WsCommandType.UNSUBSCRIBE,
-            topics: [{ symbol }],
-        };
-        sendMessage(request);
-    }, [sendMessage]);
+        if (!isConnected) return;
 
-    useEffect(() => {
-        connect();
-        return () => {
-            disconnect();
-        };
-    }, [connect, disconnect]);
+        sendMessage({
+            type: WsCommandType.UNSUBSCRIBE,
+            topics: [{ symbol }]
+        });
+    }, [isConnected, sendMessage]);
 
     return {
         isConnected,
-        lastMessage,
+        lastMessage: parsedMessage,
         subscribe,
-        unsubscribe,
+        unsubscribe
     };
 };
