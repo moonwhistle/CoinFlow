@@ -6,6 +6,7 @@ import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.aggregation.process.aggregate.AggregateKey;
 import com.coinflow.aggregation.process.aggregate.OhlcAccumulator;
+import com.coinflow.aggregation.process.policy.VolumeScaler;
 import com.coinflow.aggregation.event.Ohlc1mFlushedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -37,7 +38,7 @@ public class Ohlc1mFlushService {
                 acc.getHigh(),
                 acc.getLow(),
                 acc.getClose(),
-                acc.getVolume());
+                VolumeScaler.toBigDecimal(acc.getVolume()));
 
         // 2. Internal Event Pub (Rollup Trigger)
         applicationEventPublisher.publishEvent(new Ohlc1mFlushedEvent(

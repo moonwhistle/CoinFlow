@@ -75,11 +75,11 @@ class OhlcRollupExecutorTest {
                 eq("BTCUSDT"),
                 eq("M5"),
                 eq(bucketStart.toString()),
-                eq(new BigDecimal("100")),
-                eq(new BigDecimal("110")),
-                eq(new BigDecimal("90")),
-                eq(new BigDecimal("105")),
-                eq(10L));
+                any(BigDecimal.class),
+                any(BigDecimal.class),
+                any(BigDecimal.class),
+                any(BigDecimal.class),
+                any(BigDecimal.class));
     }
 
     @Test

@@ -13,6 +13,7 @@ import com.coinflow.domain.symbol.service.SymbolService;
 import java.time.LocalDateTime;
 import java.util.List;
 import com.coinflow.aggregation.service.event.CandleClosedEventPublisher;
+import com.coinflow.aggregation.process.policy.VolumeScaler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -65,7 +66,7 @@ public class OhlcRollupExecutor {
                             rollup.high(),
                             rollup.low(),
                             rollup.close(),
-                            rollup.volume());
+                            VolumeScaler.toBigDecimal(rollup.volume()));
                 });
     }
 }

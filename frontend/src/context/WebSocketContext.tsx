@@ -19,6 +19,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     const [lastMessage, setLastMessage] = useState<MessageEvent<any> | null>(null);
     const ws = useRef<WebSocket | null>(null);
     const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const messageQueue = useRef<string[]>([]);
 
     const connect = useCallback(() => {
         if (ws.current?.readyState === WebSocket.OPEN) return;
@@ -29,6 +30,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
         socket.onopen = () => {
             console.log('[WS Provider] Connected');
             setIsConnected(true);
+
+            // Flush message queue
+            if (messageQueue.current.length > 0) {
+                console.log(`[WS Provider] Flushing ${messageQueue.current.length} queued messages`);
+                messageQueue.current.forEach(msg => socket.send(msg));
+                messageQueue.current = [];
+            }
         };
 
         socket.onclose = () => {
@@ -66,10 +74,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     }, [connect]);
 
     const sendMessage = useCallback((message: WsRequest) => {
+        const payload = JSON.stringify(message);
         if (ws.current?.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify(message));
+            ws.current.send(payload);
         } else {
-            console.warn('[WS Provider] Cannot send message, socket not open');
+            console.log('[WS Provider] Socket not open, queueing message:', message);
+            messageQueue.current.push(payload);
         }
     }, []);
 

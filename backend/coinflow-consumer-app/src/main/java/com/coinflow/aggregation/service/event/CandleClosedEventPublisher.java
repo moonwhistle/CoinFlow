@@ -20,7 +20,7 @@ public class CandleClosedEventPublisher {
     public void publish(Long symbolId, String symbolCode, String interval, String bucketTime, BigDecimal open,
             BigDecimal high,
             BigDecimal low,
-            BigDecimal close, Long volume) {
+            BigDecimal close, BigDecimal volume) {
         try {
             CandleClosedEvent event = CandleClosedEvent.builder()
                     .symbolId(symbolId)
