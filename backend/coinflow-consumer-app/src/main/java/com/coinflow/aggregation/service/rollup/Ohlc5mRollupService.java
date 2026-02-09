@@ -4,12 +4,14 @@ import com.coinflow.aggregation.service.rollup.executor.OhlcRollupExecutor;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class Ohlc5mRollupService {
 
     private static final OhlcInterval INTERVAL = OhlcInterval.M5;
@@ -26,6 +28,7 @@ public class Ohlc5mRollupService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void rollupInNewTransaction(Long symbolId, LocalDateTime bucketStart1m) {
+        log.info("[Rollup] Triggering 5m rollup for symbolId={}, 1mBucket={}", symbolId, bucketStart1m);
         LocalDateTime bucketStart5m = INTERVAL.resolveBucketStart(bucketStart1m);
         rollupExecutor.rollupFrom1mIfClosed(symbolId, INTERVAL, bucketStart5m);
         rollupExecutor.rollupFrom1mIfClosed(symbolId, INTERVAL, bucketStart5m.minus(INTERVAL.duration()));
