@@ -35,7 +35,6 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
                     new BigDecimal(data.get(QUANTITY).asText()),
                     Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()));
 
-            log.info("Publishing TickRawEvent: symbol={}, price={}", event.symbol(), event.price());
             publisher.publish(event);
         } catch (Exception e) {
             log.warn(
