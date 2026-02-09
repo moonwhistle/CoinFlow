@@ -6,6 +6,8 @@ import com.coinflow.domain.ohlc.domain.Ohlc5m;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
+
 /**
  * Read-only OHLC candle snapshot for chart queries.
  * Used for API responses and cache storage.
@@ -16,8 +18,7 @@ public record OhlcCandleSnapshot(
         BigDecimal highPrice,
         BigDecimal lowPrice,
         BigDecimal closePrice,
-        Long volume
-) {
+        BigDecimal volume) {
 
     public static OhlcCandleSnapshot from(Ohlc1m candle) {
         return new OhlcCandleSnapshot(
@@ -26,8 +27,7 @@ public record OhlcCandleSnapshot(
                 candle.getHighPrice(),
                 candle.getLowPrice(),
                 candle.getClosePrice(),
-                candle.getVolume()
-        );
+                VolumeScaler.toBigDecimal(candle.getVolume()));
     }
 
     public static OhlcCandleSnapshot from(Ohlc5m candle) {
@@ -37,8 +37,7 @@ public record OhlcCandleSnapshot(
                 candle.getHighPrice(),
                 candle.getLowPrice(),
                 candle.getClosePrice(),
-                candle.getVolume()
-        );
+                VolumeScaler.toBigDecimal(candle.getVolume()));
     }
 
     public static OhlcCandleSnapshot from(Ohlc30m candle) {
@@ -48,7 +47,6 @@ public record OhlcCandleSnapshot(
                 candle.getHighPrice(),
                 candle.getLowPrice(),
                 candle.getClosePrice(),
-                candle.getVolume()
-        );
+                VolumeScaler.toBigDecimal(candle.getVolume()));
     }
 }
