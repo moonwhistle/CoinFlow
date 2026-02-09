@@ -279,8 +279,8 @@ export const TradingChart = () => {
     // --- WebSocket Subscription ---
     useEffect(() => {
         if (isConnected) {
-            console.log("Subscribing to BTCUSDT...");
-            subscribe('BTCUSDT');
+            console.log("Subscribing to btcusdt...");
+            subscribe('btcusdt');
         }
     }, [isConnected, subscribe]);
 
