@@ -30,12 +30,11 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
             JsonNode data = root.get(DATA);
 
             TickRawEvent event = new TickRawEvent(
-                    data.get(SYMBOL).asText(),
+                    data.get(SYMBOL).asText().toLowerCase(),
                     new BigDecimal(data.get(PRICE).asText()),
                     new BigDecimal(data.get(QUANTITY).asText()),
                     Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()));
-
-            log.info("Publishing TickRawEvent: symbol={}, price={}", event.symbol(), event.price());
+            
             publisher.publish(event);
         } catch (Exception e) {
             log.warn(
