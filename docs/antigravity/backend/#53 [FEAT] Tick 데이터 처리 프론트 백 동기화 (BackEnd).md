@@ -166,11 +166,16 @@ Redis Stream 기반의 **Fast-Path** 아키텍처를 도입하여 틱 시세 응
     *   **[FEAT] Multi-Interval Support**: 
         *   `CandleClosedEvent`에 `interval` 필드를 추가 ("M1", "M5", "M30").
         *   `OhlcRollupExecutor` 수정: 5분/30분 롤업(Rollup) 완료 시에도 보정 이벤트를 발행하도록 개선했습니다.
+*   **[FEAT] Volume Scaling Strategy**:
+    *   **Precision & Performance**: 부동소수점 오차 방지와 고빈도 연산 최적화를 위해 내부적으로 볼륨을 **Long (Fixed-Point 10^8)** 형태로 저장.
+    *   **VolumeScaler**: `coinflow-core`로 공통화하여, API/WebSocket 응답 시에는 클라이언트가 바로 사용할 수 있도록 **BigDecimal(Unscaled)**로 변환하여 제공.
 
 ### Frontend (CoinFlow-Web)
 *   **[FEAT] WebSocket Type Handling**:
     *   `websocket.ts`: `TickDto`와 `CandleClosedEvent` 타입을 정의하고 Union Type (`WsMessage`) 처리 로직을 추가했습니다.
     *   `useCoinflowWebSocket`: 메시지 수신 시 JSON 파싱 및 타입 안전성을 확보했습니다.
+    *   **[FIX] Connection Race Condition**:
+        *   `WebSocketContext`: 연결 전발생한 `SUBSCRIBE` 요청이 유실되지 않도록 **Message Queue**를 구현하여, 연결 즉시(`onopen`) 자동으로 플러시(Flush) 되도록 개선했습니다.
 *   **[FEAT] TradingChart Integration**:
     *   **Optimistic Update**: `TickDto` 수신 즉시 차트의 현재 캔들(OHLC)과 볼륨을 업데이트하여 지연 없는 사용자 경험을 제공합니다.
     *   **Server Correction**: `CandleClosedEvent` 수신 시 해당 분(Bucket)의 데이터를 서버 데이터로 강제 교체하여 데이터 불일치를 해소합니다.
@@ -189,6 +194,7 @@ Redis Stream 기반의 **Fast-Path** 아키텍처를 도입하여 틱 시세 응
 | **Frontend Sync** | **Optimistic + Correction** | Pessimistic / Polling | **UX와 정합성**: 틱 데이터는 즉시 반영하여 속도감을 주고(Optimistic), 마감 데이터로 보정(Correction)하여 데이터 신뢰성을 모두 확보하는 하이브리드 방식을 택했습니다. |
 | **Data Structure** | **Java Record** | Class (Lombok) | **불변성 및 모던 자바**: DTO의 목적(단순 데이터 전달)에 부합하며, 불변성이 보장되고 코드가 간결한 Record를 사용했습니다. (JDK 14+ 장점 활용) |
 | **Date Serialization** | **ISO-8601 String** | Array / Timestamp | **호환성**: 프론트엔드(`new Date()`)와의 호환성을 위해 `LocalDateTime`을 복잡한 배열 대신 표준 문자열(String)로 직렬화했습니다. |
+| **Volume Storage** | **Long (Fixed-Point)** | BigDecimal | **성능 및 정밀도**: 고빈도 덧셈 연산 시 CPU 효율성이 높은 `long`을 사용하되, 10^8 스케일링으로 소수점 정밀도를 보장했습니다. (Display 시점 변환) |
 
 ## 📌 Related Issue
 - Closes #53
