@@ -151,7 +151,23 @@ WS Client
 ## 📌 Summary
 
 실시간 Tick 데이터 처리를 위한 프론트엔드/백엔드 동기화 작업을 완료했습니다.
-Redis Stream 기반의 **Fast-Path** 아키텍처를 도입하여 틱 시세 응답 속도를 극대화(Optimistic Update)하고, Pub/Sub 기반의 **Slow-Path**를 통해 데이터 정합성(Correction)을 보장하는 구조를 구현했습니다.
+핵심은 **"속도"와 "정확성"이라는 두 마리 토끼를 잡기 위한 이중 경로(Dual-Path) 아키텍처**입니다.
+
+### 🚀 아키텍처 핵심: Dual-Path Strategy
+
+**1. Fast-Path (Redis Stream): 속도 우선 (Optimistic)**
+*   **경로**: `Exchange` -> `Redis Stream` -> `WebSocket` -> `Client`
+*   **특징**:
+    *   데이터베이스 저장이나 복잡한 계산(집계)을 기다리지 않고, 틱(Tick)이 들어오자마자 **0.1초 이내**에 클라이언트로 쏴줍니다.
+    *   **"일단 보여준다"**: 중간에 유실될 가능성이 조금 있더라도, 사용자에게 즉각적인 시세 변화를 보여주는 것이 중요하기 때문입니다. (게임의 예측 이동과 유사)
+
+**2. Slow-Path (Redis Pub/Sub): 정합성 보장 (Correction)**
+*   **경로**: `Exchange` -> `Aggregator` -> `DB 저장` -> `Redis Pub/Sub` -> `WebSocket` -> `Client`
+*   **특징**:
+    *   1분마다 모든 데이터를 모아서 DB에 확실하게 저장한 뒤, **"확정된 정답지(CandleClosedEvent)"**를 발행합니다.
+    *   **"나중에 고쳐준다"**: 혹시 Fast-Path에서 살짝 틀린 그림을 그렸더라도, 이 경로를 통해 매 분 00초마다 정확한 데이터로 덮어씌워 줍니다.
+
+이 두 가지를 조합하여 사용자는 **"빠르면서도(Fast) 결국엔 정확한(Slow)"** 차트를 보게 됩니다.
 
 ## 📚 Changes
 
