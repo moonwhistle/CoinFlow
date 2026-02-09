@@ -34,6 +34,7 @@ public class CoinflowWebSocketHandler implements WebSocketHandler {
                 .flatMap(message -> {
                     try {
                         String payload = message.getPayloadAsText();
+                        log.info("[WS] Received message from {}: {}", sessionId, payload);
                         WsRequest request = objectMapper.readValue(payload, WsRequest.class);
                         handleRequest(sessionId, request);
                     } catch (Exception e) {
