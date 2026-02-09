@@ -1,5 +1,5 @@
 import type { Time } from 'lightweight-charts';
-import type { TickData } from '../types/websocket';
+import type { TickDto } from '../types/websocket';
 import type { OhlcInterval } from '../types/chart';
 
 export interface ChartCandle {
@@ -21,16 +21,16 @@ export interface VolumeBar {
  * 백엔드 API 연동 전까지 클라이언트 사이드 집계를 수행합니다.
  */
 export const aggregateTickToCandle = (
-    tick: TickData,
+    tick: TickDto,
     currentCandle: ChartCandle | null,
     currentVolume: VolumeBar | null,
     upColor: string,
     downColor: string,
     interval: OhlcInterval = 'M1'
 ) => {
-    const price = parseFloat(tick.price);
-    const quantity = parseFloat(tick.quantity);
-    const timestamp = parseInt(tick.eventTime);
+    const price = tick.price;
+    const quantity = tick.volume;
+    const timestamp = tick.eventTime;
 
     // Determine duration in seconds based on interval
     let duration = 60;

@@ -4,3 +4,5 @@ binance:
     trade-stream-suffix: "@trade"
     symbols:
       - btcusdt
+  main:
+    web-application-type: none

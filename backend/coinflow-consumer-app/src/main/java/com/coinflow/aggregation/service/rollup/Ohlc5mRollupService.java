@@ -4,12 +4,14 @@ import com.coinflow.aggregation.service.rollup.executor.OhlcRollupExecutor;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class Ohlc5mRollupService {
 
     private static final OhlcInterval INTERVAL = OhlcInterval.M5;

@@ -1,4 +1,4 @@
-package com.coinflow.aggregation.process.policy;
+package com.coinflow.domain.ohlc.policy;
 
 import com.coinflow.common.exception.CoreErrorCode;
 import com.coinflow.common.exception.CoreException;

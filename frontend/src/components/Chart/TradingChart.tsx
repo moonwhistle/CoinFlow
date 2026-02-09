@@ -8,7 +8,7 @@ import { aggregateTickToCandle } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
 import { getOhlcData } from '../../api/ohlcApi';
 import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
-import type { TickData } from '../../types/websocket';
+import { type WsMessage, isTickDto, isCandleClosedEvent } from '../../types/websocket';
 import './TradingChart.css';
 
 export const TradingChart = () => {
@@ -30,34 +30,68 @@ export const TradingChart = () => {
     const currentVolumeRef = useRef<VolumeBar | null>(null);
 
     // --- Real-time Data Handling (Performance Optimized) ---
-    const handleTick = useCallback((tick: TickData) => {
+    const handleWebSocketMessage = useCallback((msg: WsMessage) => {
         if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
 
-        const { candle, volume } = aggregateTickToCandle(
-            tick,
-            currentCandleRef.current,
-            currentVolumeRef.current,
-            CHART_COLORS.UP_TRANSPARENT,
-            CHART_COLORS.DOWN_TRANSPARENT,
-            activeTimeframe
-        );
+        if (isTickDto(msg)) {
+            console.log("Tick Received:", msg.price, msg.volume);
+            // 1. Optimistic Update (Tick)
+            const { candle, volume } = aggregateTickToCandle(
+                msg,
+                currentCandleRef.current,
+                currentVolumeRef.current,
+                CHART_COLORS.UP_TRANSPARENT,
+                CHART_COLORS.DOWN_TRANSPARENT,
+                activeTimeframe
+            );
 
-        if (candle && volume) {
-            // Apply Update Direct to Chart (No React Render)
-            mainSeriesRef.current.update(candle);
-            volumeSeriesRef.current.update(volume);
+            if (candle && volume) {
+                mainSeriesRef.current.update(candle);
+                volumeSeriesRef.current.update(volume);
 
-            // Update Refs
-            currentCandleRef.current = candle;
-            currentVolumeRef.current = volume;
+                currentCandleRef.current = candle;
+                currentVolumeRef.current = volume;
+            }
+        } else if (isCandleClosedEvent(msg)) {
+            // 2. Server Correction (CandleClosed)
+            // Filter by active timeframe
+            if (msg.interval !== activeTimeframe) {
+                return;
+            }
+
+            // Parse bucketTime (LocalDateTime string) to chart time
+            const bucketTime = (new Date(msg.bucketTime).getTime() / 1000) as Time;
+
+            // Correction Candle
+            const correctedCandle: ChartCandle = {
+                time: bucketTime,
+                open: msg.open,
+                high: msg.high,
+                low: msg.low,
+                close: msg.close,
+            };
+
+            const correctedVolume: VolumeBar = {
+                time: bucketTime,
+                value: msg.volume,
+                color: msg.close >= msg.open ? CHART_COLORS.UP_TRANSPARENT : CHART_COLORS.DOWN_TRANSPARENT,
+            };
+
+            // Apply Correction
+            // Note: If we have already moved to the next candle (new tick arrived), update() for a past candle might fail in lightweight-charts.
+            // But since this event fires exactly at the close, it typically arrives before or very close to the first tick of the next candle.
+            try {
+                mainSeriesRef.current.update(correctedCandle);
+                volumeSeriesRef.current.update(correctedVolume);
+                console.log(`[Correction] Applied for ${msg.symbolCode} at ${msg.bucketTime}`);
+            } catch (e) {
+                console.warn(`[Correction] Skipped for ${msg.bucketTime} due to time regression (Candle already moved forward)`);
+            }
         }
-    }, []);
+    }, [activeTimeframe]);
 
     // WebSocket Hook with Callback
-    const { isConnected, subscribe } = useCoinflowWebSocket(
-        'ws://localhost:8080/ws/v1/coinflow',
-        { onMessage: handleTick }
-    );
+    const { isConnected, subscribe } = useCoinflowWebSocket(handleWebSocketMessage);
 
     // --- Chart Initialization & Data Loading ---
     useEffect(() => {
@@ -91,6 +125,8 @@ export const TradingChart = () => {
             borderVisible: false,
             wickUpColor: CHART_COLORS.UP,
             wickDownColor: CHART_COLORS.DOWN,
+            lastValueVisible: false,
+            priceLineVisible: false,
         });
 
         // 2. Initialize Volume Chart
@@ -243,8 +279,8 @@ export const TradingChart = () => {
     // --- WebSocket Subscription ---
     useEffect(() => {
         if (isConnected) {
-            console.log("Subscribing to BTCUSDT...");
-            subscribe('BTCUSDT');
+            console.log("Subscribing to btcusdt...");
+            subscribe('btcusdt');
         }
     }, [isConnected, subscribe]);
 
