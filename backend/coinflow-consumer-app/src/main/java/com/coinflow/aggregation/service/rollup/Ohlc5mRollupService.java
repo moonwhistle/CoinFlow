@@ -28,7 +28,6 @@ public class Ohlc5mRollupService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void rollupInNewTransaction(Long symbolId, LocalDateTime bucketStart1m) {
-        log.info("[Rollup] Triggering 5m rollup for symbolId={}, 1mBucket={}", symbolId, bucketStart1m);
         LocalDateTime bucketStart5m = INTERVAL.resolveBucketStart(bucketStart1m);
         rollupExecutor.rollupFrom1mIfClosed(symbolId, INTERVAL, bucketStart5m);
         rollupExecutor.rollupFrom1mIfClosed(symbolId, INTERVAL, bucketStart5m.minus(INTERVAL.duration()));
