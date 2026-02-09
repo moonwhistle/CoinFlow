@@ -1,6 +1,6 @@
 package com.coinflow.domain.ohlc.snapshot;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -32,6 +32,7 @@ class OhlcCandleSnapshotTest {
 
         // then
         // VolumeScaler divides by 10^8
-        assertThat(snapshot.volume()).isEqualByComparingTo("1.0");
+        // expected: 1.00000000 (scale 8) check value equality
+        assertEquals(0, new BigDecimal("1.0").compareTo(snapshot.volume()));
     }
 }
