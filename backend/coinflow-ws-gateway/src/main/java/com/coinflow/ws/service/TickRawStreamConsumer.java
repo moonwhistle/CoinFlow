@@ -46,7 +46,10 @@ public class TickRawStreamConsumer implements StreamListener<String, MapRecord<S
             log.trace("[Redis] Received tick for {}: {}", symbol, jsonPayload); // Changed to trace for high traffic
 
             // Get subscribers for this symbol
-            subscriptionManager.getSubscribers(symbol).forEach(sessionId -> {
+            var subscribers = subscriptionManager.getSubscribers(symbol);
+            log.info("[Redis] Processing tick for symbol: '{}'. Found {} subscribers.", symbol, subscribers.size());
+
+            subscribers.forEach(sessionId -> {
                 WebSocketSession session = sessionManager.getSession(sessionId);
 
                 if (session != null && session.isOpen()) {
