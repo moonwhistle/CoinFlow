@@ -63,3 +63,6 @@ not ready
 
 ### Volume Scaling Strategy 
 - not ready
+
+## Disclaimer
+This project is a personal, educational project built for learning purposes only.
