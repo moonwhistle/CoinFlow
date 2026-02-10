@@ -27,6 +27,15 @@ During this project, I wanted to build everything starting from raw tick data.
 *   **State**: Context API (WebSocket Management)
 *   **Visualization**: Lightweight Charts (Financial Charting)
 
+### AI
+* **IDE & Tools**: Antigravity IDE, Gemini 3 Pro
+* **UI Design**: Stitch AI
+* **Workflow**: 
+    * **Document-Driven Development (DDD)**: Wrote requirements first to guide AI correctly.
+    * **Rule-Based Coding**: Used project rules (`.rule`) to keep code clean and consistent.
+    * **Frontend (Fast)**: Used **Vibe Coding** to see results immediately.
+    * **Backend**: Used AI to find bugs and test edge cases, and code review.
+
 
 
 ## 🏗️ System Architecture (Single Server)
@@ -45,7 +54,7 @@ Designed **dual-path flow**, which is consist of **Accuracy Layer** and **Speed 
 
 - In Slow-path, use **Event Bus** to provide accuracy data.
 
-This design enables low-latency tick processing and guarantees backend–frontend consistency.
+>This design enables low-latency tick processing and guarantees backend–frontend consistency.
 
 ## 🧑‍💻 Getting Started
 
