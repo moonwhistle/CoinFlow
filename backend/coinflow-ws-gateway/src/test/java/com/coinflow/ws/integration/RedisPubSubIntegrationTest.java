@@ -1,5 +1,6 @@
 package com.coinflow.ws.integration;
 
+import com.coinflow.WsGatewayApplication;
 import com.coinflow.ws.service.CandleClosedStreamConsumer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,16 +8,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.data.redis.listener.ChannelTopic;
-
-import java.time.Duration;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
-@SpringBootTest
+@SpringBootTest(classes = WsGatewayApplication.class)
 @ActiveProfiles("test")
 public class RedisPubSubIntegrationTest {
 
