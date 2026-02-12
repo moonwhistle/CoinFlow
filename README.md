@@ -52,7 +52,7 @@ Designed **dual-path flow**, which is consist of **Accuracy Layer** and **Speed 
 ### Why Dual-Path? 
 To achieve both Real-time Responsiveness and Strong Consistency.
 
-- Speed Layer (Fast-path): Uses Message Queue to deliver raw ticks, Ohcl immediately for zero-latency UX.
+- Speed Layer (Fast-path): Uses Message Queue to deliver raw ticks and show ohlc candle immediately for zero-latency UX.
 - Accuracy Layer (Slow-path): Uses Event Bus to broadcast confirmed candle data, correcting any client-side discrepancies.
 
 >This hybrid approach ensures that users see price changes instantly while the system guarantees data integrity in the background.
