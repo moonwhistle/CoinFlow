@@ -57,6 +57,8 @@ To achieve both Real-time Responsiveness and Strong Consistency.
 
 >This hybrid approach ensures that users see price changes instantly while the system guarantees data integrity in the background.
 
+For more details, see [Data Flow](<https://sanghu-i.tistory.com/124>)
+
 ## 🧑‍💻 Getting Started
 
 ### Backend
