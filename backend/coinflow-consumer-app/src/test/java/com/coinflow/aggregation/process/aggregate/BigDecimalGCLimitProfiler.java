@@ -17,7 +17,11 @@ public class BigDecimalGCLimitProfiler {
         BigDecimal accumulator = BigDecimal.ZERO;
 
         // 누적되는 틱 데이터(1분봉 등)가 메모리에 상주하는 상황을 모방
-        List<BigDecimal> historyList = new ArrayList<>();
+        // ArrayList.add()의 배열 복사(Arrays.copyOf) 오버헤드를 완전히 제거하기 위해
+        // 10만 개 단위의 청크(Chunk) 배열을 할당하여 순수 BigDecimal 객체 생성 부하만 측정합니다.
+        List<BigDecimal[]> historyChunks = new ArrayList<>(2000);
+        BigDecimal[] currentChunk = new BigDecimal[100_000];
+        int chunkIndex = 0;
 
         long opsCount = 0;
         long startTime = System.currentTimeMillis();
@@ -25,8 +29,15 @@ public class BigDecimalGCLimitProfiler {
         try {
             while (true) {
                 accumulator = accumulator.add(tickVolume);
-                historyList.add(accumulator);
+                currentChunk[chunkIndex++] = accumulator;
                 opsCount++;
+
+                // 청크가 꽉 차면 보관함에 넣고 새 청크 할당
+                if (chunkIndex == 100_000) {
+                    historyChunks.add(currentChunk);
+                    currentChunk = new BigDecimal[100_000];
+                    chunkIndex = 0;
+                }
 
                 // 500만 번마다 현재 메모리 상태 출력
                 if (opsCount % 5_000_000 == 0) {
