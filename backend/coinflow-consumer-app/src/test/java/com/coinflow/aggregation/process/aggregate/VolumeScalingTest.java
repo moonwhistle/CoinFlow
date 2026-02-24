@@ -101,4 +101,46 @@ class VolumeScalingTest {
                 .isInstanceOf(ArithmeticException.class)
                 .hasMessageContaining("long overflow");
     }
+
+    @Test
+    @DisplayName("성능 비교: BigDecimal vs Long (1천만 번 누적 연산)")
+    void performance_Benchmark_BigDecimal_Vs_Long_Test() {
+        // Given
+        int iterationCount = 10_000_000;
+
+        BigDecimal bdTickVolume = new BigDecimal("0.0001");
+        BigDecimal accumulatedBd = BigDecimal.ZERO;
+
+        // 0.0001을 10^8 스케일링한 값 = 10000L
+        long longTickVolume = 10000L;
+        long accumulatedLong = 0L;
+
+        // When - 1. BigDecimal 성능 측정
+        long startBd = System.currentTimeMillis();
+        for (int i = 0; i < iterationCount; i++) {
+            accumulatedBd = accumulatedBd.add(bdTickVolume);
+        }
+        long endBd = System.currentTimeMillis();
+        long bdDuration = endBd - startBd;
+
+        // When - 2. Long 성능 측정
+        long startLong = System.currentTimeMillis();
+        for (int i = 0; i < iterationCount; i++) {
+            accumulatedLong = Math.addExact(accumulatedLong, longTickVolume);
+        }
+        long endLong = System.currentTimeMillis();
+        long longDuration = endLong - startLong;
+
+        // Then - 연산 결과 검증 (1000)
+        assertThat(accumulatedBd.compareTo(new BigDecimal("1000"))).isEqualTo(0);
+        assertThat(accumulatedLong).isEqualTo(1000_00000000L); // 1000 * 10^8
+
+        // Then - 성능 비교 검증 (Long이 더 빨라야 함)
+        // 블로그 포스팅 수치 참고를 위해 콘솔 출력 허용
+        System.out.println("====== 1천만 번 누적 연산 벤치마크 ======");
+        System.out.println("BigDecimal 누적 연산 소요 시간: " + bdDuration + "ms");
+        System.out.println("Long (Math.addExact) 누적 연산 소요 시간: " + longDuration + "ms");
+
+        assertThat(longDuration).isLessThan(bdDuration);
+    }
 }
