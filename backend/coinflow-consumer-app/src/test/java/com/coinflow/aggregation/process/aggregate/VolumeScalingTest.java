@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class VolumeScalingTest {
 
@@ -96,7 +97,7 @@ class VolumeScalingTest {
         long tickVolume = 1L;
 
         // When & Then
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Math.addExact(maxVolume, tickVolume))
+        assertThatThrownBy(() -> Math.addExact(maxVolume, tickVolume))
                 .isInstanceOf(ArithmeticException.class)
                 .hasMessageContaining("long overflow");
     }
