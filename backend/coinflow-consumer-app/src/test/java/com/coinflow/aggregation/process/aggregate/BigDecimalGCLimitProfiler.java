@@ -13,14 +13,20 @@ public class BigDecimalGCLimitProfiler {
         long maxMemory = Runtime.getRuntime().maxMemory();
         System.out.println("현재 JVM 최대 가용 메모리: " + (maxMemory / 1024 / 1024) + " MB\n");
 
+        // JVM Argument 또는 Default Value 설정 (PR 피드백 반영: 파라미터화)
+        // 사용 예: java -Dchunk.size=100000 -Dchunk.limit=2000 BigDecimalGCLimitProfiler
+        int chunkSize = Integer.parseInt(System.getProperty("chunk.size", "100000"));
+        int chunkLimit = Integer.parseInt(System.getProperty("chunk.limit", "2000"));
+        System.out.println("설정된 Chunk Size: " + chunkSize + ", Chunk Limit: " + chunkLimit);
+
         final BigDecimal tickVolume = new BigDecimal("0.0001");
         BigDecimal accumulator = BigDecimal.ZERO;
 
         // 누적되는 틱 데이터(1분봉 등)가 메모리에 상주하는 상황을 모방
         // ArrayList.add()의 배열 복사(Arrays.copyOf) 오버헤드를 완전히 제거하기 위해
-        // 10만 개 단위의 청크(Chunk) 배열을 할당하여 순수 BigDecimal 객체 생성 부하만 측정합니다.
-        List<BigDecimal[]> historyChunks = new ArrayList<>(2000);
-        BigDecimal[] currentChunk = new BigDecimal[100_000];
+        // 단위 청크(Chunk) 배열을 할당하여 순수 BigDecimal 객체 생성 부하만 측정합니다.
+        List<BigDecimal[]> historyChunks = new ArrayList<>(chunkLimit);
+        BigDecimal[] currentChunk = new BigDecimal[chunkSize];
         int chunkIndex = 0;
 
         long opsCount = 0;
@@ -33,9 +39,11 @@ public class BigDecimalGCLimitProfiler {
                 opsCount++;
 
                 // 청크가 꽉 차면 보관함에 넣고 새 청크 할당
-                if (chunkIndex == 100_000) {
+                if (chunkIndex == chunkSize) {
                     historyChunks.add(currentChunk);
-                    currentChunk = new BigDecimal[100_000];
+                    // OOM을 발생시키는 것이 목적이므로 limit을 넘어가면 List에 계속 누적되지만,
+                    // ArrayList 자체의 capacity 증가 부하를 줄이기 위해 초기 사이즈를 limit으로 잡은 구조
+                    currentChunk = new BigDecimal[chunkSize];
                     chunkIndex = 0;
                 }
 
