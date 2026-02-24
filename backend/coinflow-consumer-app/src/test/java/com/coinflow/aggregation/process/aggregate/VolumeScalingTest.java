@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 class VolumeScalingTest {
 
@@ -71,5 +72,35 @@ class VolumeScalingTest {
 
         // Then
         assertThat(accumulatedBigDecimal.compareTo(BigDecimal.ONE)).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("Long Scaling: 단순 `+` 연산 시 오버플로우 발생 검증 (Silent Failure)")
+    void long_SimpleAddition_Overflow_Test() {
+        // Given
+        long maxVolume = Long.MAX_VALUE;
+        long tickVolume = 1L;
+
+        // When
+        long result = maxVolume + tickVolume;
+
+        // Then
+        // 예외가 발생하지 않고, 음수로 순환(wrap-around)됨을 증명
+        assertThat(result).isNegative();
+        assertThat(result).isEqualTo(Long.MIN_VALUE);
+    }
+
+    @Test
+    @DisplayName("Long Scaling: Math.addExact 연산 시 오버플로우 방어(예외 발생) 검증")
+    void long_AddExact_OverflowProtection_Test() {
+        // Given
+        long maxVolume = Long.MAX_VALUE;
+        long tickVolume = 1L;
+
+        // When & Then
+        // 최대치에서 1을 더하면 즉시 ArithmeticException 예외가 발생해야 함
+        assertThatThrownBy(() -> Math.addExact(maxVolume, tickVolume))
+                .isInstanceOf(ArithmeticException.class)
+                .hasMessageContaining("long overflow");
     }
 }
