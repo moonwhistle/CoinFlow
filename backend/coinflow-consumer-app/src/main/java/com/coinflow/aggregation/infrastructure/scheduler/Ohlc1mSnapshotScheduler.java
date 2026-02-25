@@ -45,14 +45,14 @@ public class Ohlc1mSnapshotScheduler {
 
             try {
                 // To create Ohlc1m we need the Symbol
-                Symbol symbol = symbolService.findBySymbol(key.symbolId()); // Note: aggregate key holds symbolId, need
-                                                                            // to check if findBySymbol resolves by ID
-                                                                            // or String. Assuming findSymbol or
-                                                                            // findById. Wait, symbolService in
-                                                                            // Ohlc1mAggregationService uses
-                                                                            // findBySymbol(event.symbol()) which is a
-                                                                            // String code. AggregateKey stores Long
-                                                                            // symbolId.
+                Symbol symbol = symbolService.findSymbol(key.symbolId()); // Note: aggregate key holds symbolId, need
+                                                                          // to check if findBySymbol resolves by ID
+                                                                          // or String. Assuming findSymbol or
+                                                                          // findById. Wait, symbolService in
+                                                                          // Ohlc1mAggregationService uses
+                                                                          // findBySymbol(event.symbol()) which is a
+                                                                          // String code. AggregateKey stores Long
+                                                                          // symbolId.
                 // need to use findSymbol(Long id).
 
                 Ohlc1m liveCandle = Ohlc1m.builder()
