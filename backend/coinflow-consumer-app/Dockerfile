@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jre-alpine
+FROM amazoncorretto:17-alpine-jdk
 
 # 타임존 설정 (KST)
 ENV TZ=Asia/Seoul
