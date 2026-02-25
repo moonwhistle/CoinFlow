@@ -158,7 +158,10 @@ export const TradingChart = () => {
 
         const volumeSeries = volumeChart.addSeries(HistogramSeries, {
             color: CHART_COLORS.UP,
-            priceFormat: { type: 'volume' },
+            priceFormat: {
+                type: 'custom',
+                formatter: (price: number) => price.toFixed(4)
+            },
         });
 
         // 3. Initial Data Load
