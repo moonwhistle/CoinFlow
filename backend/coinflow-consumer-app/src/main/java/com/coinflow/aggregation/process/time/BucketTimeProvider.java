@@ -15,8 +15,8 @@ public class BucketTimeProvider {
     private final Clock clock;
 
     public LocalDateTime nowUtc() {
-        return LocalDateTime.now(clock)
-                .atOffset(UTC)
+        return java.time.Instant.now(clock)
+                .atZone(UTC)
                 .toLocalDateTime();
     }
 }
