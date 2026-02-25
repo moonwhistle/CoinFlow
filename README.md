@@ -46,8 +46,7 @@ NOT READY
 ## 📊 Data Flow
 Designed **dual-path flow**, which is consist of **Accuracy Layer** and **Speed Layer**.
 
-
-![Data Flow](</image/dataFlowVersion1.png>)
+![Data Flow](</image/dataFlowVersion2.png>)
 
 ### Why Dual-Path? 
 To achieve both Real-time Responsiveness and Strong Consistency.
