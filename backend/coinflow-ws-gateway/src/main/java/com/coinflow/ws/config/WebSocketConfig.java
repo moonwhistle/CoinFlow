@@ -8,6 +8,7 @@ import org.springframework.web.reactive.HandlerMapping;
 import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAdapter;
+import org.springframework.web.cors.CorsConfiguration;
 
 @Configuration
 public class WebSocketConfig {
@@ -22,11 +23,9 @@ public class WebSocketConfig {
         mapping.setOrder(-1); // Before other mappings
 
         // Allow all origins (for development)
-        /*
-         * CorsConfiguration corsProperties = new CorsConfiguration();
-         * corsProperties.addAllowedOriginPattern("*");
-         * mapping.setCorsConfigurations(Map.of("*", corsProperties));
-         */
+        CorsConfiguration corsProperties = new CorsConfiguration();
+        corsProperties.addAllowedOriginPattern("*");
+        mapping.setCorsConfigurations(Map.of("*", corsProperties));
 
         return mapping;
     }
