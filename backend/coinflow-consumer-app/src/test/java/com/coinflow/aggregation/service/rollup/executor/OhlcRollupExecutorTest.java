@@ -74,7 +74,7 @@ class OhlcRollupExecutorTest {
                 eq(symbolId),
                 eq("BTCUSDT"),
                 eq("M5"),
-                eq(bucketStart.toString()),
+                eq(bucketStart),
                 any(BigDecimal.class),
                 any(BigDecimal.class),
                 any(BigDecimal.class),
@@ -95,6 +95,7 @@ class OhlcRollupExecutorTest {
         executor.rollupFrom1mIfClosed(symbolId, interval, bucketStart);
 
         // Then
-        verify(eventPublisher, times(0)).publish(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, times(0)).publish(any(), any(), any(), any(LocalDateTime.class), any(), any(), any(),
+                any(), any());
     }
 }

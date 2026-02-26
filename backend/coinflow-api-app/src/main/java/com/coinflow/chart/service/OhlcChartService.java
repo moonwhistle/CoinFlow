@@ -12,6 +12,7 @@ import com.coinflow.domain.ohlc.service.Ohlc5mService;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
 import com.coinflow.util.TimeBucket;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
+import java.time.ZoneOffset;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -171,6 +172,7 @@ public class OhlcChartService {
             if (existing.bucketTime().equals(parentBucketTime)) {
                 result.set(i, new OhlcCandleSnapshot(
                         existing.bucketTime(),
+                        existing.bucketTime().toEpochSecond(ZoneOffset.UTC),
                         existing.openPrice(), // Open은 기존 유지
                         existing.highPrice().max(liveHigh), // High 확장
                         existing.lowPrice().min(liveLow), // Low 확장
@@ -186,6 +188,7 @@ public class OhlcChartService {
         if (!merged) {
             result.add(new OhlcCandleSnapshot(
                     parentBucketTime,
+                    parentBucketTime.toEpochSecond(ZoneOffset.UTC),
                     liveOpen, liveHigh, liveLow, liveClose, liveVolume));
         }
 

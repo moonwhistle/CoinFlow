@@ -59,12 +59,12 @@ export const TradingChart = () => {
                 return;
             }
 
-            // Parse bucketTime (LocalDateTime string) to chart time
-            const bucketTime = (new Date(msg.bucketTime).getTime() / 1000) as Time;
+            // Use epochSeconds directly (UTC)
+            const candleTime = msg.epochSeconds as Time;
 
             // Correction Candle
             const correctedCandle: ChartCandle = {
-                time: bucketTime,
+                time: candleTime,
                 open: msg.open,
                 high: msg.high,
                 low: msg.low,
@@ -72,20 +72,18 @@ export const TradingChart = () => {
             };
 
             const correctedVolume: VolumeBar = {
-                time: bucketTime,
+                time: candleTime,
                 value: msg.volume,
                 color: msg.close >= msg.open ? CHART_COLORS.UP_TRANSPARENT : CHART_COLORS.DOWN_TRANSPARENT,
             };
 
             // Apply Correction
-            // Note: If we have already moved to the next candle (new tick arrived), update() for a past candle might fail in lightweight-charts.
-            // But since this event fires exactly at the close, it typically arrives before or very close to the first tick of the next candle.
             try {
                 mainSeriesRef.current.update(correctedCandle);
                 volumeSeriesRef.current.update(correctedVolume);
-                console.log(`[Correction] Applied for ${msg.symbolCode} at ${msg.bucketTime}`);
+                console.log(`[Correction] Applied for ${msg.symbolCode} at epoch=${msg.epochSeconds}`);
             } catch (e) {
-                console.warn(`[Correction] Skipped for ${msg.bucketTime} due to time regression (Candle already moved forward)`);
+                console.warn(`[Correction] Skipped for epoch=${msg.epochSeconds} due to time regression`);
             }
         }
     }, [activeTimeframe]);
@@ -175,7 +173,7 @@ export const TradingChart = () => {
                 const volumes: VolumeBar[] = [];
 
                 response.candles.forEach((snap: OhlcCandleSnapshot) => {
-                    const time = (new Date(snap.bucketTime).getTime() / 1000) as Time;
+                    const time = snap.epochSeconds as Time;
 
                     candles.push({
                         time,
@@ -322,11 +320,14 @@ export const TradingChart = () => {
                 style={{ flex: 3, borderBottom: '1px solid var(--border-color)' }}
             />
 
-            <div
-                ref={volumeContainerRef}
-                className="chart-volume-container"
-                style={{ flex: 1, minHeight: 0 }}
-            />
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                <span className="volume-label">Vol (BTC)</span>
+                <div
+                    ref={volumeContainerRef}
+                    className="chart-volume-container"
+                    style={{ width: '100%', height: '100%' }}
+                />
+            </div>
         </div>
     );
 };
