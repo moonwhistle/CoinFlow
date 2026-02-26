@@ -32,6 +32,7 @@ export const TradingChart = () => {
     // --- Real-time Data Handling (Performance Optimized) ---
     const handleWebSocketMessage = useCallback((msg: WsMessage) => {
         if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
+        if (isLoading) return; // Bug3 fix: 초기 데이터 로딩 중에는 틱 무시
 
         if (isTickDto(msg)) {
             console.log("Tick Received:", msg.price, msg.volume);
@@ -86,7 +87,7 @@ export const TradingChart = () => {
                 console.warn(`[Correction] Skipped for epoch=${msg.epochSeconds} due to time regression`);
             }
         }
-    }, [activeTimeframe]);
+    }, [activeTimeframe, isLoading]);
 
     // WebSocket Hook with Callback
     const { isConnected, subscribe } = useCoinflowWebSocket(handleWebSocketMessage);
@@ -94,6 +95,10 @@ export const TradingChart = () => {
     // --- Chart Initialization & Data Loading ---
     useEffect(() => {
         if (!mainContainerRef.current || !volumeContainerRef.current) return;
+
+        // Bug1 fix: 타임프레임 전환 시 이전 캔들 ref 초기화
+        currentCandleRef.current = null;
+        currentVolumeRef.current = null;
 
         // 1. Initialize Main Chart (Price)
         const mainChart = createChart(mainContainerRef.current, {
