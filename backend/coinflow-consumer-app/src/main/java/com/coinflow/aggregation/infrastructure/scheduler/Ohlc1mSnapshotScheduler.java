@@ -34,7 +34,9 @@ public class Ohlc1mSnapshotScheduler {
 
             // Only snapshot OPEN buckets. Closed ones are flushed to DB and handled by
             // Ohlc1mFlushScheduler.
-            if (!bucketCloseChecker.isOpen(INTERVAL, key.bucket())) {
+            boolean isOpen = bucketCloseChecker.isOpen(INTERVAL, key.bucket());
+            log.debug("SnapshotScheduler: key={}, isOpen={}", key, isOpen);
+            if (!isOpen) {
                 continue;
             }
 
@@ -45,15 +47,8 @@ public class Ohlc1mSnapshotScheduler {
 
             try {
                 // To create Ohlc1m we need the Symbol
+                log.debug("SnapshotScheduler: looking up symbol for id={}", key.symbolId());
                 Symbol symbol = symbolService.findSymbol(key.symbolId()); // Note: aggregate key holds symbolId, need
-                                                                          // to check if findBySymbol resolves by ID
-                                                                          // or String. Assuming findSymbol or
-                                                                          // findById. Wait, symbolService in
-                                                                          // Ohlc1mAggregationService uses
-                                                                          // findBySymbol(event.symbol()) which is a
-                                                                          // String code. AggregateKey stores Long
-                                                                          // symbolId.
-                // need to use findSymbol(Long id).
 
                 Ohlc1m liveCandle = Ohlc1m.builder()
                         .symbol(symbol)
@@ -65,6 +60,7 @@ public class Ohlc1mSnapshotScheduler {
                         .volume(acc.getVolume())
                         .build();
 
+                log.debug("SnapshotScheduler: saving snapshot to Redis for symbolId={}", key.symbolId());
                 snapshotRepository.save(key.symbolId(), INTERVAL, liveCandle);
 
             } catch (Exception e) {

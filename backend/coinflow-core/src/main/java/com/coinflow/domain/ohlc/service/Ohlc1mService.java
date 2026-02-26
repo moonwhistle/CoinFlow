@@ -9,9 +9,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class Ohlc1mService {
@@ -59,8 +61,11 @@ public class Ohlc1mService {
                 // 단순화를 위해 endExclusive - 1분 위치를 RealTime 조회 대상으로 삼음. (1분 봉 기준)
                 LocalDateTime lastBucketTime = endExclusive.minusMinutes(1);
 
-                realTimeOhlcProvider.ifPresent(provider -> {
-                        provider.getRealTimeCandle(symbolId, lastBucketTime).ifPresent(realTimeCandle -> {
+                log.debug("Requesting realTimeCandle for symbolId={}, lastBucketTime={}", symbolId, lastBucketTime);
+                realTimeOhlcProvider.ifPresentOrElse(provider -> {
+                        log.debug("RealTimeOhlcProvider is present. Calling getRealTimeCandle...");
+                        provider.getRealTimeCandle(symbolId, lastBucketTime).ifPresentOrElse(realTimeCandle -> {
+                                log.debug("getRealTimeCandle returned a candle: {}", realTimeCandle);
                                 // 이미 DB에서 가져온 리스트에 포함되어 있는지 확인 (Flush가 1초마다 되므로 있을 수도 있음)
                                 // 만약 있다면 최신 메모리 상태로 덮어쓰기 로직 필요, 혹은 이미 완벽하다면 Skip
                                 // 여기서는 간단히 리스트에 없으면 추가, 있으면 교체하는 식으로 구현
@@ -75,8 +80,8 @@ public class Ohlc1mService {
                                 if (!exists) {
                                         candles.add(realTimeCandle);
                                 }
-                        });
-                });
+                        }, () -> log.debug("getRealTimeCandle returned Optional.empty"));
+                }, () -> log.debug("RealTimeOhlcProvider is NOT present"));
 
                 return candles;
         }
