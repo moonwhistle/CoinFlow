@@ -3,7 +3,7 @@ package com.coinflow;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication(scanBasePackages = "com.coinflow")
+@SpringBootApplication
 public class ApiApplication {
 
     public static void main(String[] args) {
