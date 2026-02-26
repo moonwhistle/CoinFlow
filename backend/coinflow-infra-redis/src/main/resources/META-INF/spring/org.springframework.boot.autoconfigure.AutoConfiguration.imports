@@ -1,0 +1,3 @@
+com.coinflow.common.config.RedisConfig
+com.coinflow.publish.config.TickPublisherConfig
+com.coinflow.aggregation.infrastructure.redis.OhlcLiveSnapshotRepositoryImpl
