@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
 import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
 import { isTickDto, isCandleClosedEvent } from '../types/websocket';
+import type { WsMessage } from '../types/websocket';
 import './LiveTicker.css';
 
 // WS_URL removed
@@ -29,9 +30,15 @@ const MOCK_STATS = {
 };
 
 export const LiveTicker = () => {
-    const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket();
+    const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
     const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
     const prevPriceRef = useRef<number | null>(null);
+
+    const handleMessage = useCallback((msg: WsMessage) => {
+        setLastMessage(msg);
+    }, []);
+
+    const { isConnected, subscribe } = useCoinflowWebSocket(handleMessage);
 
     useEffect(() => {
         if (isConnected) {
