@@ -1,4 +1,4 @@
-package com.coinflow.api.provider;
+package com.coinflow.aggregation.infrastructure.redis;
 
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
