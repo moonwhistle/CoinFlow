@@ -22,7 +22,7 @@ class OhlcAccumulatorTest {
         BigDecimal initialPrice = new BigDecimal("100");
         long initialVolume = 0L;
         Instant startTime = Instant.now();
-        OhlcAccumulator accumulator = OhlcAccumulator.first(initialPrice, initialVolume, startTime);
+        OhlcAccumulator accumulator = OhlcAccumulator.first(initialPrice, initialVolume, startTime, "0-0");
 
         int threadCount = 10;
         int additionsPerThread = 1000;
@@ -40,8 +40,8 @@ class OhlcAccumulatorTest {
                         accumulator.apply(
                                 new BigDecimal("100"),
                                 volumePerAddition,
-                                startTime.plusMillis(1) // Time doesn't matter for volume
-                        );
+                                startTime.plusMillis(1),
+                                "0-" + j);
                     }
                 } catch (Exception e) {
                     exceptionCount.incrementAndGet();

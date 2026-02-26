@@ -1,12 +1,12 @@
 package com.coinflow.domain.ohlc.repository;
 
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
-import com.coinflow.domain.ohlc.domain.Ohlc1m;
+import com.coinflow.domain.ohlc.snapshot.LiveCandleSnapshot;
 
 import java.util.Optional;
 
 public interface OhlcLiveSnapshotRepository {
-    void save(Long symbolId, OhlcInterval interval, Ohlc1m ohlc1m);
+    void save(Long symbolId, OhlcInterval interval, LiveCandleSnapshot snapshot);
 
-    Optional<Ohlc1m> find(Long symbolId, OhlcInterval interval);
+    Optional<LiveCandleSnapshot> find(Long symbolId, OhlcInterval interval);
 }

@@ -5,8 +5,8 @@ import com.coinflow.aggregation.process.aggregate.OhlcAccumulator;
 import com.coinflow.aggregation.process.store.Ohlc1mAggregationStore;
 import com.coinflow.aggregation.process.time.BucketCloseChecker;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
-import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.repository.OhlcLiveSnapshotRepository;
+import com.coinflow.domain.ohlc.snapshot.LiveCandleSnapshot;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
 import lombok.RequiredArgsConstructor;
@@ -26,14 +26,10 @@ public class Ohlc1mSnapshotScheduler {
     private final BucketCloseChecker bucketCloseChecker;
     private final SymbolService symbolService;
 
-    // Flush is running every 1000ms. We can run snapshot offloading staggered or at
-    // the same interval.
     @Scheduled(fixedDelay = 1000)
     public void offloadLiveSnapshots() {
         for (AggregateKey key : store.keysSnapshot()) {
 
-            // Only snapshot OPEN buckets. Closed ones are flushed to DB and handled by
-            // Ohlc1mFlushScheduler.
             boolean isOpen = bucketCloseChecker.isOpen(INTERVAL, key.bucket());
             log.debug("SnapshotScheduler: key={}, isOpen={}", key, isOpen);
             if (!isOpen) {
@@ -46,22 +42,23 @@ public class Ohlc1mSnapshotScheduler {
             }
 
             try {
-                // To create Ohlc1m we need the Symbol
                 log.debug("SnapshotScheduler: looking up symbol for id={}", key.symbolId());
-                Symbol symbol = symbolService.findSymbol(key.symbolId()); // Note: aggregate key holds symbolId, need
+                Symbol symbol = symbolService.findSymbol(key.symbolId());
 
-                Ohlc1m liveCandle = Ohlc1m.builder()
-                        .symbol(symbol)
-                        .bucketTime(key.bucket())
-                        .open(acc.getOpen())
-                        .high(acc.getHigh())
-                        .low(acc.getLow())
-                        .close(acc.getClose())
-                        .volume(acc.getVolume())
-                        .build();
+                LiveCandleSnapshot snapshot = new LiveCandleSnapshot(
+                        key.symbolId(),
+                        symbol.getSymbol(),
+                        key.bucket(),
+                        acc.getOpen(),
+                        acc.getHigh(),
+                        acc.getLow(),
+                        acc.getClose(),
+                        acc.getVolume(),
+                        acc.getLastStreamId());
 
-                log.debug("SnapshotScheduler: saving snapshot to Redis for symbolId={}", key.symbolId());
-                snapshotRepository.save(key.symbolId(), INTERVAL, liveCandle);
+                log.debug("SnapshotScheduler: saving snapshot to Redis for symbolId={}, lastStreamId={}",
+                        key.symbolId(), acc.getLastStreamId());
+                snapshotRepository.save(key.symbolId(), INTERVAL, snapshot);
 
             } catch (Exception e) {
                 log.error(
