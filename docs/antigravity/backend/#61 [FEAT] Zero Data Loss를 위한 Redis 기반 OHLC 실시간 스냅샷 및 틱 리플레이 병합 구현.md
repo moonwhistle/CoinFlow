@@ -1,13 +1,152 @@
-# [FEAT] Zero Data Loss를 위한 Redis 기반 OHLC 실시간 스냅샷 구현
+# [FEAT] Zero Data Loss를 위한 Redis 기반 OHLC 실시간 스냅샷 및 틱 리플레이 병합 구현
 
 ## 📌 Summary
-API 모듈이 클라이언트 초기 동기화 시 누락되는 라이브 캔들을 보강할 수 있도록, `consumer-app`에서 1초마다 메모리의 최신 `Ohlc1m` 상태를 Redis에 스냅샷 형태로 오프로드(Offload)하는 배치 로직을 구현했습니다. (Step 1 완료)
+`consumer-app`이 1초마다 메모리의 라이브 캔들을 Redis에 스냅샷으로 저장하고,
+`api-app`이 이를 읽어 Redis Stream의 누락 틱까지 정밀 리플레이하여 **M1/M5/M30 모든 인터벌에서 Volume 이중 누적 없이** 최신 캔들을 반환합니다.
 
 ## 📚 Changes
-- `coinflow-core`: Redis에 Live 캔들 스냅샷을 저장하기 위한 `OhlcLiveSnapshotRepository` 인터페이스 추가
-- `coinflow-consumer-app`: 
-  - `StringRedisTemplate`을 이용해 Redis Hash/String 구조에 `ohlc:live:{symbolId}:{interval}` 키 형태로 스냅샷을 JSON 직렬화하여 덮어쓰는 `OhlcLiveSnapshotRepositoryImpl` 구현체 추가
-  - 매 1초(`fixedDelay=1000`)마다 `Ohlc1mAggregationStore`의 메모리를 순회하며, 아직 종료되지 않은(Open 상태인) 캔들을 추출해 Redis에 저장하는 `Ohlc1mSnapshotScheduler` 구현
+- `coinflow-core`: `OhlcLiveSnapshotRepository` 인터페이스, `LiveCandleSnapshot` DTO, `Ohlc1mService` SRP 분리 (DB 전용)
+- `coinflow-infra-redis`: `OhlcLiveSnapshotRepositoryImpl`, `OhlcChartSyncProvider` (`RealTimeOhlcProvider` 구현체)
+- `coinflow-consumer-app`: `OhlcAccumulator`에 `lastStreamId` 추적, `TickRawEvent`에 `streamId` 전파, `Ohlc1mSnapshotScheduler`
+- `coinflow-api-app`: `OhlcChartService`에서 M1/M5/M30 실시간 병합
+
+---
+
+## 전체 데이터 흐름
+
+```
+[Binance WebSocket]
+       │ 틱 수신
+       ▼
+[collector-app] ── XADD ──→ [tick:raw Stream] ── StreamID 자동채번 ──→ "1772079194006-0"
+                                   │
+                                   ▼
+                            [consumer-app]
+                            ┌──── OhlcAccumulator ────┐
+                            │  OHLCV + lastStreamId    │
+                            └──────────┬───────────────┘
+                                매 1초 │ fixedDelay=1000
+                                       ▼
+                              Redis ohlc:live:1:M1
+                              {OHLCV, lastStreamId, bucketTime}
+                              TTL = 10분
+                                       │
+                                       ▼
+                               [api-app 요청 시]
+                               ┌───────────────────────┐
+                               │ 1) DB에서 과거 캔들 조회 │
+                               │ 2) Redis 스냅샷 조회    │
+                               │ 3) XRANGE Replay       │
+                               │ 4) 병합 후 응답         │
+                               └───────────────────────┘
+```
+
+---
+
+## 각 컴포넌트 역할과 전략
+
+### 1. Redis 키 전략
+
+```
+키:   ohlc:live:{symbolId}:{interval}
+예시: ohlc:live:1:M1
+```
+
+- **심볼당 키 1개**: `bucketTime`은 Value 내부 JSON 필드로 관리
+- **덮어쓰기 전략**: 매초 같은 키에 SET → 항상 최신 상태 유지
+- **TTL 10분**: 거래량 가뭄, Consumer 장애 대비 안전망 (재시작 시 자연스럽게 갱신 재개)
+
+### 2. Stream ID 생성 전략
+
+```
+형식: {밀리초 타임스탬프}-{시퀀스 번호}
+예시: 1772079194006-0
+```
+
+- `XADD tick:raw *` → Redis 서버가 자동 생성
+- **단조 증가 보장**: 시간 역행 시에도 마지막 ID보다 큰 값 강제 생성
+- **밀리초 내 순서**: 같은 밀리초에 복수 건이면 `-0`, `-1`, `-2`로 자동 증가
+
+### 3. `lastStreamId` — 체크포인트(Checkpoint)
+
+멱등성 키가 아닌 **읽기 위치 마커(Cursor)**입니다. Kafka Consumer Offset, DB WAL LSN과 동일한 개념으로, **같은 데이터를 두 번 처리하지 않도록 경계를 설정**합니다.
+
+```json
+{
+  "symbolId": 1,
+  "symbolCode": "btcusdt",
+  "bucketTime": "2026-02-26T04:13:00",
+  "open": 68570.22, "high": 68613.69, "low": 68565.96, "close": 68568.25,
+  "volume": 931941000,
+  "lastStreamId": "1772079194006-0"  ← 이 틱까지 반영됨
+}
+```
+
+API가 `XRANGE tick:raw (1772079194006-0 +` 로 조회하면 **이후 틱만** 반환됩니다. `(` prefix = exclusive start.
+
+### 4. 분 전환 메커니즘
+
+같은 키에 새 버킷 데이터가 덮어쓰기 됩니다:
+
+```
+12:00:59  스냅샷 저장 → {bucketTime:"12:00", vol:5200}
+12:01:00  ── 분 전환 ── (12:00 Close → DB Flush, 12:01 Open)
+12:01:01  스냅샷 저장 → {bucketTime:"12:01", vol:100}   ← 같은 키 덮어쓰기
+```
+
+**`bucketTime` 가드로 과거 스냅샷 오사용 방지:**
+
+```java
+if (!snapshot.bucketTime().equals(bucketTime)) {
+    return Optional.empty();  // 시간 불일치 → 무시
+}
+```
+
+전환 직후 Redis에 이전 분 데이터가 남아있어도, API는 요청한 시간과 일치하지 않으면 무시합니다.
+
+### 5. 인터벌별 병합 전략 (M1 / M5 / M30)
+
+| 인터벌 | DB 데이터 | 실시간 데이터 | 병합 방식 |
+|---|---|---|---|
+| **M1** | `Ohlc1mService` → DB 조회 | Redis 스냅샷 + XRANGE Replay | M1 캔들을 **교체 또는 추가** |
+| **M5** | `Ohlc5mService` → DB 롤업 | M1 라이브 캔들 1개 | 해당 M5 버킷에 OHLCV **합산** |
+| **M30** | `Ohlc30mService` → DB 롤업 | M1 라이브 캔들 1개 | 해당 M30 버킷에 OHLCV **합산** |
+
+**M5/M30 합산 예시** — 12:03에 M5 차트 조회 시:
+
+```
+M5 버킷 {12:00~12:05}
+  = DB 롤업 (12:00 + 12:01 + 12:02의 M1 합산)
+  + Redis M1 라이브 (12:03, 현재 진행 중)
+  ─────────────────────────────────────
+  Open   = DB 유지 (12:00의 시가)
+  High   = max(DB high, 라이브 high)
+  Low    = min(DB low,  라이브 low)
+  Close  = 라이브 close (최신)
+  Volume = DB volume + 라이브 volume
+```
+
+M5/M30은 별도의 Redis 스냅샷을 저장하지 않습니다. **M1 스냅샷 1개를 재사용**하여 해당 부모 버킷에 합산합니다.
+
+---
+
+## Volume 이중 누적이 발생하지 않는 이유
+
+| 기존 (bucketTime 기반) | 개선 (lastStreamId 기반) |
+|---|---|
+| `XRANGE tick:raw {12:00:00}-0 +` | `XRANGE tick:raw ({lastStreamId} +` |
+| Stream의 **모든 틱** 재합산 → 호출마다 Volume 증가 ❌ | **미반영 틱만** 합산 → Volume 일관 ✅ |
+
+---
+
+## 장애 시나리오별 동작
+
+| 상황 | Replay 범위 | 결과 |
+|---|---|---|
+| 정상 (1초 갱신) | 0~1초치 틱 (수십 건) | 정상 |
+| Consumer 3초 지연 | 3초치 틱 | XRANGE로 복구 |
+| Consumer 5분 다운 | 5분치 틱 | TTL 10분 이내, 정상 동작 |
+| Consumer 15분 다운 | — | TTL 만료, DB 데이터만 반환 |
 
 ## 📝 Note
 ### Redis 스냅샷 TTL을 1분(60초)이 아닌 10분으로 설정한 이유
