@@ -3,6 +3,8 @@ package com.coinflow.aggregation.service.event;
 import com.coinflow.event.ohlc.CandleClosedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -17,7 +19,7 @@ public class CandleClosedEventPublisher {
     private final ObjectMapper objectMapper;
     private static final String CHANNEL = "candle:closed";
 
-    public void publish(Long symbolId, String symbolCode, String interval, String bucketTime, BigDecimal open,
+    public void publish(Long symbolId, String symbolCode, String interval, LocalDateTime bucketTime, BigDecimal open,
             BigDecimal high,
             BigDecimal low,
             BigDecimal close, BigDecimal volume) {
@@ -26,7 +28,7 @@ public class CandleClosedEventPublisher {
                     .symbolId(symbolId)
                     .symbolCode(symbolCode)
                     .interval(interval)
-                    .bucketTime(bucketTime)
+                    .epochSeconds(bucketTime.toEpochSecond(ZoneOffset.UTC))
                     .open(open)
                     .high(high)
                     .low(low)

@@ -5,6 +5,7 @@ import com.coinflow.domain.ohlc.domain.Ohlc30m;
 import com.coinflow.domain.ohlc.domain.Ohlc5m;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
 
@@ -14,6 +15,7 @@ import com.coinflow.domain.ohlc.policy.VolumeScaler;
  */
 public record OhlcCandleSnapshot(
         LocalDateTime bucketTime,
+        long epochSeconds,
         BigDecimal openPrice,
         BigDecimal highPrice,
         BigDecimal lowPrice,
@@ -23,6 +25,7 @@ public record OhlcCandleSnapshot(
     public static OhlcCandleSnapshot from(Ohlc1m candle) {
         return new OhlcCandleSnapshot(
                 candle.getBucketTime(),
+                candle.getBucketTime().toEpochSecond(ZoneOffset.UTC),
                 candle.getOpenPrice(),
                 candle.getHighPrice(),
                 candle.getLowPrice(),
@@ -33,6 +36,7 @@ public record OhlcCandleSnapshot(
     public static OhlcCandleSnapshot from(Ohlc5m candle) {
         return new OhlcCandleSnapshot(
                 candle.getBucketTime(),
+                candle.getBucketTime().toEpochSecond(ZoneOffset.UTC),
                 candle.getOpenPrice(),
                 candle.getHighPrice(),
                 candle.getLowPrice(),
@@ -43,6 +47,7 @@ public record OhlcCandleSnapshot(
     public static OhlcCandleSnapshot from(Ohlc30m candle) {
         return new OhlcCandleSnapshot(
                 candle.getBucketTime(),
+                candle.getBucketTime().toEpochSecond(ZoneOffset.UTC),
                 candle.getOpenPrice(),
                 candle.getHighPrice(),
                 candle.getLowPrice(),

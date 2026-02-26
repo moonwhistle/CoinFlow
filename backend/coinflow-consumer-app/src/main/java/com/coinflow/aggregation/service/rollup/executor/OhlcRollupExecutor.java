@@ -61,7 +61,7 @@ public class OhlcRollupExecutor {
                             symbolId,
                             symbol.getSymbol(),
                             interval.name(),
-                            bucketStart.toString(),
+                            bucketStart,
                             rollup.open(),
                             rollup.high(),
                             rollup.low(),

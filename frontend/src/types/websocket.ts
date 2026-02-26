@@ -27,7 +27,7 @@ export interface CandleClosedEvent {
     symbolId: number;
     symbolCode: string;
     interval: 'M1' | 'M5' | 'M30';
-    bucketTime: string; // ISO 8601 string
+    epochSeconds: number;
     open: number;
     high: number;
     low: number;
@@ -43,5 +43,5 @@ export const isTickDto = (msg: WsMessage): msg is TickDto => {
 };
 
 export const isCandleClosedEvent = (msg: WsMessage): msg is CandleClosedEvent => {
-    return 'symbolCode' in msg && 'bucketTime' in msg;
+    return 'symbolCode' in msg && 'epochSeconds' in msg;
 };

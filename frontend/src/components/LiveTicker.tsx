@@ -78,7 +78,7 @@ export const LiveTicker = () => {
     const getTime = () => {
         if (!lastMessage) return null;
         if (isTickDto(lastMessage)) return lastMessage.eventTime;
-        if (isCandleClosedEvent(lastMessage)) return new Date(lastMessage.bucketTime).getTime();
+        if (isCandleClosedEvent(lastMessage)) return lastMessage.epochSeconds * 1000;
         return null;
     };
 
