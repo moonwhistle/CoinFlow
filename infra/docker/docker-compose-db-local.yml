@@ -9,11 +9,12 @@ services:
     environment:
       POSTGRES_DB: ohlc
       POSTGRES_USER: ohlc_user
-      POSTGRES_PASSWORD: ohlc_pass
+      POSTGRES_PASSWORD: 1234
       TZ: Asia/Seoul
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
+
 

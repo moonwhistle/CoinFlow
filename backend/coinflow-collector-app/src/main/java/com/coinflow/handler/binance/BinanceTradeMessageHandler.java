@@ -25,6 +25,7 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
 
     @Override
     public void handle(String message) {
+        log.info("Received raw message: {}", message);
         try {
             JsonNode root = objectMapper.readTree(message);
             JsonNode data = root.get(DATA);

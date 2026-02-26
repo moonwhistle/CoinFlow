@@ -34,8 +34,8 @@ public class OhlcLiveSnapshotRepositoryImpl implements OhlcLiveSnapshotRepositor
         try {
             String json = objectMapper.writeValueAsString(ohlc1m);
             redisTemplate.opsForValue().set(key, json, TTL);
-        } catch (JsonProcessingException e) {
-            log.error("Failed to serialize Ohlc1m live snapshot for key: {}", key, e);
+        } catch (Exception e) {
+            log.error("Failed to serialize or save Ohlc1m live snapshot for key: {}", key, e);
         }
     }
 

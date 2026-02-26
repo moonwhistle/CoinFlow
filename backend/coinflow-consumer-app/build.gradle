@@ -5,6 +5,7 @@ plugins {
 dependencies {
     implementation project(':coinflow-core')
     implementation project(':coinflow-common')
+    implementation project(':coinflow-infra-redis')
 
     // redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
