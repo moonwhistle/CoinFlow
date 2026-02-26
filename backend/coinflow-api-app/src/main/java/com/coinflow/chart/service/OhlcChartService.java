@@ -8,6 +8,7 @@ import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
+import com.coinflow.util.TimeBucket;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,19 +26,20 @@ public class OhlcChartService {
     private final Ohlc30mService ohlc30mService;
 
     public List<OhlcCandleSnapshot> show(Long symbolId, OhlcInterval interval, int candles) {
-        LocalDateTime endExclusive = interval.resolveBucketStart(LocalDateTime.now(clock));
+        java.time.Instant nowInstant = java.time.Instant.now(clock);
+        LocalDateTime base1mBucket = TimeBucket.to1m(nowInstant);
+        LocalDateTime endExclusive = interval.resolveBucketStart(base1mBucket);
 
         return chartStore.get(symbolId, interval, candles, endExclusive)
                 .orElseGet(() -> loadAndCache(
                         symbolId,
                         interval,
                         candles,
-                        endExclusive
-                ));
+                        endExclusive));
     }
 
     private List<OhlcCandleSnapshot> loadAndCache(Long symbolId, OhlcInterval interval, int candles,
-                                                  LocalDateTime endExclusive) {
+            LocalDateTime endExclusive) {
         List<OhlcCandleSnapshot> result = loadFromDataSource(symbolId, interval, candles, endExclusive);
         chartStore.put(symbolId, interval, candles, endExclusive, result);
 
@@ -45,7 +47,7 @@ public class OhlcChartService {
     }
 
     private List<OhlcCandleSnapshot> loadFromDataSource(Long symbolId, OhlcInterval interval, int candles,
-                                                        LocalDateTime endExclusive) {
+            LocalDateTime endExclusive) {
         LocalDateTime startInclusive = endExclusive.minus(interval.duration().multipliedBy(candles));
 
         if (interval == OhlcInterval.M1) {
