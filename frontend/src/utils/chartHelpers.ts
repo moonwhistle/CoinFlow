@@ -1,6 +1,7 @@
 import type { Time } from 'lightweight-charts';
 import type { TickDto } from '../types/websocket';
 import type { OhlcInterval } from '../types/chart';
+import { CHART_COLORS } from '../constants/chart';
 
 export interface ChartCandle {
     time: Time;
@@ -8,6 +9,11 @@ export interface ChartCandle {
     high: number;
     low: number;
     close: number;
+    // Per-candle color overrides (for ghost candles)
+    color?: string;
+    borderColor?: string;
+    wickUpColor?: string;
+    wickDownColor?: string;
 }
 
 export interface VolumeBar {
@@ -17,8 +23,7 @@ export interface VolumeBar {
 }
 
 /**
- * Tick 데이터를 1분봉 캔들로 병합하거나 새로운 캔들을 생성합니다.
- * 백엔드 API 연동 전까지 클라이언트 사이드 집계를 수행합니다.
+ * Tick 데이터를 인터벌별 캔들로 병합하거나 새로운 캔들을 생성합니다.
  */
 export const aggregateTickToCandle = (
     tick: TickDto,
@@ -37,11 +42,6 @@ export const aggregateTickToCandle = (
     if (interval === 'M5') duration = 300;
     else if (interval === 'M30') duration = 1800;
 
-    // Round to nearest interval start time
-    // timestamp is in ms, so divide by 1000 first, or convert duration to ms
-    // Logic: Floor(timestamp_ms / duration_ms) * duration_seconds_converted_to_chart_time
-    // Wait, chart uses Seconds.
-
     const timestampSec = Math.floor(timestamp / 1000);
     const candleTime = (Math.floor(timestampSec / duration) * duration) as Time;
 
@@ -52,7 +52,6 @@ export const aggregateTickToCandle = (
     // Check if we moved to a new minute or initialized
     if (!nextCandle || candleTime > nextCandle.time) {
         isNewCandle = true;
-        // New Candle
         nextCandle = {
             time: candleTime,
             open: price,
@@ -74,7 +73,6 @@ export const aggregateTickToCandle = (
         // Accumulate volume
         if (nextVolume) {
             nextVolume.value += quantity;
-            // Determine color based on candle direction
             const isUp = nextCandle.close >= nextCandle.open;
             nextVolume.color = isUp ? upColor : downColor;
         }
@@ -88,35 +86,60 @@ export const aggregateTickToCandle = (
 };
 
 /**
- * 초기 차트 데이터를 위한 Mock 데이터 생성기
- * (추후 백엔드 Historical Data API로 대체 예정)
+ * 캔들 데이터의 시간 갭을 Forward-Fill로 채웁니다.
+ * 거래가 없던 분에는 이전 close 가격으로 flat 캔들을 생성하고,
+ * 반투명(ghost) 스타일을 적용합니다.
+ *
+ * @param candles - 정렬된 캔들 배열
+ * @param volumes - 정렬된 볼륨 배열 (candles와 1:1 대응)
+ * @param interval - 차트 인터벌 ('M1', 'M5', 'M30')
  */
-export const generateMockData = (count: number = 100) => {
-    const candleData: ChartCandle[] = [];
-    const volumeData: VolumeBar[] = [];
+export const forwardFillCandles = (
+    candles: ChartCandle[],
+    volumes: VolumeBar[],
+    interval: OhlcInterval = 'M1'
+): { filledCandles: ChartCandle[]; filledVolumes: VolumeBar[] } => {
+    if (candles.length < 2) return { filledCandles: candles, filledVolumes: volumes };
 
-    // End 1 minute ago so live data takes over naturally
-    let time = Math.floor(Date.now() / 1000) - (60 * count);
-    let value = 90000;
+    let durationSec = 60;
+    if (interval === 'M5') durationSec = 300;
+    else if (interval === 'M30') durationSec = 1800;
 
-    for (let i = 0; i < count; i++) {
-        const open = value;
-        const change = (Math.random() - 0.5) * 50;
-        const close = open + change;
-        const high = Math.max(open, close) + Math.random() * 10;
-        const low = Math.min(open, close) - Math.random() * 10;
-        const volume = Math.random() * 10 + 5;
-        const isUp = close >= open;
-        const timePoint = Math.floor(time / 60) * 60 as Time;
+    const filledCandles: ChartCandle[] = [];
+    const filledVolumes: VolumeBar[] = [];
 
-        candleData.push({ time: timePoint, open, high, low, close });
-        volumeData.push({
-            time: timePoint,
-            value: volume,
-            color: isUp ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
-        });
-        value = close;
-        time += 60;
+    for (let i = 0; i < candles.length; i++) {
+        // 첫 캔들 전에는 채우기 불가
+        if (i > 0) {
+            const prevTime = candles[i - 1].time as number;
+            const currTime = candles[i].time as number;
+            const prevClose = candles[i - 1].close;
+
+            // 갭이 있으면 ghost 캔들로 채우기
+            for (let t = prevTime + durationSec; t < currTime; t += durationSec) {
+                filledCandles.push({
+                    time: t as Time,
+                    open: prevClose,
+                    high: prevClose,
+                    low: prevClose,
+                    close: prevClose,
+                    color: CHART_COLORS.GHOST,
+                    borderColor: CHART_COLORS.GHOST,
+                    wickUpColor: CHART_COLORS.GHOST_WICK,
+                    wickDownColor: CHART_COLORS.GHOST_WICK,
+                });
+                filledVolumes.push({
+                    time: t as Time,
+                    value: 0,
+                    color: CHART_COLORS.GHOST,
+                });
+            }
+        }
+
+        filledCandles.push(candles[i]);
+        filledVolumes.push(volumes[i]);
     }
-    return { candleData, volumeData };
+
+    return { filledCandles, filledVolumes };
 };
+

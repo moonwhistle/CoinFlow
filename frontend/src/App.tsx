@@ -6,7 +6,7 @@ import './App.css';
 import { WebSocketProvider } from './context/WebSocketContext';
 
 function App() {
-  const WS_URL = 'ws://localhost:8081/ws/v1/coinflow';
+  const WS_URL = `ws://${window.location.host}/ws/v1/coinflow`;
 
   return (
     <WebSocketProvider url={WS_URL}>

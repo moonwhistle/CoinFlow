@@ -13,13 +13,7 @@ export const useCoinflowWebSocket = (
     useEffect(() => {
         if (lastMessage) {
             try {
-                // We know this is WsMessage type from context, but we need to safely mutate or cast it
                 const data: WsMessage = JSON.parse(lastMessage.data);
-
-                // Downscale volume for real-time data
-                if ('volume' in data && typeof data.volume === 'number') {
-                    data.volume = data.volume / 100000000;
-                }
 
                 setParsedMessage(data);
                 if (onMessage) {

@@ -4,7 +4,6 @@ plugins {
 
 dependencies {
     implementation project(':coinflow-common')
-    implementation project(':coinflow-infra-redis')
 
     // WebFlux (Netty) for WebSocket
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
