@@ -4,7 +4,7 @@ import type { Time, LogicalRange, IChartApi, ISeriesApi } from 'lightweight-char
 import { Settings, Camera, Maximize, BarChart2 } from 'lucide-react';
 import { useCoinflowWebSocket } from '../../hooks/useCoinflowWebSocket';
 import { CHART_COLORS, CHART_CONFIG } from '../../constants/chart';
-import { aggregateTickToCandle } from '../../utils/chartHelpers';
+import { aggregateTickToCandle, forwardFillCandles } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
 import { getOhlcData } from '../../api/ohlcApi';
 import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
@@ -196,8 +196,11 @@ export const TradingChart = () => {
                 candles.sort((a, b) => (a.time as number) - (b.time as number));
                 volumes.sort((a, b) => (a.time as number) - (b.time as number));
 
-                mainSeries.setData(candles);
-                volumeSeries.setData(volumes);
+                // Forward-fill gaps with semi-transparent ghost candles
+                const { filledCandles, filledVolumes } = forwardFillCandles(candles, volumes, activeTimeframe);
+
+                mainSeries.setData(filledCandles);
+                volumeSeries.setData(filledVolumes);
 
                 // Update refs for real-time updates
                 if (candles.length > 0) {
