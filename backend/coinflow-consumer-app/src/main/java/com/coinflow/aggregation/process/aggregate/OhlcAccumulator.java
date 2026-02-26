@@ -14,6 +14,10 @@ import lombok.Getter;
  * volume은 고정 소수점 스케일링된 long(VolumeScaler)을 누적한다.
  * </p>
  * <p>
+ * lastStreamId는 마지막으로 처리한 Redis Stream Record ID를 추적한다.
+ * API 측에서 이 ID 이후의 틱만 XRANGE하여 Volume 이중 누적을 방지한다.
+ * </p>
+ * <p>
  * Note: 이 클래스는 Thread-Safe 합니다.
  * </p>
  */
@@ -27,21 +31,23 @@ public class OhlcAccumulator {
     private long volume;
 
     private Instant closeTime;
+    private String lastStreamId;
 
-    private OhlcAccumulator(BigDecimal open, long volume, Instant eventTime) {
+    private OhlcAccumulator(BigDecimal open, long volume, Instant eventTime, String streamId) {
         this.open = open;
         this.high = open;
         this.low = open;
         this.close = open;
         this.volume = volume;
         this.closeTime = eventTime;
+        this.lastStreamId = streamId;
     }
 
-    public static OhlcAccumulator first(BigDecimal price, long volume, Instant eventTime) {
-        return new OhlcAccumulator(price, volume, eventTime);
+    public static OhlcAccumulator first(BigDecimal price, long volume, Instant eventTime, String streamId) {
+        return new OhlcAccumulator(price, volume, eventTime, streamId);
     }
 
-    public synchronized void apply(BigDecimal price, long vol, Instant eventTime) {
+    public synchronized void apply(BigDecimal price, long vol, Instant eventTime, String streamId) {
         if (price.compareTo(high) > 0) {
             high = price;
         }
@@ -57,5 +63,8 @@ public class OhlcAccumulator {
 
         // volume overflow 검증
         volume = Math.addExact(volume, vol);
+
+        // 마지막으로 처리한 Stream Record ID 갱신
+        this.lastStreamId = streamId;
     }
 }

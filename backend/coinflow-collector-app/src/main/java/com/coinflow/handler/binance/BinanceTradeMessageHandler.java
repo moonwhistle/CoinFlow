@@ -34,7 +34,9 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
                     data.get(SYMBOL).asText().toLowerCase(),
                     new BigDecimal(data.get(PRICE).asText()),
                     new BigDecimal(data.get(QUANTITY).asText()),
-                    Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()));
+                    Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()),
+                    null // streamId는 Collector 단계에서 아직 존재하지 않음 (publish 이전)
+            );
 
             publisher.publish(event);
         } catch (Exception e) {

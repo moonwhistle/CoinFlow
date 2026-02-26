@@ -23,9 +23,9 @@ public abstract class BaseOhlcAggregationStore implements OhlcAggregationStore {
 
         store.compute(key, (k, acc) -> {
             if (acc == null) {
-                return OhlcAccumulator.first(event.price(), volume, event.eventTime());
+                return OhlcAccumulator.first(event.price(), volume, event.eventTime(), event.streamId());
             }
-            acc.apply(event.price(), volume, event.eventTime());
+            acc.apply(event.price(), volume, event.eventTime(), event.streamId());
             return acc;
         });
     }
