@@ -68,32 +68,4 @@ public class RedisStreamConfig {
 
                 return subscription;
         }
-
-        /**
-         * Redis Pub/Sub Container for Candle Closed Events
-         */
-        @Bean
-        public org.springframework.data.redis.listener.RedisMessageListenerContainer redisMessageListenerContainer(
-                        RedisConnectionFactory connectionFactory,
-                        org.springframework.data.redis.listener.adapter.MessageListenerAdapter listenerAdapter) {
-                org.springframework.data.redis.listener.RedisMessageListenerContainer container = new org.springframework.data.redis.listener.RedisMessageListenerContainer();
-                container.setConnectionFactory(connectionFactory);
-                // Subscribe to "candle:closed" channel
-                container.addMessageListener(listenerAdapter,
-                                new org.springframework.data.redis.listener.PatternTopic("candle:closed"));
-                return container;
-        }
-
-        /**
-         * Adapter for CandleClosedStreamConsumer (which implements MessageListener)
-         */
-        @Bean
-        public org.springframework.data.redis.listener.adapter.MessageListenerAdapter listenerAdapter(
-                        com.coinflow.ws.service.CandleClosedStreamConsumer consumer) {
-                // Since CandleClosedStreamConsumer implements MessageListener, we can just pass
-                // it directly
-                // But using Adapter is more flexible if we want to change method name later
-                return new org.springframework.data.redis.listener.adapter.MessageListenerAdapter(consumer,
-                                "onMessage");
-        }
 }

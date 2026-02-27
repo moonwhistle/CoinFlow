@@ -32,14 +32,25 @@ public class KlineState {
     }
 
     /**
-     * Process a single tick. If the tick belongs to a new candle period,
-     * the state is reset first.
+     * Process a single tick.
+     * Returns a snapshot of the *previous* closed candle if this tick caused a
+     * bucket transition.
+     * Otherwise returns null.
      */
-    public synchronized void processTick(BigDecimal price, BigDecimal qty, long tickEpochSec) {
+    public synchronized KlineSnapshot processTick(BigDecimal price, BigDecimal qty, long tickEpochSec) {
         long bucketStart = (tickEpochSec / durationSeconds) * durationSeconds;
+        KlineSnapshot closedSnapshot = null;
 
         if (this.open == null || bucketStart != this.startTime) {
-            // New candle period
+            // If there's an existing open candle, close it and capture snapshot
+            if (this.open != null) {
+                this.closed = true;
+                closedSnapshot = new KlineSnapshot(
+                        startTime, closeTime,
+                        open, high, low, close,
+                        volume, trades, closed);
+            }
+            // Start new candle period
             reset(bucketStart);
             this.open = price;
             this.high = price;
@@ -56,6 +67,8 @@ public class KlineState {
         this.volume = this.volume.add(qty);
         this.trades++;
         this.dirty = true;
+
+        return closedSnapshot;
     }
 
     /**
