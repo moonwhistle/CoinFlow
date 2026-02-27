@@ -1,4 +1,4 @@
-package com.coinflow.redis.repository;
+package com.coinflow.aggregation.repository;
 
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
