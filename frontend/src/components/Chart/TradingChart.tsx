@@ -8,7 +8,7 @@ import { forwardFillCandles } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
 import { getOhlcData } from '../../api/ohlcApi';
 import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
-import { type WsMessage, isKlineEvent } from '../../types/websocket';
+import { type WsMessage, isKlineEvent, isTickerEvent } from '../../types/websocket';
 import './TradingChart.css';
 
 export const TradingChart = () => {
@@ -51,6 +51,18 @@ export const TradingChart = () => {
                     ? CHART_COLORS.UP_TRANSPARENT
                     : CHART_COLORS.DOWN_TRANSPARENT,
             });
+        }
+        else if (isTickerEvent(msg)) {
+            // TickerEvent (0ms real-time): Update ONLY the current latest candle's close price
+            // Note: In lightweight-charts, updating a candle that already exists at `time` modifies it.
+            // Since we don't have the exact `open/high/low/time` of the CURRENT candle inside the TickerEvent,
+            // the safest robust approach for lightweight-charts is to wait for the next KlineEvent (250ms)
+            // OR we can maintain the latest candle state in a ref and patch it.
+            // For now, if we want to just flash the price, we can update the price scale or let KlineEvent handle the candle shape
+            // and use TickerEvent for a separate Top-Bar UI component (Current Price Display).
+            // Let's fire a custom DOM event so the outer dashboard can listen to the raw ticker if needed:
+            const tickerEvent = new CustomEvent('coinflow-ticker', { detail: msg });
+            window.dispatchEvent(tickerEvent);
         }
     }, [activeTimeframe]);
 

@@ -34,10 +34,21 @@ export interface KlineEvent {
     closed: boolean;      // true = candle is finalized
 }
 
-export type WsMessage = KlineEvent;
+export interface TickerEvent {
+    symbol: string;
+    price: number;
+    volume: number;
+    eventTime: number; // epoch milliseconds
+}
 
-// Helper Type Guard
+export type WsMessage = KlineEvent | TickerEvent;
+
+// Helper Type Guards
 export const isKlineEvent = (msg: WsMessage): msg is KlineEvent => {
-    return 'startTime' in msg && 'interval' in msg;
+    return 'interval' in msg && 'startTime' in msg;
+};
+
+export const isTickerEvent = (msg: WsMessage): msg is TickerEvent => {
+    return 'price' in msg && 'eventTime' in msg;
 };
 

@@ -1,28 +1,25 @@
-package com.coinflow.aggregation.service.kline;
+package com.coinflow.redis.repository;
 
+import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
-
 @Slf4j
 @Repository
 @RequiredArgsConstructor
-public class RedisLiveKlineRepository {
+public class LiveKlineRepositoryImpl implements LiveKlineRepository {
 
     public static final String KEY_PREFIX = "kline:live:";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    /**
-     * Set the current live kline state (JSON) in Redis.
-     * Overwrites any existing value.
-     */
+    @Override
     public void save(KlineEvent klineEvent) {
         String key = buildKey(klineEvent.symbol(), klineEvent.interval());
         try {
@@ -33,10 +30,7 @@ public class RedisLiveKlineRepository {
         }
     }
 
-    /**
-     * Get the current live kline state from Redis.
-     * Used mainly by api-app to merge with DB data for initial load.
-     */
+    @Override
     public Optional<KlineEvent> findBySymbolAndInterval(String symbol, String interval) {
         String key = buildKey(symbol, interval);
         try {
@@ -51,10 +45,7 @@ public class RedisLiveKlineRepository {
         }
     }
 
-    /**
-     * Delete the live kline state from Redis.
-     * Typically called when a candle is fully closed.
-     */
+    @Override
     public void delete(String symbol, String interval) {
         String key = buildKey(symbol, interval);
         redisTemplate.delete(key);

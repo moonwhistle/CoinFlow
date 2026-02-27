@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Broadcasts kline snapshots to Redis Pub/Sub and saves them to Redis Key
@@ -24,7 +25,23 @@ public class KlineSnapshotBroadcaster {
     private final ObjectMapper objectMapper;
     private final RedisLiveKlineRepository liveKlineRepository;
 
+    // symbol:interval -> timestamp (ms)
+    private final ConcurrentHashMap<String, Long> lastBroadcastTimes = new ConcurrentHashMap<>();
+    private static final long BROADCAST_INTERVAL_MS = 250;
+
     public void broadcastAndSave(String symbol, String interval, KlineSnapshot snapshot) {
+        String cacheKey = symbol.toLowerCase() + ":" + interval;
+        long now = System.currentTimeMillis();
+
+        // Throttling Logic for Live Candles
+        if (!snapshot.closed()) {
+            Long lastTime = lastBroadcastTimes.get(cacheKey);
+            if (lastTime != null && (now - lastTime) < BROADCAST_INTERVAL_MS) {
+                // Skip broadcast if 250ms hasn't passed
+                return;
+            }
+        }
+
         try {
             KlineEvent event = KlineEvent.builder()
                     .symbol(symbol)
@@ -46,6 +63,9 @@ public class KlineSnapshotBroadcaster {
             // 2. Broadcast to Pub/Sub (for ws-gateway)
             String json = objectMapper.writeValueAsString(event);
             redisTemplate.convertAndSend(KLINE_BROADCAST_TOPIC, json);
+
+            // Update last broadcast time
+            lastBroadcastTimes.put(cacheKey, now);
 
             // 3. Reset in-memory state if closed
             if (snapshot.closed()) {
