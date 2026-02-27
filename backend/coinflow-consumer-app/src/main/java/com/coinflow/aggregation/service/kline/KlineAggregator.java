@@ -3,10 +3,9 @@ package com.coinflow.aggregation.service.kline;
 import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -44,6 +43,7 @@ public class KlineAggregator {
     public AggregationResult processTickAndGetResult(String symbol, BigDecimal price, BigDecimal quantity,
             long epochMs) {
         long epochSec = epochMs / 1000;
+        long scaledQty = VolumeScaler.toLong(quantity);
         List<ClosedKlineSnapshot> closedSnapshots = new ArrayList<>();
         List<ClosedKlineSnapshot> liveSnapshots = new ArrayList<>();
 
@@ -52,7 +52,7 @@ public class KlineAggregator {
             KlineState state = states.computeIfAbsent(key, k -> new KlineState(interval.seconds()));
 
             // 1. Process tick and get closed snapshot (if any)
-            KlineState.KlineSnapshot closed = state.processTick(price, quantity, epochSec);
+            KlineSnapshot closed = state.processTick(price, scaledQty, epochSec);
             if (closed != null) {
                 closedSnapshots.add(new ClosedKlineSnapshot(interval.name(), closed));
             }
@@ -67,17 +67,6 @@ public class KlineAggregator {
     }
 
     /**
-     * Get a snapshot for broadcasting. Returns null if no data or not dirty.
-     */
-    public KlineSnapshot takeSnapshot(String symbol, String interval) {
-        String key = buildKey(symbol, interval);
-        KlineState state = states.get(key);
-        if (state == null)
-            return null;
-        return state.takeSnapshot();
-    }
-
-    /**
      * Reset state after a closed candle has been broadcast.
      */
     public void resetAfterClose(String symbol, String interval) {
@@ -86,21 +75,6 @@ public class KlineAggregator {
         if (state != null) {
             state.resetAfterClose();
         }
-    }
-
-    /**
-     * Get all active symbol keys (symbols that have at least one KlineState).
-     */
-    public Set<String> getActiveSymbols() {
-        Set<String> symbols = new HashSet<>();
-        for (String key : states.keySet()) {
-            symbols.add(key.split(":")[0]);
-        }
-        return symbols;
-    }
-
-    public List<IntervalDef> getIntervals() {
-        return INTERVALS;
     }
 
     private String buildKey(String symbol, String interval) {
