@@ -1,16 +1,16 @@
 package com.coinflow.aggregation.service.kline;
 
+import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
 import com.coinflow.event.kline.KlineEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Broadcasts kline snapshots every 1 second to Redis Pub/Sub so that ws-gateway
- * can relay them to clients.
+ * Broadcasts kline snapshots to Redis Pub/Sub and saves them to Redis Key
+ * immediately when triggered by the TickProcessService.
  */
 @Slf4j
 @Component
@@ -22,21 +22,9 @@ public class KlineSnapshotBroadcaster {
     private final KlineAggregator aggregator;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final RedisLiveKlineRepository liveKlineRepository;
 
-    @Scheduled(fixedRate = 1000)
-    public void broadcastSnapshots() {
-        for (String symbol : aggregator.getActiveSymbols()) {
-            for (var interval : aggregator.getIntervals()) {
-                KlineState.KlineSnapshot snapshot = aggregator.takeSnapshot(symbol, interval.name());
-                if (snapshot == null)
-                    continue;
-
-                broadcast(symbol, interval.name(), snapshot);
-            }
-        }
-    }
-
-    public void broadcast(String symbol, String interval, KlineState.KlineSnapshot snapshot) {
+    public void broadcastAndSave(String symbol, String interval, KlineSnapshot snapshot) {
         try {
             KlineEvent event = KlineEvent.builder()
                     .symbol(symbol)
@@ -52,16 +40,21 @@ public class KlineSnapshotBroadcaster {
                     .closed(snapshot.closed())
                     .build();
 
+            // 1. Save to Redis (SSOT for api-app)
+            liveKlineRepository.save(event);
+
+            // 2. Broadcast to Pub/Sub (for ws-gateway)
             String json = objectMapper.writeValueAsString(event);
             redisTemplate.convertAndSend(KLINE_BROADCAST_TOPIC, json);
 
+            // 3. Reset in-memory state if closed
             if (snapshot.closed()) {
-                log.debug("Broadcasted closed kline to Redis for {}:{}", symbol, interval);
+                log.debug("Broadcasted and saved closed kline for {}:{}", symbol, interval);
                 aggregator.resetAfterClose(symbol, interval);
             }
 
         } catch (Exception e) {
-            log.error("Failed to broadcast kline to Redis for {}:{}", symbol, interval, e);
+            log.error("Failed to broadcast/save kline for {}:{}", symbol, interval, e);
         }
     }
 }
