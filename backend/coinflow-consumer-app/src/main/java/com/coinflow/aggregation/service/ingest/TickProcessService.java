@@ -5,6 +5,7 @@ import com.coinflow.aggregation.service.kline.KlineAggregator.AggregationResult;
 import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapshot;
 import com.coinflow.aggregation.service.kline.KlineSnapshotBroadcaster;
 import com.coinflow.aggregation.service.ticker.TickerBroadcaster;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
@@ -12,10 +13,8 @@ import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.tick.event.TickRawEvent;
 import com.coinflow.event.ticker.TickerEvent;
-import java.math.RoundingMode;
-import java.time.Instant;
+
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,20 +54,21 @@ public class TickProcessService {
                     event.quantity(),
                     event.eventTime().toEpochMilli());
 
-            // Broadcast & Save Live Snapshots (M1, M5, M30 always updated on tick)
+            // 1. Broadcast & Save Closed Snapshots if bucket transitions occurred (Must be
+            // first to avoid 'Cannot update oldest data' in frontend)
+            for (ClosedKlineSnapshot c : result.closedSnapshots()) {
+                // WebSocket Broadcast & Redis Save
+                klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
+
+                // Exact SSOT DB Persistence (No more Schedulers)
+                persistClosedCandleToDb(event.symbol(), c);
+            }
+
+            // 2. Broadcast & Save Live Snapshots (M1, M5, M30 always updated on tick)
             if (!result.liveSnapshots().isEmpty()) {
                 for (ClosedKlineSnapshot c : result.liveSnapshots()) {
                     klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
                 }
-            }
-
-            // Broadcast & Save Closed Snapshots if bucket transitions occurred
-            for (ClosedKlineSnapshot c : result.closedSnapshots()) {
-                // 1. WebSocket Broadcast
-                klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
-
-                // 2. Exact SSOT DB Persistence (No more Schedulers)
-                persistClosedCandleToDb(event.symbol(), c);
             }
 
             log.debug("[Consumer] Successfully processed tick event - symbol={}", event.symbol());
@@ -87,7 +87,7 @@ public class TickProcessService {
         Symbol symbol = symbolService.findBySymbol(symbolCode);
         LocalDateTime bucketTime = LocalDateTime.ofEpochSecond(closedSnapshot.snapshot().startTime(), 0,
                 ZoneOffset.UTC);
-        long volume = closedSnapshot.snapshot().volume().setScale(0, RoundingMode.DOWN).longValue();
+        long volume = VolumeScaler.toLong(closedSnapshot.snapshot().volume());
 
         switch (closedSnapshot.interval()) {
             case "M1" -> ohlc1mService.applyAndSave(
