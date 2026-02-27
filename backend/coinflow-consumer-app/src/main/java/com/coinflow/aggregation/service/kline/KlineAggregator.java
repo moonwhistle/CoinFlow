@@ -1,7 +1,11 @@
 package com.coinflow.aggregation.service.kline;
 
+import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -24,35 +28,48 @@ public class KlineAggregator {
     // key: "btcusdt:M1"
     private final ConcurrentHashMap<String, KlineState> states = new ConcurrentHashMap<>();
 
-    public record ClosedKlineSnapshot(String interval, KlineState.KlineSnapshot snapshot) {
+    public record ClosedKlineSnapshot(String interval, KlineSnapshot snapshot) {
+    }
+
+    public record AggregationResult(
+            List<ClosedKlineSnapshot> closedSnapshots,
+            List<ClosedKlineSnapshot> liveSnapshots) {
     }
 
     /**
      * Process a tick for all supported intervals.
-     * Returns a list of snapshots for any candles that were closed during this tick
-     * (due to traversing a bucket boundary).
+     * Returns both the updated live snapshots (for immediate broadcast/Redis SET)
+     * and any closed snapshots (due to bucket transition).
      */
-    public List<ClosedKlineSnapshot> processTickAndGetClosed(String symbol, BigDecimal price, BigDecimal quantity,
+    public AggregationResult processTickAndGetResult(String symbol, BigDecimal price, BigDecimal quantity,
             long epochMs) {
         long epochSec = epochMs / 1000;
-        List<ClosedKlineSnapshot> closedSnapshots = new java.util.ArrayList<>();
+        List<ClosedKlineSnapshot> closedSnapshots = new ArrayList<>();
+        List<ClosedKlineSnapshot> liveSnapshots = new ArrayList<>();
 
         for (IntervalDef interval : INTERVALS) {
             String key = buildKey(symbol, interval.name());
             KlineState state = states.computeIfAbsent(key, k -> new KlineState(interval.seconds()));
-            KlineState.KlineSnapshot closed = state.processTick(price, quantity, epochSec);
 
+            // 1. Process tick and get closed snapshot (if any)
+            KlineState.KlineSnapshot closed = state.processTick(price, quantity, epochSec);
             if (closed != null) {
                 closedSnapshots.add(new ClosedKlineSnapshot(interval.name(), closed));
             }
+
+            // 2. Get current live snapshot (should always exist after processTick)
+            KlineSnapshot live = state.takeSnapshot();
+            if (live != null) {
+                liveSnapshots.add(new ClosedKlineSnapshot(interval.name(), live));
+            }
         }
-        return closedSnapshots;
+        return new AggregationResult(closedSnapshots, liveSnapshots);
     }
 
     /**
      * Get a snapshot for broadcasting. Returns null if no data or not dirty.
      */
-    public KlineState.KlineSnapshot takeSnapshot(String symbol, String interval) {
+    public KlineSnapshot takeSnapshot(String symbol, String interval) {
         String key = buildKey(symbol, interval);
         KlineState state = states.get(key);
         if (state == null)
@@ -74,8 +91,8 @@ public class KlineAggregator {
     /**
      * Get all active symbol keys (symbols that have at least one KlineState).
      */
-    public java.util.Set<String> getActiveSymbols() {
-        java.util.Set<String> symbols = new java.util.HashSet<>();
+    public Set<String> getActiveSymbols() {
+        Set<String> symbols = new HashSet<>();
         for (String key : states.keySet()) {
             symbols.add(key.split(":")[0]);
         }
