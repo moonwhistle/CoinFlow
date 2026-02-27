@@ -14,34 +14,30 @@ export interface WsRequest {
     topics: WsSubscription[];
 }
 
-// Corresponds to Backend TickDto record
-export interface TickDto {
+/**
+ * Kline (candlestick) event from WebSocket.
+ * Matches Binance kline stream format.
+ * Sent every ~1 second with current candle state.
+ * When closed=true, this is the final value for the candle.
+ */
+export interface KlineEvent {
     symbol: string;
-    price: number;
-    volume: number;
-    eventTime: number;
-}
-
-// Corresponds to Backend CandleClosedEvent record
-export interface CandleClosedEvent {
-    symbolId: number;
-    symbolCode: string;
     interval: 'M1' | 'M5' | 'M30';
-    epochSeconds: number;
+    startTime: number;    // epoch seconds (candle start)
+    closeTime: number;    // epoch seconds (candle end)
     open: number;
     high: number;
     low: number;
     close: number;
     volume: number;
+    trades: number;
+    closed: boolean;      // true = candle is finalized
 }
 
-export type WsMessage = TickDto | CandleClosedEvent;
+export type WsMessage = KlineEvent;
 
 // Helper Type Guard
-export const isTickDto = (msg: WsMessage): msg is TickDto => {
-    return 'price' in msg && 'eventTime' in msg;
+export const isKlineEvent = (msg: WsMessage): msg is KlineEvent => {
+    return 'startTime' in msg && 'interval' in msg;
 };
 
-export const isCandleClosedEvent = (msg: WsMessage): msg is CandleClosedEvent => {
-    return 'symbolCode' in msg && 'epochSeconds' in msg;
-};

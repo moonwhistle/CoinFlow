@@ -4,11 +4,11 @@ import type { Time, LogicalRange, IChartApi, ISeriesApi } from 'lightweight-char
 import { Settings, Camera, Maximize, BarChart2 } from 'lucide-react';
 import { useCoinflowWebSocket } from '../../hooks/useCoinflowWebSocket';
 import { CHART_COLORS, CHART_CONFIG } from '../../constants/chart';
-import { aggregateTickToCandle, forwardFillCandles } from '../../utils/chartHelpers';
+import { forwardFillCandles } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
 import { getOhlcData } from '../../api/ohlcApi';
 import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
-import { type WsMessage, isTickDto, isCandleClosedEvent } from '../../types/websocket';
+import { type WsMessage, isKlineEvent } from '../../types/websocket';
 import './TradingChart.css';
 
 export const TradingChart = () => {
@@ -25,69 +25,34 @@ export const TradingChart = () => {
     const [activeTimeframe, setActiveTimeframe] = useState<OhlcInterval>('M1');
     const [isLoading, setIsLoading] = useState(true);
 
-    // State to track the current accumulating candle
-    const currentCandleRef = useRef<ChartCandle | null>(null);
-    const currentVolumeRef = useRef<VolumeBar | null>(null);
-
-    // --- Real-time Data Handling (Performance Optimized) ---
+    // --- Real-time Data Handling (Kline Stream — Binance Style) ---
     const handleWebSocketMessage = useCallback((msg: WsMessage) => {
         if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
-        if (isLoading) return; // Bug3 fix: 초기 데이터 로딩 중에는 틱 무시
 
-        if (isTickDto(msg)) {
-            console.log("Tick Received:", msg.price, msg.volume);
-            // 1. Optimistic Update (Tick)
-            const { candle, volume } = aggregateTickToCandle(
-                msg,
-                currentCandleRef.current,
-                currentVolumeRef.current,
-                CHART_COLORS.UP_TRANSPARENT,
-                CHART_COLORS.DOWN_TRANSPARENT,
-                activeTimeframe
-            );
+        if (isKlineEvent(msg)) {
+            // Filter: only render the active timeframe
+            if (msg.interval !== activeTimeframe) return;
 
-            if (candle && volume) {
-                mainSeriesRef.current.update(candle);
-                volumeSeriesRef.current.update(volume);
+            const candleTime = msg.startTime as Time;
 
-                currentCandleRef.current = candle;
-                currentVolumeRef.current = volume;
-            }
-        } else if (isCandleClosedEvent(msg)) {
-            // 2. Server Correction (CandleClosed)
-            // Filter by active timeframe
-            if (msg.interval !== activeTimeframe) {
-                return;
-            }
-
-            // Use epochSeconds directly (UTC)
-            const candleTime = msg.epochSeconds as Time;
-
-            // Correction Candle
-            const correctedCandle: ChartCandle = {
+            // Server provides complete OHLCV — just render it
+            mainSeriesRef.current.update({
                 time: candleTime,
                 open: msg.open,
                 high: msg.high,
                 low: msg.low,
                 close: msg.close,
-            };
+            });
 
-            const correctedVolume: VolumeBar = {
+            volumeSeriesRef.current.update({
                 time: candleTime,
                 value: msg.volume,
-                color: msg.close >= msg.open ? CHART_COLORS.UP_TRANSPARENT : CHART_COLORS.DOWN_TRANSPARENT,
-            };
-
-            // Apply Correction
-            try {
-                mainSeriesRef.current.update(correctedCandle);
-                volumeSeriesRef.current.update(correctedVolume);
-                console.log(`[Correction] Applied for ${msg.symbolCode} at epoch=${msg.epochSeconds}`);
-            } catch (e) {
-                console.warn(`[Correction] Skipped for epoch=${msg.epochSeconds} due to time regression`);
-            }
+                color: msg.close >= msg.open
+                    ? CHART_COLORS.UP_TRANSPARENT
+                    : CHART_COLORS.DOWN_TRANSPARENT,
+            });
         }
-    }, [activeTimeframe, isLoading]);
+    }, [activeTimeframe]);
 
     // WebSocket Hook with Callback
     const { isConnected, subscribe } = useCoinflowWebSocket(handleWebSocketMessage);
@@ -95,10 +60,6 @@ export const TradingChart = () => {
     // --- Chart Initialization & Data Loading ---
     useEffect(() => {
         if (!mainContainerRef.current || !volumeContainerRef.current) return;
-
-        // Bug1 fix: 타임프레임 전환 시 이전 캔들 ref 초기화
-        currentCandleRef.current = null;
-        currentVolumeRef.current = null;
 
         // 1. Initialize Main Chart (Price)
         const mainChart = createChart(mainContainerRef.current, {
@@ -204,12 +165,6 @@ export const TradingChart = () => {
 
                 mainSeries.setData(filledCandles);
                 volumeSeries.setData(filledVolumes);
-
-                // Update refs for real-time updates
-                if (candles.length > 0) {
-                    currentCandleRef.current = candles[candles.length - 1];
-                    currentVolumeRef.current = volumes[volumes.length - 1];
-                }
             } catch (err) {
                 console.error("Failed to load chart data", err);
             } finally {
