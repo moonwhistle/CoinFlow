@@ -1,11 +1,11 @@
 # [FEAT] Zero Data Loss를 위한 Redis 기반 OHLC 실시간 스냅샷 및 틱 리플레이 병합 구현
 
 ## 📌 Summary
-초기에는 Snapshot + Replay 구조를 통해 실시간 데이터를 프론트엔드에서 집계하려고 하였으나, 정합성과 클라이언트 부담 문제를 해결하기 위해 백엔드에서 집계하여 완성된 캔들(Kline)을 1초마다 내려주는 구조로 아키텍처를 전면 개편하였습니다.
-이제 `consumer-app`이 실시간 틱 데이터를 바탕으로 OHLC 데이터를 집계 후 분리하여, Redis에 저장 및 Pub/Sub으로 브로드캐스팅합니다. 이를 통해 **Zero Data Loss** 정합성을 달성하며 프론트엔드의 구조를 완전히 단순화하였습니다.
+과거에는 실시간성을 위해 틱을 바로 쏘는 Fast-path와, 안전성을 위해 스냅샷을 주기적으로 저장하는 Slow-path의 **듀얼 아키텍처(Dual-path)**를 사용하여 프론트엔드에서 두 데이터를 병합(집계)하도록 하였습니다. 
+하지만 정합성과 클라이언트 부담 문제를 근본적으로 해결하기 위해, 이 두 경로를 하나로 완전히 통합하였습니다. 이제 `Consumer` 모듈이 **단일 집계자(Single Aggregator)** 역할을 수행하여 완성된 캔들(Kline)을 만들고, 이를 View(Websocket)와 API(Global Memory/DB) 양쪽으로 제공하는 직관적이고 완벽한 단방향 파이프라인으로 개편되었습니다.
 
 ## 📚 Changes
-- `coinflow-consumer-app`: `TickProcessService`와 `KlineAggregator`를 도입하여 틱 수신 시 실시간으로 M1, M5, M30 캔들을 메모리상에서 집계. 
+- `coinflow-consumer-app`: `TickProcessService`와 `KlineAggregator`를 도입하여 틱 수신 시 실시간으로 M1, M5, M30 캔들을 메모리상에서 단일 집계. 
 - `coinflow-consumer-app`: Ticker(0ms 지연)와 Kline(250ms/1초 스로틀링) 푸시 전략 분리 구현.
 - `coinflow-infra-redis`: `LiveKlineRepositoryImpl` 추가 및 Redis 키 관리 전략(심볼-인터벌 당 1개의 키 덮어쓰기) 구현.
 - `coinflow-ws-gateway`: Redis Pub/Sub을 구독하여 클라이언트로 브로드캐스팅하는 역할로 단순화. 직접적인 상태 유지나 집계 로직 제거.
@@ -13,27 +13,32 @@
 
 ---
 
-## 1. 원래 구현하고자 했던 Snapshot+Replay 흐름 정리
+## 1. 원래 구현하고자 했던 Snapshot+Replay (Dual-path) 흐름 정리
 - **흐름**: 
-  - API 초기 로딩 시 `DB 과거 캔들 + 마지막 Redis 스냅샷 + 누락 틱(XRANGE Replay)`을 병합해 응답.
-  - 실시간으로는 `ws-gateway`가 낱개의 틱(Raw Tick)을 클라이언트로 쏴줌.
-  - 프론트엔드에서 이 틱들을 가져다가 현재 캔들을 직접 OHLCV 갱신 및 집계(`aggregateTickToCandle`).
+  - **Slow-path (API)**: 초기 로딩 시 `DB 과거 캔들 + 마지막 Redis 스냅샷 + 누락 틱(XRANGE Replay)`을 병합해 응답.
+  - **Fast-path (WebSocket)**: 실시간으로는 `ws-gateway`가 낱개의 틱(Raw Tick)을 클라이언트로 직송.
+  - 프론트엔드(Dashboard)에서 이 틱들을 가져다가 현재 캔들을 직접 OHLCV 갱신 및 집계(`aggregateTickToCandle`).
   - 1분이 지나면 서버에서 확정된 캔들 데이터(`CandleClosedEvent`)를 보내 클라이언트 메모리 값을 보정(Overwrite).
 
 ## 2. Snapshot+Replay 분석 및 장단점
-- **장점**: 틱 발생 즉시(<100ms) 차트가 갱신되므로 실시간성이 매우 높음. 서버(`ws-gateway`)는 단순히 틱을 중계만 하므로 부하가 적음. `lastStreamId`를 통해 정밀한 멱등성 보장이 가능하여 이론 상 데이터 유실이 없음.
+- **장점**: 틱 발생 즉시(<100ms) 차트가 갱신되므로 실시간성이 매우 높음. 서버(`ws-gateway`)는 단순히 틱을 중계만 하므로 부하가 적음. `lastStreamId`를 통해 정밀한 멱등성 보장이 가능.
 - **단점**: 클라이언트 복잡도가 극도로 높음. WebSocket 연결이 불안정하거나 브라우저 탭 비활성화 시 틱이 유실되면 서버와 화면의 일치성이 바로 깨짐. 봉이 마감되는 시점에 과거 데이터를 보정하는 과정에서 시간 역행 문제 등 상태 관리(State management)가 매우 까다로움.
 
 ---
 
-## 3. Kline 흐름 정리 (현재)
-- **흐름**: 
-  - `consumer-app`이 Redis Stream에서 틱을 소비하며 메모리에서 즉시 캔들(Kline)로 응집화(Aggregation) 수행.
-  - 마감되지 않은 라이브 캔들은 일정 주기(예: 1초, 혹은 250ms)로 스냅샷을 만들어 Redis에 저장하고 Pub/Sub으로 브로드캐스팅.
-  - 캔들이 마감(Closed)되면 즉시 `closed: true` 플래그와 함께 브로드캐스팅 후 메모리 리셋 및 DB 영속화 진행.
-  - 클라이언트는 별도의 계산 없이 수신된 Kline 스냅샷을 `series.update()`로 그대로 차트에 밀어넣어 렌더링만 갱신.
+## 3. 완전 통합된 단일 파이프라인 아키텍처 (현재)
+Fast-path와 Slow-path가 하나로 합쳐져, 다음과 같은 명확하고 단순한 아키텍처로 동작합니다.
 
-## 4. Kline Stream 분석 및 장단점
+- **Collector**: `Tick Data API`에서 틱을 수집해 `Tick Producer`가 `Message Queue` (Redis Stream)로 발행합니다.
+- **Consumer**: `Consumer`가 큐에서 틱을 소비하고, 내부 `Aggregator`가 이를 즉시 인메모리에서 OHLC(Kline) 캔들로 병합합니다. 집계된 결과는 3곳으로 전파됩니다:
+  1. **Global Memory (Redis)**: 아직 마감되지 않은 캔들을 주기적(예: 1초)으로 덮어쓰기(Save Current Tick 1s)하여 실시간 상태 캐싱.
+  2. **Pub/Sub**: 마감되거나 스로틀링된 라이브 캔들을 브로드캐스트.
+  3. **DB**: 캔들이 완전히 마감(Closed)되면 영구 저장(Save Ohlc).
+- **View & API**:
+  - **Chart API**: 클라이언트가 대시보드 진입 시, `DB`의 과거 데이터와 `Global Memory`의 실시간 데이터를 조합해 초기 차트 제공.
+  - **WebSocket Gateway**: `Pub/Sub`을 통해 Consumer가 완성해 둔 캔들을 그대로 넘겨받아 `Dashboard` 화면에 실시간 업데이트(렌더링만 수행).
+
+## 4. 새 아키텍처 분석 및 장단점
 - **장점**: 프론트엔드는 온전히 "뷰(View)의 렌더링"만 담당하게 되어 매우 가벼워짐. 네트워크 유실이 발생하더라도 다음 1초 뒤에 날아오는 완성된 캔들 스냅샷 하나로 완벽하게 자가 복구됨(자가 치유). 모든 유저가 서버와 100% 동일한 정합성을 가진 차트를 보게 됨.
 - **단점**: 각 틱마다 갱신되지 않고 지정한 간격(1초)마다 업데이트되므로 초단타 매매 수준의 초지연(Ultra-Low Latency) 실시간성에는 약간 손해를 봄. 모든 심볼과 인터벌에 대한 메모리 상태(State)를 `consumer-app`이 유지해야 하므로 서버 리소스가 더 필요함.
 
