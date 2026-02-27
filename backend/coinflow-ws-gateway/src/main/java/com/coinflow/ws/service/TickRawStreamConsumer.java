@@ -1,27 +1,21 @@
 package com.coinflow.ws.service;
 
-import com.coinflow.ws.dto.TickDto;
-import com.coinflow.ws.session.SubscriptionSessionManager;
-import com.coinflow.ws.session.WebSocketSessionManager;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.coinflow.ws.service.kline.KlineAggregator;
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.socket.WebSocketMessage;
-import org.springframework.web.reactive.socket.WebSocketSession;
-import reactor.core.publisher.Flux;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TickRawStreamConsumer implements StreamListener<String, MapRecord<String, String, String>> {
 
-    private final WebSocketSessionManager sessionManager;
-    private final SubscriptionSessionManager subscriptionManager;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final KlineAggregator klineAggregator;
 
     @Override
     public void onMessage(MapRecord<String, String, String> message) {
@@ -34,28 +28,14 @@ public class TickRawStreamConsumer implements StreamListener<String, MapRecord<S
                 return;
             }
 
-            // Map to DTO
-            TickDto tickDto = TickDto.builder()
-                    .symbol(symbol)
-                    .price(new java.math.BigDecimal(body.get("price")))
-                    .volume(new java.math.BigDecimal(body.get("quantity")))
-                    .eventTime(java.time.Instant.parse(body.get("eventTime")).toEpochMilli())
-                    .build();
+            BigDecimal price = new BigDecimal(body.get("price"));
+            BigDecimal quantity = new BigDecimal(body.get("quantity"));
+            long epochMs = Instant.parse(body.get("eventTime")).toEpochMilli();
 
-            String jsonPayload = objectMapper.writeValueAsString(tickDto);
-            log.trace("[Redis] Received tick for {}: {}", symbol, jsonPayload); // Changed to trace for high traffic
+            // Feed tick into KlineAggregator — no more raw tick forwarding
+            klineAggregator.processTick(symbol, price, quantity, epochMs);
 
-            // Get subscribers for this symbol
-            subscriptionManager.getSubscribers(symbol).forEach(sessionId -> {
-                WebSocketSession session = sessionManager.getSession(sessionId);
-
-                if (session != null && session.isOpen()) {
-                    WebSocketMessage wsMessage = session.textMessage(jsonPayload);
-                    session.send(Flux.just(wsMessage))
-                            .doOnError(e -> log.warn("Failed to send message to session {}", sessionId, e))
-                            .subscribe();
-                }
-            });
+            log.trace("[Redis] Tick processed for {}: price={}, qty={}", symbol, price, quantity);
 
         } catch (Exception e) {
             log.error("Failed to process redis stream message", e);
