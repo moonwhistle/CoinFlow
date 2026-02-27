@@ -1,6 +1,7 @@
 package com.coinflow.aggregation.service.kline;
 
 import java.math.BigDecimal;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 
 /**
  * In-memory state of a single kline (candle) for one symbol × one interval.
@@ -21,7 +22,7 @@ public class KlineState {
     private BigDecimal high;
     private BigDecimal low;
     private BigDecimal close;
-    private BigDecimal volume;
+    private long volume;
     private int trades;
     private boolean closed;
     private boolean dirty; // has data been updated since last broadcast?
@@ -37,7 +38,7 @@ public class KlineState {
      * bucket transition.
      * Otherwise returns null.
      */
-    public synchronized KlineSnapshot processTick(BigDecimal price, BigDecimal qty, long tickEpochSec) {
+    public synchronized KlineSnapshot processTick(BigDecimal price, long scaledQty, long tickEpochSec) {
         long bucketStart = (tickEpochSec / durationSeconds) * durationSeconds;
         KlineSnapshot closedSnapshot = null;
 
@@ -48,7 +49,7 @@ public class KlineState {
                 closedSnapshot = new KlineSnapshot(
                         startTime, closeTime,
                         open, high, low, close,
-                        volume, trades, closed);
+                        VolumeScaler.toBigDecimal(volume), trades, closed);
             }
             // Start new candle period
             reset(bucketStart);
@@ -64,7 +65,7 @@ public class KlineState {
         }
 
         this.close = price;
-        this.volume = this.volume.add(qty);
+        this.volume = Math.addExact(this.volume, scaledQty);
         this.trades++;
         this.dirty = true;
 
@@ -83,7 +84,7 @@ public class KlineState {
         return new KlineSnapshot(
                 startTime, closeTime,
                 open, high, low, close,
-                volume, trades, closed);
+                VolumeScaler.toBigDecimal(volume), trades, closed);
     }
 
     /**
@@ -109,7 +110,7 @@ public class KlineState {
         this.high = null;
         this.low = null;
         this.close = null;
-        this.volume = BigDecimal.ZERO;
+        this.volume = 0L;
         this.trades = 0;
         this.closed = false;
         this.dirty = false;
