@@ -4,14 +4,18 @@ import com.coinflow.aggregation.service.kline.KlineAggregator;
 import com.coinflow.aggregation.service.kline.KlineAggregator.AggregationResult;
 import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapshot;
 import com.coinflow.aggregation.service.kline.KlineSnapshotBroadcaster;
+import com.coinflow.aggregation.service.ticker.TickerBroadcaster;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.tick.event.TickRawEvent;
+import com.coinflow.event.ticker.TickerEvent;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,15 +26,27 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class TickProcessService {
 
+    private final KlineAggregator klineAggregator;
+    private final KlineSnapshotBroadcaster klineBroadcaster;
+    private final TickerBroadcaster tickerBroadcaster;
+    private final SymbolService symbolService;
+
+    // Direct DB Services
     private final Ohlc1mService ohlc1mService;
     private final Ohlc5mService ohlc5mService;
     private final Ohlc30mService ohlc30mService;
-    private final SymbolService symbolService;
-
-    private final KlineAggregator klineAggregator;
-    private final KlineSnapshotBroadcaster klineSnapshotBroadcaster;
 
     public void process(TickRawEvent event) {
+        log.debug("Processing tick event: {}", event);
+
+        // 1. Broadcast 100% real-time Ticker Event (0ms delay)
+        TickerEvent tickerEvent = new TickerEvent(
+                event.symbol(),
+                event.price(),
+                event.quantity(),
+                event.eventTime().toEpochMilli());
+        tickerBroadcaster.broadcast(tickerEvent);
+
         try {
             // In-Memory Real-time Kline Aggregation (SSOT track)
             AggregationResult result = klineAggregator.processTickAndGetResult(
@@ -40,14 +56,16 @@ public class TickProcessService {
                     event.eventTime().toEpochMilli());
 
             // Broadcast & Save Live Snapshots (M1, M5, M30 always updated on tick)
-            for (ClosedKlineSnapshot c : result.liveSnapshots()) {
-                klineSnapshotBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
+            if (!result.liveSnapshots().isEmpty()) {
+                for (ClosedKlineSnapshot c : result.liveSnapshots()) {
+                    klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
+                }
             }
 
             // Broadcast & Save Closed Snapshots if bucket transitions occurred
             for (ClosedKlineSnapshot c : result.closedSnapshots()) {
                 // 1. WebSocket Broadcast
-                klineSnapshotBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
+                klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
 
                 // 2. Exact SSOT DB Persistence (No more Schedulers)
                 persistClosedCandleToDb(event.symbol(), c);

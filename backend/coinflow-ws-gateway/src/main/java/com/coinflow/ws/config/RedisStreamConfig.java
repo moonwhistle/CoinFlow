@@ -1,6 +1,7 @@
 package com.coinflow.ws.config;
 
 import com.coinflow.ws.service.KlineBroadcastConsumer;
+import com.coinflow.ws.service.TickerBroadcastConsumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -17,11 +18,13 @@ public class RedisStreamConfig {
         @Bean
         public RedisMessageListenerContainer redisMessageListenerContainer(
                         RedisConnectionFactory connectionFactory,
-                        KlineBroadcastConsumer klineBroadcastConsumer) {
+                        KlineBroadcastConsumer klineBroadcastConsumer,
+                        TickerBroadcastConsumer tickerBroadcastConsumer) {
 
                 RedisMessageListenerContainer container = new RedisMessageListenerContainer();
                 container.setConnectionFactory(connectionFactory);
                 container.addMessageListener(klineBroadcastConsumer, new ChannelTopic("kline:broadcast"));
+                container.addMessageListener(tickerBroadcastConsumer, new ChannelTopic("ticker:broadcast"));
                 return container;
         }
 }
