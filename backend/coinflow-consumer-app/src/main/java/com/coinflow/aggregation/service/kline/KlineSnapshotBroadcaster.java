@@ -1,6 +1,7 @@
 package com.coinflow.aggregation.service.kline;
 
 import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
+import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +24,7 @@ public class KlineSnapshotBroadcaster {
     private final KlineAggregator aggregator;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final RedisLiveKlineRepository liveKlineRepository;
+    private final LiveKlineRepository liveKlineRepository;
 
     // symbol:interval -> timestamp (ms)
     private final ConcurrentHashMap<String, Long> lastBroadcastTimes = new ConcurrentHashMap<>();
