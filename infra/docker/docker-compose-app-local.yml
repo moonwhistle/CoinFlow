@@ -13,8 +13,8 @@ services:
       - SERVER_PORT=8080
       - SPRING_CONFIG_NAME=application-api
       - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATA_REDIS_HOST=host.docker.internal
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5432/ohlc
+      - SPRING_DATA_REDIS_HOST=redis-local
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
     extra_hosts:
@@ -31,7 +31,7 @@ services:
       - SERVER_PORT=8081
       - SPRING_CONFIG_NAME=application-ws
       - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATA_REDIS_HOST=host.docker.internal
+      - SPRING_DATA_REDIS_HOST=redis-local
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -46,8 +46,8 @@ services:
       - SERVER_PORT=8082
       - SPRING_CONFIG_NAME=application-consumer
       - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATA_REDIS_HOST=host.docker.internal
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5432/ohlc
+      - SPRING_DATA_REDIS_HOST=redis-local
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
     extra_hosts:
@@ -64,7 +64,10 @@ services:
       - SERVER_PORT=8083
       - SPRING_CONFIG_NAME=application-collector
       - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATA_REDIS_HOST=host.docker.internal
+      - SPRING_DATA_REDIS_HOST=redis-local
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
+      - SPRING_DATASOURCE_USERNAME=ohlc_user
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

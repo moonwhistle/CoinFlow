@@ -25,6 +25,7 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
 
     @Override
     public void handle(String message) {
+        log.info("Received raw message: {}", message);
         try {
             JsonNode root = objectMapper.readTree(message);
             JsonNode data = root.get(DATA);
@@ -33,7 +34,9 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
                     data.get(SYMBOL).asText().toLowerCase(),
                     new BigDecimal(data.get(PRICE).asText()),
                     new BigDecimal(data.get(QUANTITY).asText()),
-                    Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()));
+                    Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()),
+                    null // streamId는 Collector 단계에서 아직 존재하지 않음 (publish 이전)
+            );
 
             publisher.publish(event);
         } catch (Exception e) {

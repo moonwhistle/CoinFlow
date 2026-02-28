@@ -17,8 +17,9 @@ public class Ohlc30mService {
     private final Ohlc30mRepository ohlc30mRepository;
 
     @Transactional
-    public void upsert(Long symbolId, Symbol symbol, LocalDateTime bucketTime, BigDecimal open, BigDecimal high,
-                       BigDecimal low, BigDecimal close, long volume) {
+    public void applyAndSave(Symbol symbol, LocalDateTime bucketTime, BigDecimal open, BigDecimal high,
+            BigDecimal low, BigDecimal close, long volume) {
+        Long symbolId = symbol.getId();
         Ohlc30m candle = ohlc30mRepository.findBySymbolIdAndBucketTime(symbolId, bucketTime)
                 .orElseGet(() -> Ohlc30m.builder()
                         .symbol(symbol)
@@ -30,16 +31,14 @@ public class Ohlc30mService {
                 high,
                 low,
                 close,
-                volume
-        );
+                volume);
 
         ohlc30mRepository.save(candle);
     }
 
     @Transactional(readOnly = true)
     public List<Ohlc30m> findCandlesInBucketRange(Long symbolId, LocalDateTime startInclusive,
-                                                  LocalDateTime endExclusive) {
+            LocalDateTime endExclusive) {
         return ohlc30mRepository.findCandlesInBucketRange(symbolId, startInclusive, endExclusive);
     }
 }
-

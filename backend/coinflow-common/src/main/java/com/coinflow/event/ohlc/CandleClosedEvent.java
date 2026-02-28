@@ -5,13 +5,13 @@ import lombok.Builder;
 
 @Builder
 public record CandleClosedEvent(
-        Long symbolId,
-        String symbolCode,
-        String interval,
-        String bucketTime,
-        BigDecimal open,
-        BigDecimal high,
-        BigDecimal low,
-        BigDecimal close,
-        BigDecimal volume) {
+                Long symbolId,
+                String symbolCode,
+                String interval,
+                long epochSeconds,
+                BigDecimal open,
+                BigDecimal high,
+                BigDecimal low,
+                BigDecimal close,
+                BigDecimal volume) {
 }

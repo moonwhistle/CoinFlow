@@ -20,15 +20,14 @@ public class TickRawEventConsumer implements StreamListener<String, MapRecord<St
 
     @Override
     public void onMessage(MapRecord<String, String, String> record) {
-        boolean success = handler.handle(record.getValue());
+        boolean success = handler.handle(record.getValue(), record.getId().getValue());
 
         if (success) {
             redisTemplate.opsForStream()
                     .acknowledge(
                             properties.streamKey(),
                             properties.group(),
-                            record.getId()
-                    );
+                            record.getId());
         } else {
             // 실패 > pending 유지
             log.debug("Processing failed. keep pending. recordId={}", record.getId());

@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
 import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
-import { isTickDto, isCandleClosedEvent } from '../types/websocket';
+import type { WsMessage } from '../types/websocket';
 import './LiveTicker.css';
 
 // WS_URL removed
@@ -29,9 +29,18 @@ const MOCK_STATS = {
 };
 
 export const LiveTicker = () => {
-    const { isConnected, lastMessage, subscribe } = useCoinflowWebSocket();
+    const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
     const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
     const prevPriceRef = useRef<number | null>(null);
+
+    const handleMessage = useCallback((msg: WsMessage) => {
+        // Only use M1 kline for ticker (highest frequency)
+        if (msg.interval === 'M1') {
+            setLastMessage(msg);
+        }
+    }, []);
+
+    const { isConnected, subscribe } = useCoinflowWebSocket(handleMessage);
 
     useEffect(() => {
         if (isConnected) {
@@ -41,50 +50,22 @@ export const LiveTicker = () => {
 
     useEffect(() => {
         if (lastMessage) {
-            let currentPrice: number | null = null;
-
-            if (isTickDto(lastMessage)) {
-                currentPrice = lastMessage.price;
-            } else if (isCandleClosedEvent(lastMessage)) {
-                currentPrice = lastMessage.close;
-            }
-
-            if (currentPrice !== null) {
-                if (prevPriceRef.current !== null) {
-                    if (currentPrice > prevPriceRef.current) {
-                        setPriceColor('up');
-                    } else if (currentPrice < prevPriceRef.current) {
-                        setPriceColor('down');
-                    }
+            const currentPrice = lastMessage.close;
+            if (prevPriceRef.current !== null) {
+                if (currentPrice > prevPriceRef.current) {
+                    setPriceColor('up');
+                } else if (currentPrice < prevPriceRef.current) {
+                    setPriceColor('down');
                 }
-                prevPriceRef.current = currentPrice;
             }
+            prevPriceRef.current = currentPrice;
         }
     }, [lastMessage]);
 
-    // Helpers to extract data safely from Union Type
-    const getPrice = () => {
-        if (!lastMessage) return null;
-        if (isTickDto(lastMessage)) return lastMessage.price;
-        if (isCandleClosedEvent(lastMessage)) return lastMessage.close;
-        return null;
-    };
-
-    const getVolume = () => {
-        if (!lastMessage) return null;
-        return lastMessage.volume; // Both types have 'volume' (number)
-    };
-
-    const getTime = () => {
-        if (!lastMessage) return null;
-        if (isTickDto(lastMessage)) return lastMessage.eventTime;
-        if (isCandleClosedEvent(lastMessage)) return new Date(lastMessage.bucketTime).getTime();
-        return null;
-    };
-
-    const currentPrice = getPrice();
-    const currentVolume = getVolume();
-    const currentTime = getTime();
+    // KlineEvent fields — direct access (no union type)
+    const currentPrice = lastMessage?.close ?? null;
+    const currentVolume = lastMessage?.volume ?? null;
+    const currentTime = lastMessage ? lastMessage.startTime * 1000 : null;
 
     // Formatters using current or mock data
     const displayPrice = currentPrice
