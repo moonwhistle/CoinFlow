@@ -22,17 +22,17 @@ public class TickRawMessageHandler {
     private final TickProcessService tickProcessService;
 
     /**
-     * @return true  = 정상 처리 (ACK 가능)
+     * @return true = 정상 처리 (ACK 가능)
      *         false = 실패 (pending 유지)
      */
-    public boolean handle(Map<String, String> value) {
+    public boolean handle(Map<String, String> value, String streamId) {
         try {
             TickRawEvent event = new TickRawEvent(
                     value.get(SYMBOL),
                     new BigDecimal(value.get(PRICE)),
                     new BigDecimal(value.get(QUANTITY)),
-                    Instant.parse(value.get(EVENT_TIME))
-            );
+                    Instant.parse(value.get(EVENT_TIME)),
+                    streamId);
             tickProcessService.process(event);
 
             return true;
@@ -40,8 +40,7 @@ public class TickRawMessageHandler {
             log.error(
                     "Failed to handle tick raw message. payload={}",
                     value,
-                    e
-            );
+                    e);
 
             return false;
         }

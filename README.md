@@ -44,19 +44,25 @@ NOT READY
 
 
 ## 📊 Data Flow
-Designed **dual-path flow**, which is consist of **Accuracy Layer** and **Speed Layer**.
+Designed **Unidirectional Data Flow** with a **Single Aggregator** to guarantee 100% data consistency and zero latency UX.
 
-![Data Flow](</image/dataFlowVersion2.png>)
+![Data Flow](</image/dataFlowVersion3.png>)
 
-### Why Dual-Path? 
-To achieve both Real-time Responsiveness and Strong Consistency.
+### Core Logic
+To achieve both Extreme Real-time Responsiveness and Strong Consistency without Client-Side Complexity.
 
-- Speed Layer (Fast-path): Uses Message Queue to deliver raw ticks and show ohlc candle immediately for zero-latency UX.
-- Accuracy Layer (Slow-path): Uses Event Bus to broadcast confirmed candle data, correcting any client-side discrepancies.
+- **Collector**: Pushes raw tick data to the Message Queue (Redis Stream) as fast as possible.
+- **Consumer (Single Aggregator)**: Consumes raw ticks and builds perfect OHLC (Kline) candles in-memory.
+- **View (Stateless)**: The WebSocket Gateway simply broadcasts the completely finished candles directly to the Dashboard. No client-side math required.
 
->This hybrid approach ensures that users see price changes instantly while the system guarantees data integrity in the background.
+> This unified approach ensures strict data consistency between the server and the client without complex synchronization logic.
 
-For more details, see [Data Flow](<https://sanghu-i.tistory.com/124>)
+### Data Flow Evolution
+- 👴 **[Legacy] First Design: Dual-Path Architecture** 👉 [Read Article](https://sanghu-i.tistory.com/124)
+   - Initially separated into a Speed Layer (Redis Stream) for zero-latency UX and an Accuracy Layer (Redis Pub/Sub) to correct client-side data.
+- 👶 **[Current] Shift to Single Aggregator** 👉 [Read Article](https://sanghu-i.tistory.com/126)
+   - Shifted to a Unidirectional flow to eliminate complex front-end calculations and guarantee 100% identical Server-Client states using in-memory aggregation.
+
 
 ## 🧑‍💻 Getting Started
 

@@ -4,11 +4,11 @@ import type { Time, LogicalRange, IChartApi, ISeriesApi } from 'lightweight-char
 import { Settings, Camera, Maximize, BarChart2 } from 'lucide-react';
 import { useCoinflowWebSocket } from '../../hooks/useCoinflowWebSocket';
 import { CHART_COLORS, CHART_CONFIG } from '../../constants/chart';
-import { aggregateTickToCandle } from '../../utils/chartHelpers';
+import { forwardFillCandles } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
 import { getOhlcData } from '../../api/ohlcApi';
 import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
-import { type WsMessage, isTickDto, isCandleClosedEvent } from '../../types/websocket';
+import { type WsMessage, isKlineEvent, isTickerEvent } from '../../types/websocket';
 import './TradingChart.css';
 
 export const TradingChart = () => {
@@ -25,68 +25,55 @@ export const TradingChart = () => {
     const [activeTimeframe, setActiveTimeframe] = useState<OhlcInterval>('M1');
     const [isLoading, setIsLoading] = useState(true);
 
-    // State to track the current accumulating candle
-    const currentCandleRef = useRef<ChartCandle | null>(null);
-    const currentVolumeRef = useRef<VolumeBar | null>(null);
-
-    // --- Real-time Data Handling (Performance Optimized) ---
+    // --- Real-time Data Handling (Kline Stream — Binance Style) ---
     const handleWebSocketMessage = useCallback((msg: WsMessage) => {
         if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
 
-        if (isTickDto(msg)) {
-            console.log("Tick Received:", msg.price, msg.volume);
-            // 1. Optimistic Update (Tick)
-            const { candle, volume } = aggregateTickToCandle(
-                msg,
-                currentCandleRef.current,
-                currentVolumeRef.current,
-                CHART_COLORS.UP_TRANSPARENT,
-                CHART_COLORS.DOWN_TRANSPARENT,
-                activeTimeframe
-            );
+        if (isKlineEvent(msg)) {
+            // Filter: only render the active timeframe
+            if (msg.interval !== activeTimeframe) return;
 
-            if (candle && volume) {
-                mainSeriesRef.current.update(candle);
-                volumeSeriesRef.current.update(volume);
+            const candleTime = msg.startTime as Time;
 
-                currentCandleRef.current = candle;
-                currentVolumeRef.current = volume;
-            }
-        } else if (isCandleClosedEvent(msg)) {
-            // 2. Server Correction (CandleClosed)
-            // Filter by active timeframe
-            if (msg.interval !== activeTimeframe) {
-                return;
-            }
-
-            // Parse bucketTime (LocalDateTime string) to chart time
-            const bucketTime = (new Date(msg.bucketTime).getTime() / 1000) as Time;
-
-            // Correction Candle
-            const correctedCandle: ChartCandle = {
-                time: bucketTime,
-                open: msg.open,
-                high: msg.high,
-                low: msg.low,
-                close: msg.close,
-            };
-
-            const correctedVolume: VolumeBar = {
-                time: bucketTime,
-                value: msg.volume,
-                color: msg.close >= msg.open ? CHART_COLORS.UP_TRANSPARENT : CHART_COLORS.DOWN_TRANSPARENT,
-            };
-
-            // Apply Correction
-            // Note: If we have already moved to the next candle (new tick arrived), update() for a past candle might fail in lightweight-charts.
-            // But since this event fires exactly at the close, it typically arrives before or very close to the first tick of the next candle.
             try {
-                mainSeriesRef.current.update(correctedCandle);
-                volumeSeriesRef.current.update(correctedVolume);
-                console.log(`[Correction] Applied for ${msg.symbolCode} at ${msg.bucketTime}`);
-            } catch (e) {
-                console.warn(`[Correction] Skipped for ${msg.bucketTime} due to time regression (Candle already moved forward)`);
+                // Try updating the latest candle directly (Fastest approach)
+                mainSeriesRef.current.update({
+                    time: candleTime,
+                    open: msg.open,
+                    high: msg.high,
+                    low: msg.low,
+                    close: msg.close,
+                });
+
+                volumeSeriesRef.current.update({
+                    time: candleTime,
+                    value: msg.volume,
+                    color: msg.close >= msg.open
+                        ? CHART_COLORS.UP_TRANSPARENT
+                        : CHART_COLORS.DOWN_TRANSPARENT,
+                });
+            } catch (err) {
+                // If it fails (usually due to "Cannot update oldest data" error from out-of-order delivery
+                // like receiving a delayed 'closed' candle after a new 'live' candle has started),
+                // we gracefully ignore it or handle it in a state array if necessary.
+                // In lightweight charts, the only way to update past data is to use setData() on the entire array.
+                // However, since this typically only happens on the exact boundary where the NEW candle just started
+                // and the OLD candle just closed, the OLD candle is essentially already complete in the UI. 
+                // We'll log it as a warning instead of letting it crash the chart.
+                console.warn(`[TradingChart] Ignored past candle update for time ${candleTime}:`, err);
             }
+        }
+        else if (isTickerEvent(msg)) {
+            // TickerEvent (0ms real-time): Update ONLY the current latest candle's close price
+            // Note: In lightweight-charts, updating a candle that already exists at `time` modifies it.
+            // Since we don't have the exact `open/high/low/time` of the CURRENT candle inside the TickerEvent,
+            // the safest robust approach for lightweight-charts is to wait for the next KlineEvent (250ms)
+            // OR we can maintain the latest candle state in a ref and patch it.
+            // For now, if we want to just flash the price, we can update the price scale or let KlineEvent handle the candle shape
+            // and use TickerEvent for a separate Top-Bar UI component (Current Price Display).
+            // Let's fire a custom DOM event so the outer dashboard can listen to the raw ticker if needed:
+            const tickerEvent = new CustomEvent('coinflow-ticker', { detail: msg });
+            window.dispatchEvent(tickerEvent);
         }
     }, [activeTimeframe]);
 
@@ -175,7 +162,7 @@ export const TradingChart = () => {
                 const volumes: VolumeBar[] = [];
 
                 response.candles.forEach((snap: OhlcCandleSnapshot) => {
-                    const time = (new Date(snap.bucketTime).getTime() / 1000) as Time;
+                    const time = snap.epochSeconds as Time;
 
                     candles.push({
                         time,
@@ -196,14 +183,11 @@ export const TradingChart = () => {
                 candles.sort((a, b) => (a.time as number) - (b.time as number));
                 volumes.sort((a, b) => (a.time as number) - (b.time as number));
 
-                mainSeries.setData(candles);
-                volumeSeries.setData(volumes);
+                // Forward-fill gaps with semi-transparent ghost candles
+                const { filledCandles, filledVolumes } = forwardFillCandles(candles, volumes, activeTimeframe);
 
-                // Update refs for real-time updates
-                if (candles.length > 0) {
-                    currentCandleRef.current = candles[candles.length - 1];
-                    currentVolumeRef.current = volumes[volumes.length - 1];
-                }
+                mainSeries.setData(filledCandles);
+                volumeSeries.setData(filledVolumes);
             } catch (err) {
                 console.error("Failed to load chart data", err);
             } finally {
@@ -319,11 +303,14 @@ export const TradingChart = () => {
                 style={{ flex: 3, borderBottom: '1px solid var(--border-color)' }}
             />
 
-            <div
-                ref={volumeContainerRef}
-                className="chart-volume-container"
-                style={{ flex: 1, minHeight: 0 }}
-            />
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                <span className="volume-label">Vol (BTC)</span>
+                <div
+                    ref={volumeContainerRef}
+                    className="chart-volume-container"
+                    style={{ width: '100%', height: '100%' }}
+                />
+            </div>
         </div>
     );
 };

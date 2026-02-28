@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import type { WsRequest } from '../types/websocket';
 
+type MessageListener = (event: MessageEvent) => void;
+
 interface WebSocketContextType {
     isConnected: boolean;
     sendMessage: (message: WsRequest) => void;
-    lastMessage: MessageEvent<any> | null;
+    addMessageListener: (listener: MessageListener) => void;
+    removeMessageListener: (listener: MessageListener) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -16,10 +19,18 @@ interface WebSocketProviderProps {
 
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, children }) => {
     const [isConnected, setIsConnected] = useState(false);
-    const [lastMessage, setLastMessage] = useState<MessageEvent<any> | null>(null);
     const ws = useRef<WebSocket | null>(null);
     const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const messageQueue = useRef<string[]>([]);
+    const listenersRef = useRef<Set<MessageListener>>(new Set());
+
+    const addMessageListener = useCallback((listener: MessageListener) => {
+        listenersRef.current.add(listener);
+    }, []);
+
+    const removeMessageListener = useCallback((listener: MessageListener) => {
+        listenersRef.current.delete(listener);
+    }, []);
 
     const connect = useCallback(() => {
         if (ws.current?.readyState === WebSocket.OPEN) return;
@@ -43,7 +54,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
             console.log('[WS Provider] Disconnected');
             setIsConnected(false);
             ws.current = null;
-            // Simple reconnect logic
             reconnectTimeout.current = setTimeout(() => {
                 console.log('[WS Provider] Attempting reconnect...');
                 connect();
@@ -55,7 +65,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
         };
 
         socket.onmessage = (event) => {
-            setLastMessage(event);
+            // Dispatch directly to all listeners — no React state involved
+            listenersRef.current.forEach(listener => listener(event));
         };
 
         ws.current = socket;
@@ -84,7 +95,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     }, []);
 
     return (
-        <WebSocketContext.Provider value={{ isConnected, sendMessage, lastMessage }}>
+        <WebSocketContext.Provider value={{ isConnected, sendMessage, addMessageListener, removeMessageListener }}>
             {children}
         </WebSocketContext.Provider>
     );
@@ -97,3 +108,4 @@ export const useWebSocketContext = () => {
     }
     return context;
 };
+

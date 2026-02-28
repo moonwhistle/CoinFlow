@@ -29,17 +29,8 @@ export const getOhlcData = async (
 
         const data: OhlcChartResponse = await response.json();
 
-        // Downscale volume internally before returning to UI
-        const scaledCandles = data.candles.map(c => ({
-            ...c,
-            volume: c.volume / 100000000
-        }));
-
         console.log(`[ohlcApi] Success. Candles: ${data.candles.length}`);
-        return {
-            ...data,
-            candles: scaledCandles
-        };
+        return data;
     } catch (error) {
         console.error('Failed to fetch OHLC data:', error);
         throw error;

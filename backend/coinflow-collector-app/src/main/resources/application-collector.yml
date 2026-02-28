@@ -6,3 +6,7 @@ binance:
       - btcusdt
   main:
     web-application-type: none
+
+logging:
+  level:
+    com.coinflow: debug
