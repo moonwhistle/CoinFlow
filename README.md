@@ -53,14 +53,14 @@ To achieve both Extreme Real-time Responsiveness and Strong Consistency without 
 
 - **Collector**: Pushes raw tick data to the Message Queue (Redis Stream) as fast as possible.
 - **Consumer (Single Aggregator)**: Consumes raw ticks and builds perfect OHLC (Kline) candles in-memory.
-- **View (Stateless)**: The WebSocket Gateway simply broadcasts the completely finished candles directly to the Dashboard. No client-side math required.
+- **View**: The WebSocket Gateway simply broadcasts the current tick and closed candles directly to the Dashboard.
 
 > This unified approach ensures strict data consistency between the server and the client without complex synchronization logic.
 
 ### Data Flow Evolution
-- 👴 **[Legacy] First Design: Dual-Path Architecture** 👉 [Read Article](https://sanghu-i.tistory.com/124)
-   - Initially separated into a Speed Layer (Redis Stream) for zero-latency UX and an Accuracy Layer (Redis Pub/Sub) to correct client-side data.
-- 👶 **[Current] Shift to Single Aggregator** 👉 [Read Article](https://sanghu-i.tistory.com/126)
+- 👴 **[Legacy] [First Design: Dual-Path Architecture](https://sanghu-i.tistory.com/124)** 
+   - Initially separated into a Speed Layer (Redis Stream) for zero-latency UX and an Accuracy Layer (Candle Closed Event) to correct client-side data.
+- 👶 **[Current] [Shift to Single Aggregator](https://sanghu-i.tistory.com/126)**
    - Shifted to a Unidirectional flow to eliminate complex front-end calculations and guarantee 100% identical Server-Client states using in-memory aggregation.
 
 
@@ -79,7 +79,21 @@ not ready
 ## 🛠️ Technical Decisions & Troubleshooting
 
 ### Volume Scaling Strategy 
-- not ready
+To aggregate the volume without sacrificing precision or system latency, Use a **Long Scaling Strategy**.
+- **Problem**: `double` (IEEE 754) causes critical floating-point inaccuracies in financial data. On the other hand, `BigDecimal` guarantees accuracy but creating 10,000+ new objects per second causes severe Garbage Collection (GC) overhead and Stop-The-World latency spikes.
+- **Solution**: Scale incoming tick volumes by $10^8$ and accumulate them as primitive `long` types using `Math.addExact()`. This ensures **zero object creation** and maximum CPU efficiency. The accumulated long value is only converted back to `BigDecimal` exactly when the candle snapshot is pushed to the client.
+
+For more details.. [click here](https://sanghu-i.tistory.com/125)
+
+### Save scaled volume to DB (why not decimal?)
+summary
+
+ - **B-Tree Indexing efficiency**:
+
+ - **Aggregation Performance**:
+
+ - **Data Integrity**:
+
 
 ## Disclaimer
 This project is a personal, educational project built for learning purposes only.
