@@ -53,7 +53,7 @@ To achieve both Extreme Real-time Responsiveness and Strong Consistency without 
 
 - **Collector**: Pushes raw tick data to the Message Queue (Redis Stream) as fast as possible.
 - **Consumer (Single Aggregator)**: Consumes raw ticks and builds perfect OHLC (Kline) candles in-memory.
-- **View**: The WebSocket Gateway simply broadcasts the current tick and closed candles directly to the Dashboard.
+- **View**: The WebSocket Gateway simply broadcasts the current tick and current ohlc candle(250ms delay) directly to the Dashboard.
 
 > This unified approach ensures strict data consistency between the server and the client without complex synchronization logic.
 
