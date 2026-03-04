@@ -40,8 +40,27 @@ During this project, I wanted to build everything starting from raw tick data.
 
 ## 🏗️ System Architecture (Single Server)
 
-NOT READY
+![Architecture](/image/architect1.png)
+(In the current deployment, ElastiCache and RDS run as Docker containers on the same EC2 to minimize cost...)
 
+### Nginx — Reverse Proxy & SSL Termination
+ - Nginx is the **only entry point** exposed to the internet (`80`/`443`). It routes `/api/*` to the API Server and upgrades `/ws/*` to the WebSocket Server with proper `Upgrade` headers. 
+ - All internal service ports (`8080`–`8083`, `5432`, `6379`) are completely hidden from the outside. 
+ - HTTPS is terminated here using **Let's Encrypt** certificates.
+
+### Docker
+ - Each Spring Boot application (Collector, Consumer, API Server, WS Server) runs in its own isolated container. 
+
+### Redis (ElastiCache)
+ - Redis serves a dual role: **Redis Stream** as a message queue between Collector and Consumer, and **Redis Pub/Sub** for broadcasting real-time events to the WebSocket Server. 
+
+### PostgreSQL (RDS)  
+- PostgreSQL stores closed OHLC candle data and provides historical chart data via the API Server. 
+
+### CI/CD — GitHub Actions
+- Code pushed to `main` triggers **GitHub Actions**, which builds Docker images and deploys them to EC2 via SSH. 
+
+> **Why Single Server?** Multi-instance deployments with ALB are unnecessary at this scale(including cost problems). A single EC2 with Nginx achieves the same routing and SSL at zero cost — while remaining ready to scale out when needed.
 
 ## 📊 Data Flow
 Designed **Unidirectional Data Flow** with a **Single Aggregator** to guarantee 100% data consistency and zero latency UX.
@@ -58,9 +77,9 @@ To achieve both Extreme Real-time Responsiveness and Strong Consistency without 
 > This unified approach ensures strict data consistency between the server and the client without complex synchronization logic.
 
 ### Data Flow Evolution
-- 👴 **[Legacy] [First Design: Dual-Path Architecture](https://sanghu-i.tistory.com/124)** 
+- 👴 **[Legacy] [Dual-Path Architecture](https://sanghu-i.tistory.com/124)** 
    - Initially separated into a Speed Layer (Redis Stream) for zero-latency UX and an Accuracy Layer (Candle Closed Event) to correct client-side data.
-- 👶 **[Current] [Shift to Single Aggregator](https://sanghu-i.tistory.com/126)**
+- 👶 **[Current] [Single Aggregator](https://sanghu-i.tistory.com/126)**
    - Shifted to a Unidirectional flow to eliminate complex front-end calculations and guarantee 100% identical Server-Client states using in-memory aggregation.
 
 
