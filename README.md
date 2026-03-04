@@ -67,6 +67,7 @@ Designed **Unidirectional Data Flow** with a **Single Aggregator** to guarantee 
 
 ![Data Flow](</image/dataFlowVersion3.png>)
 
+![alt text](image.png)
 ### Core Logic
 To achieve both Extreme Real-time Responsiveness and Strong Consistency without Client-Side Complexity.
 
