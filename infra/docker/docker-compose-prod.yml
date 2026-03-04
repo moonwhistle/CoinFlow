@@ -1,0 +1,140 @@
+# ============================================================
+# Production Docker Compose - CoinFlow (All-in-One)
+# Target: AWS EC2 t2.micro (1GB RAM + 2GB Swap)
+#
+# Usage:
+#   1. Build JARs first:  cd backend && ./gradlew build -x test
+#   2. Run:               docker compose -f infra/docker/docker-compose-prod.yml up -d --build
+# ============================================================
+
+services:
+
+  # ──────────────────────────────────────────────
+  # Reverse Proxy (Nginx)
+  # ──────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: coinflow-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api-app
+      - ws-server
+    restart: always
+
+  # ──────────────────────────────────────────────
+  # Spring Boot Applications
+  # ──────────────────────────────────────────────
+  api-app:
+    build:
+      context: ../../backend/coinflow-api-app
+      dockerfile: Dockerfile
+    container_name: coinflow-api
+    environment:
+      - SPRING_CONFIG_NAME=application-api
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
+      - SPRING_DATASOURCE_USERNAME=ohlc_user
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
+    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+
+  ws-server:
+    build:
+      context: ../../backend/coinflow-ws-gateway
+      dockerfile: Dockerfile
+    container_name: coinflow-ws
+    environment:
+      - SPRING_CONFIG_NAME=application-ws
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATA_REDIS_HOST=redis
+    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+
+  consumer-app:
+    build:
+      context: ../../backend/coinflow-consumer-app
+      dockerfile: Dockerfile
+    container_name: coinflow-consumer
+    environment:
+      - SPRING_CONFIG_NAME=application-consumer
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
+      - SPRING_DATASOURCE_USERNAME=ohlc_user
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
+    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms256m -Xmx384m -jar app.jar" ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+
+  collector-app:
+    build:
+      context: ../../backend/coinflow-collector-app
+      dockerfile: Dockerfile
+    container_name: coinflow-collector
+    environment:
+      - SPRING_CONFIG_NAME=application-collector
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
+      - SPRING_DATASOURCE_USERNAME=ohlc_user
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
+    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
+    depends_on:
+      consumer-app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: always
+
+  # ──────────────────────────────────────────────
+  # Data Layer
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: coinflow-postgres
+    environment:
+      POSTGRES_DB: ohlc
+      POSTGRES_USER: ohlc_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-1234}
+      TZ: Asia/Seoul
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ohlc_user -d ohlc" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  redis:
+    image: redis:7.2
+    container_name: coinflow-redis
+    command: [ "redis-server", "--bind", "0.0.0.0", "--appendonly", "no", "--protected-mode", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: always
+
+volumes:
+  postgres_data:
