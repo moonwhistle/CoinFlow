@@ -41,7 +41,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
-    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
+    entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-api -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,7 +58,7 @@ services:
       - SPRING_CONFIG_NAME=application-ws
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATA_REDIS_HOST=redis
-    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
+    entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-ws -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
     depends_on:
       redis:
         condition: service_healthy
@@ -76,7 +76,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
-    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms256m -Xmx384m -jar app.jar" ]
+    entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-consumer -Dspring.profiles.active=prod -Xms256m -Xmx384m -jar app.jar" ]
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,7 +96,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
-    entrypoint: [ "sh", "-c", "java -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
+    entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-collector -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
     depends_on:
       consumer-app:
         condition: service_started
