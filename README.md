@@ -39,7 +39,7 @@ During this project, I wanted to build everything starting from raw tick data.
 
 
 ## 🏗️ System Architecture (Single Server)
-
+![alt text](image.png)
 ![Architecture](/image/architect1.png)
 (In the current deployment, ElastiCache and RDS run as Docker containers on the same EC2 to minimize cost...)
 
@@ -67,7 +67,6 @@ Designed **Unidirectional Data Flow** with a **Single Aggregator** to guarantee 
 
 ![Data Flow](</image/dataFlowVersion3.png>)
 
-![alt text](image.png)
 ### Core Logic
 To achieve both Extreme Real-time Responsiveness and Strong Consistency without Client-Side Complexity.
 
