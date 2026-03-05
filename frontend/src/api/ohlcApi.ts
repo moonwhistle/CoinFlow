@@ -16,8 +16,8 @@ export const getOhlcData = async (
         interval,
         candles: candles.toString(),
     });
-
-    const url = `/api/v1/ohlc/${symbolId}?${queryParams.toString()}`;
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+    const url = `${baseUrl}/api/v1/ohlc/${symbolId}?${queryParams.toString()}`;
     console.log(`[ohlcApi] Requesting: ${url}`);
 
     try {
