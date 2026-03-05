@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
 import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
-import type { WsMessage } from '../types/websocket';
+import type { WsMessage, KlineEvent } from '../types/websocket';
+import { isKlineEvent } from '../types/websocket';
 import './LiveTicker.css';
 
 // WS_URL removed
@@ -29,13 +30,13 @@ const MOCK_STATS = {
 };
 
 export const LiveTicker = () => {
-    const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
+    const [lastMessage, setLastMessage] = useState<KlineEvent | null>(null);
     const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
     const prevPriceRef = useRef<number | null>(null);
 
     const handleMessage = useCallback((msg: WsMessage) => {
         // Only use M1 kline for ticker (highest frequency)
-        if (msg.interval === 'M1') {
+        if (isKlineEvent(msg) && msg.interval === 'M1') {
             setLastMessage(msg);
         }
     }, []);

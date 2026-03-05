@@ -1,5 +1,5 @@
 import type { Time } from 'lightweight-charts';
-import type { TickDto } from '../types/websocket';
+import type { TickerEvent } from '../types/websocket';
 import type { OhlcInterval } from '../types/chart';
 import { CHART_COLORS } from '../constants/chart';
 
@@ -26,7 +26,7 @@ export interface VolumeBar {
  * Tick 데이터를 인터벌별 캔들로 병합하거나 새로운 캔들을 생성합니다.
  */
 export const aggregateTickToCandle = (
-    tick: TickDto,
+    tick: TickerEvent,
     currentCandle: ChartCandle | null,
     currentVolume: VolumeBar | null,
     upColor: string,
