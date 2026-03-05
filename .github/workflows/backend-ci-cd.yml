@@ -66,3 +66,6 @@ jobs:
           cd infra/docker
           docker compose -f docker-compose-prod.yml pull
           docker compose -f docker-compose-prod.yml up -d
+
+          # 4. Nginx 재시작 (업스트림 컨테이너들의 변경된 내부 IP를 새로 인식시키기 위함)
+          docker compose -f docker-compose-prod.yml restart nginx
