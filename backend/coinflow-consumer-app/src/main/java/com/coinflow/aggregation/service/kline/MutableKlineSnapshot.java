@@ -1,6 +1,7 @@
 package com.coinflow.aggregation.service.kline;
 
 import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import java.math.BigDecimal;
 
 /**
@@ -28,7 +29,7 @@ public class MutableKlineSnapshot {
         this.high = snapshot.high();
         this.low = snapshot.low();
         this.close = snapshot.close();
-        this.volume = snapshot.volume();
+        this.volume = VolumeScaler.toLong(snapshot.volume());
         this.trades = snapshot.trades();
         this.closed = snapshot.closed();
         this.createdAtMs = System.currentTimeMillis();
@@ -62,7 +63,7 @@ public class MutableKlineSnapshot {
                 high,
                 low,
                 close,
-                volume,
+                VolumeScaler.toBigDecimal(volume),
                 trades,
                 closed);
     }

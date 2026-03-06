@@ -32,6 +32,10 @@ public class KlineState {
         reset(0);
     }
 
+    public synchronized long getStartTime() {
+        return this.startTime;
+    }
+
     /**
      * Process a single tick.
      * Returns a snapshot of the *previous* closed candle if this tick caused a
@@ -85,18 +89,6 @@ public class KlineState {
                 startTime, closeTime,
                 open, high, low, close,
                 VolumeScaler.toBigDecimal(volume), trades, closed);
-    }
-
-    /**
-     * Reset after a closed candle has been broadcast.
-     * Called externally after broadcasting a closed kline.
-     */
-    public synchronized void resetAfterClose() {
-        if (this.closed) {
-            this.open = null;
-            this.closed = false;
-            this.dirty = false;
-        }
     }
 
     public synchronized boolean hasData() {

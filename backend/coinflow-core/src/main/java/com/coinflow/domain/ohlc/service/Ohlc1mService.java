@@ -28,7 +28,7 @@ public class Ohlc1mService {
 
                 if (optionalCandle.isPresent()) {
                         Ohlc1m candle = optionalCandle.get();
-                        candle.merge(open, high, low, close, volume);
+                        candle.apply(open, high, low, close, volume);
                         ohlc1mRepository.save(candle);
                 } else {
                         Ohlc1m candle = Ohlc1m.builder()
