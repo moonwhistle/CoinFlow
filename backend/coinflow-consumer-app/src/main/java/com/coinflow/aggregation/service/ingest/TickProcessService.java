@@ -54,8 +54,14 @@ public class TickProcessService {
                     event.quantity(),
                     event.eventTime().toEpochMilli());
 
-            // 1. Broadcast & Save Closed Snapshots if bucket transitions occurred (Must be
-            // first to avoid 'Cannot update oldest data' in frontend)
+            // 1. Broadcast & Save Late Snapshots (Must be before live so frontend patches
+            // past then updates present)
+            for (ClosedKlineSnapshot c : result.lateUpdatedSnapshots()) {
+                klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
+                persistClosedCandleToDb(event.symbol(), c);
+            }
+
+            // 2. Broadcast & Save Closed Snapshots if bucket transitions occurred
             for (ClosedKlineSnapshot c : result.closedSnapshots()) {
                 // WebSocket Broadcast & Redis Save
                 klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
@@ -64,7 +70,7 @@ public class TickProcessService {
                 persistClosedCandleToDb(event.symbol(), c);
             }
 
-            // 2. Broadcast & Save Live Snapshots (M1, M5, M30 always updated on tick)
+            // 3. Broadcast & Save Live Snapshots (M1, M5, M30 always updated on tick)
             if (!result.liveSnapshots().isEmpty()) {
                 for (ClosedKlineSnapshot c : result.liveSnapshots()) {
                     klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
