@@ -3,7 +3,10 @@ package com.coinflow.aggregation.service.kline;
 import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +31,7 @@ public class KlineAggregator {
     private final ConcurrentHashMap<String, KlineState> states = new ConcurrentHashMap<>();
 
     // key: "btcusdt:M1", Map of bucket startTime -> MutableKlineSnapshot
-    private final ConcurrentHashMap<String, java.util.Map<Long, MutableKlineSnapshot>> recentlyClosed = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Map<Long, MutableKlineSnapshot>> recentlyClosed = new ConcurrentHashMap<>();
 
     private static final int MAX_RECENT_BUCKETS = 3;
     private static final long BUFFER_TTL_MS = 120_000;
@@ -93,11 +96,11 @@ public class KlineAggregator {
     }
 
     private void addToRecentlyClosedBuffer(String key, KlineSnapshot closedSnapshot) {
-        java.util.Map<Long, MutableKlineSnapshot> buffer = recentlyClosed.computeIfAbsent(
+        Map<Long, MutableKlineSnapshot> buffer = recentlyClosed.computeIfAbsent(
                 key,
-                k -> java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<Long, MutableKlineSnapshot>() {
+                k -> Collections.synchronizedMap(new LinkedHashMap<>() {
                     @Override
-                    protected boolean removeEldestEntry(java.util.Map.Entry<Long, MutableKlineSnapshot> eldest) {
+                    protected boolean removeEldestEntry(Map.Entry<Long, MutableKlineSnapshot> eldest) {
                         return size() > MAX_RECENT_BUCKETS;
                     }
                 }));
@@ -105,7 +108,7 @@ public class KlineAggregator {
     }
 
     private MutableKlineSnapshot getFromBuffer(String key, long bucketStart) {
-        java.util.Map<Long, MutableKlineSnapshot> buffer = recentlyClosed.get(key);
+        Map<Long, MutableKlineSnapshot> buffer = recentlyClosed.get(key);
         if (buffer == null)
             return null;
 
