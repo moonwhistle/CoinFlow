@@ -7,6 +7,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -30,7 +33,8 @@ public class BinanceKlineClient {
         this.baseUrl = baseUrl;
     }
 
-    @Retryable(backoff = @Backoff(delay = 1000, multiplier = 2.0))
+    @Retryable(retryFor = { HttpServerErrorException.class, ResourceAccessException.class }, noRetryFor = {
+            HttpClientErrorException.class }, backoff = @Backoff(delay = 1000, multiplier = 2.0))
     public List<BinanceKline> fetchKlines(String symbol, String interval, long startTime, long endTime, int limit) {
         String url = UriComponentsBuilder.fromUriString(baseUrl)
                 .path(KLINE_API_PATH)
@@ -46,7 +50,8 @@ public class BinanceKlineClient {
         Object[][] rawResponse = restTemplate.getForObject(url, Object[][].class);
 
         if (rawResponse == null) {
-            return List.of();
+            log.warn("Binance API returned null response for symbol: {}, interval: {}", symbol, interval);
+            throw new IllegalStateException("Received null response from Binance API");
         }
 
         return Arrays.stream(rawResponse)
