@@ -2,8 +2,8 @@ spring:
   application:
     name: replay-app
   datasource:
-    url: jdbc:postgresql://localhost:5432/ohlc
-    username: ohlc_user
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ohlc}
+    username: ${DB_USERNAME:ohlc_user}
     password: ${DB_PASSWORD:1234}
     driver-class-name: org.postgresql.Driver
   jpa:
