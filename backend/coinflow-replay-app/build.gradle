@@ -8,8 +8,11 @@ dependencies {
     implementation project(':coinflow-infra-redis')
 
     implementation 'org.springframework.boot:spring-boot-starter-batch'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-quartz' // optional, but standard scheduling is part of web/core, let's just add springboot scheduling via core
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
 }
 
-bootJar { enabled = false }
-jar { enabled = true }
-
+bootJar { enabled = true }
+jar { enabled = false }
