@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: replay-app
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ohlc
+    username: ohlc_user
+    password: 1234
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+  batch:
+    jdbc:
+      initialize-schema: always # Spring Batch Meta 테이블 자동 생성 속성 켜기
+
+binance:
+  api:
+    base-url: "https://api.binance.com"
