@@ -49,4 +49,14 @@ public class Ohlc1mService {
                         LocalDateTime endExclusive) {
                 return ohlc1mRepository.findCandlesInBucketRange(symbolId, startInclusive, endExclusive);
         }
+
+        @Transactional(readOnly = true)
+        public Optional<Ohlc1m> findBySymbolIdAndBucketTime(Long symbolId, LocalDateTime bucketTime) {
+                return ohlc1mRepository.findBySymbolIdAndBucketTime(symbolId, bucketTime);
+        }
+
+        @Transactional
+        public void saveAll(List<Ohlc1m> candles) {
+                ohlc1mRepository.saveAll(candles);
+        }
 }
