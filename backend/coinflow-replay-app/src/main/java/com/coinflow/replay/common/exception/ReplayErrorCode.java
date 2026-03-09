@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ReplayErrorCode implements BaseErrorCode {
 
-    ;
+    INVALID_BATCH_PARAMETER("R001", "배치 파라미터가 유효하지 않습니다", 400);
 
     private final String code;
     private final String message;
