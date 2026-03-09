@@ -32,6 +32,10 @@ public class KlineState {
         reset(0);
     }
 
+    public synchronized long getStartTime() {
+        return this.startTime;
+    }
+
     /**
      * Process a single tick.
      * Returns a snapshot of the *previous* closed candle if this tick caused a
@@ -40,9 +44,16 @@ public class KlineState {
      */
     public synchronized KlineSnapshot processTick(BigDecimal price, long scaledQty, long tickEpochSec) {
         long bucketStart = (tickEpochSec / durationSeconds) * durationSeconds;
+
+        // Ignore late ticks in KlineState (KlineAggregator handles them via
+        // MutableKlineSnapshot buffer)
+        if (this.open != null && bucketStart < this.startTime) {
+            return null;
+        }
+
         KlineSnapshot closedSnapshot = null;
 
-        if (this.open == null || bucketStart != this.startTime) {
+        if (this.open == null || bucketStart > this.startTime) {
             // If there's an existing open candle, close it and capture snapshot
             if (this.open != null) {
                 this.closed = true;
@@ -85,18 +96,6 @@ public class KlineState {
                 startTime, closeTime,
                 open, high, low, close,
                 VolumeScaler.toBigDecimal(volume), trades, closed);
-    }
-
-    /**
-     * Reset after a closed candle has been broadcast.
-     * Called externally after broadcasting a closed kline.
-     */
-    public synchronized void resetAfterClose() {
-        if (this.closed) {
-            this.open = null;
-            this.closed = false;
-            this.dirty = false;
-        }
     }
 
     public synchronized boolean hasData() {

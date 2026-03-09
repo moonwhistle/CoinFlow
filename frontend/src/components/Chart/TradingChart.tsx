@@ -36,14 +36,15 @@ export const TradingChart = () => {
             const candleTime = msg.startTime as Time;
 
             try {
-                // Try updating the latest candle directly (Fastest approach)
+                // By passing true as the second argument (historicalUpdate),
+                // lightweight-charts v5 natively supports re-rendering/updating past closed candles (e.g., late ticks)
                 mainSeriesRef.current.update({
                     time: candleTime,
                     open: msg.open,
                     high: msg.high,
                     low: msg.low,
                     close: msg.close,
-                });
+                }, true);
 
                 volumeSeriesRef.current.update({
                     time: candleTime,
@@ -51,15 +52,10 @@ export const TradingChart = () => {
                     color: msg.close >= msg.open
                         ? CHART_COLORS.UP_TRANSPARENT
                         : CHART_COLORS.DOWN_TRANSPARENT,
-                });
+                }, true);
             } catch (err) {
-                // If it fails (usually due to "Cannot update oldest data" error from out-of-order delivery
-                // like receiving a delayed 'closed' candle after a new 'live' candle has started),
-                // we gracefully ignore it or handle it in a state array if necessary.
-                // In lightweight charts, the only way to update past data is to use setData() on the entire array.
-                // However, since this typically only happens on the exact boundary where the NEW candle just started
-                // and the OLD candle just closed, the OLD candle is essentially already complete in the UI. 
-                // We'll log it as a warning instead of letting it crash the chart.
+                // If historicalUpdate still fails (e.g. time is completely before the oldest chart data),
+                // gracefully ignore and warn.
                 console.warn(`[TradingChart] Ignored past candle update for time ${candleTime}:`, err);
             }
         }
