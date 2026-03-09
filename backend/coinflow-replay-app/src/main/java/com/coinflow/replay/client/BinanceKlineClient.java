@@ -30,9 +30,9 @@ public class BinanceKlineClient {
         this.baseUrl = baseUrl;
     }
 
-    @Retryable(value = { RestClientException.class }, backoff = @Backoff(delay = 1000, multiplier = 2.0))
+    @Retryable(backoff = @Backoff(delay = 1000, multiplier = 2.0))
     public List<BinanceKline> fetchKlines(String symbol, String interval, long startTime, long endTime, int limit) {
-        String url = UriComponentsBuilder.fromHttpUrl(baseUrl)
+        String url = UriComponentsBuilder.fromUriString(baseUrl)
                 .path(KLINE_API_PATH)
                 .queryParam("symbol", symbol.toUpperCase())
                 .queryParam("interval", interval)
