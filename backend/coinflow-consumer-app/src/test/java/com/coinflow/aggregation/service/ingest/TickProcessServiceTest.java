@@ -53,8 +53,8 @@ class TickProcessServiceTest {
 
     @BeforeEach
     void setUp() {
-        testEvent = new TickRawEvent("btcusdt", new BigDecimal("100"), new BigDecimal("10"), Instant.now());
-        Symbol symbol = Symbol.builder().id(1L).code("btcusdt").build();
+        testEvent = new TickRawEvent("btcusdt", new BigDecimal("100"), new BigDecimal("10"), Instant.now(), "stream1");
+        Symbol symbol = Symbol.builder().id(1L).symbol("btcusdt").build();
         lenient().when(symbolService.findBySymbol("btcusdt")).thenReturn(symbol);
     }
 
