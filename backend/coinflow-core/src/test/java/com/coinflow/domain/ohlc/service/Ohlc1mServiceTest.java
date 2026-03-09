@@ -23,14 +23,14 @@ class Ohlc1mServiceTest {
         private Ohlc1mRepository ohlc1mRepository;
 
         @Test
-        @DisplayName("Persistence: Merge Late Arrival Data (Accumulate Volume)")
-        void applyAndSave_Merge_Test() {
+        @DisplayName("Persistence: Apply Overwrite Data (SSOT from Aggregator)")
+        void applyAndSave_Overwrite_Test() {
                 // Given
                 Long symbolId = 1L;
                 Symbol symbol = Symbol.builder().id(symbolId).build();
                 LocalDateTime bucketTime = LocalDateTime.of(2024, 1, 1, 12, 0, 0);
 
-                // Existing DB Data: Vol 1000
+                // Existing DB Data
                 Ohlc1m existingCandle = Ohlc1m.builder()
                                 .symbol(symbol)
                                 .bucketTime(bucketTime)
@@ -44,18 +44,18 @@ class Ohlc1mServiceTest {
                 given(ohlc1mRepository.findBySymbolIdAndBucketTime(symbolId, bucketTime))
                                 .willReturn(Optional.of(existingCandle));
 
-                // When: Late tick flush attempts to save partial data (Vol 10)
-                // Service should merge 10 into 1000 => 1010
+                // When: Aggregator sends updated final state via applyAndSave
                 Ohlc1mService service = new Ohlc1mService(ohlc1mRepository);
                 service.applyAndSave(symbol, bucketTime,
-                                BigDecimal.valueOf(105), // Open (ignored in merge)
-                                BigDecimal.valueOf(105), // High (lower than DB high, ignored)
-                                BigDecimal.valueOf(105), // Low (higher than DB low, ignored)
-                                BigDecimal.valueOf(105), // Close (ignored in merge)
-                                10L);
+                                BigDecimal.valueOf(100), // Open
+                                BigDecimal.valueOf(115), // High (updated)
+                                BigDecimal.valueOf(90), // Low
+                                BigDecimal.valueOf(112), // Close (updated)
+                                1050L); // Volume (updated)
 
-                // Then
-                assertEquals(1010L, existingCandle.getVolume());
-                assertEquals(BigDecimal.valueOf(110), existingCandle.getHighPrice()); // Kept existing high
+                // Then: The DB entity should be completely overwritten by the new request
+                assertEquals(1050L, existingCandle.getVolume());
+                assertEquals(BigDecimal.valueOf(115), existingCandle.getHighPrice());
+                assertEquals(BigDecimal.valueOf(112), existingCandle.getClosePrice());
         }
 }

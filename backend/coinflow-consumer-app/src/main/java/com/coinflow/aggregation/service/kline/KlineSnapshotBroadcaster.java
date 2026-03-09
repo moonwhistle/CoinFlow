@@ -21,7 +21,6 @@ public class KlineSnapshotBroadcaster {
 
     public static final String KLINE_BROADCAST_TOPIC = "kline:broadcast";
 
-    private final KlineAggregator aggregator;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final LiveKlineRepository liveKlineRepository;
@@ -68,10 +67,9 @@ public class KlineSnapshotBroadcaster {
             // Update last broadcast time
             lastBroadcastTimes.put(cacheKey, now);
 
-            // 3. Reset in-memory state if closed
+            // 3. Log closed status
             if (snapshot.closed()) {
-                log.debug("Broadcasted and saved closed kline for {}:{}", symbol, interval);
-                aggregator.resetAfterClose(symbol, interval);
+                log.debug("Broadcasted and saved closed/late kline for {}:{}", symbol, interval);
             }
 
         } catch (Exception e) {
