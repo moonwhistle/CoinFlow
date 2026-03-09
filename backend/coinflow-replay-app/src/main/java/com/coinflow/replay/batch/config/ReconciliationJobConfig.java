@@ -23,11 +23,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Configuration
 public class ReconciliationJobConfig {
 
+    public static final String JOB_NAME = "klineReconciliationJob";
+    public static final String STEP_NAME = "klineReconciliationStep";
+
     private static final int CHUNK_SIZE = 500;
 
     @Bean
     public Job klineReconciliationJob(JobRepository jobRepository, Step klineReconciliationStep) {
-        return new JobBuilder("klineReconciliationJob", jobRepository)
+        return new JobBuilder(JOB_NAME, jobRepository)
                 .start(klineReconciliationStep)
                 .build();
     }
@@ -38,7 +41,7 @@ public class ReconciliationJobConfig {
             BinanceKlineReader klineReader,
             BinanceKlineProcessor klineProcessor,
             BinanceKlineWriter klineWriter) {
-        return new StepBuilder("klineReconciliationStep", jobRepository)
+        return new StepBuilder(STEP_NAME, jobRepository)
                 .<BinanceKline, Ohlc1m>chunk(CHUNK_SIZE, transactionManager)
                 .reader(klineReader)
                 .processor(klineProcessor)
