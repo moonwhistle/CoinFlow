@@ -113,7 +113,7 @@ public class OhlcChartService {
         }
 
         KlineEvent liveKline = liveKlineOpt.get();
-        LocalDateTime liveBucketTime = LocalDateTime.ofEpochSecond(liveKline.startTime() / 1000, 0, ZoneOffset.UTC);
+        LocalDateTime liveBucketTime = LocalDateTime.ofEpochSecond(liveKline.startTime(), 0, ZoneOffset.UTC);
 
         // Ensure that the live kline matches the requested timeframe
         if (!liveBucketTime.equals(baseBucket)) {
