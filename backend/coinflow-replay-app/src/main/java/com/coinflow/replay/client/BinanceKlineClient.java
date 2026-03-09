@@ -11,14 +11,16 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class BinanceKlineClient {
 
     private static final Logger log = LoggerFactory.getLogger(BinanceKlineClient.class);
+    private static final String KLINE_API_PATH = "/api/v3/klines";
+
     private final RestTemplate restTemplate;
     private final String baseUrl;
 
@@ -28,10 +30,10 @@ public class BinanceKlineClient {
         this.baseUrl = baseUrl;
     }
 
-    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2.0))
+    @Retryable(value = { RestClientException.class }, backoff = @Backoff(delay = 1000, multiplier = 2.0))
     public List<BinanceKline> fetchKlines(String symbol, String interval, long startTime, long endTime, int limit) {
-        String url = UriComponentsBuilder.fromUriString(baseUrl)
-                .path("/api/v3/klines")
+        String url = UriComponentsBuilder.fromHttpUrl(baseUrl)
+                .path(KLINE_API_PATH)
                 .queryParam("symbol", symbol.toUpperCase())
                 .queryParam("interval", interval)
                 .queryParam("startTime", startTime)
@@ -42,24 +44,13 @@ public class BinanceKlineClient {
         log.debug("Fetching klines from Binance: {}", url);
 
         Object[][] rawResponse = restTemplate.getForObject(url, Object[][].class);
-        List<BinanceKline> result = new ArrayList<>();
 
-        if (rawResponse != null) {
-            for (Object[] rawKline : rawResponse) {
-                result.add(new BinanceKline(
-                        ((Number) rawKline[0]).longValue(),
-                        new BigDecimal(rawKline[1].toString()),
-                        new BigDecimal(rawKline[2].toString()),
-                        new BigDecimal(rawKline[3].toString()),
-                        new BigDecimal(rawKline[4].toString()),
-                        new BigDecimal(rawKline[5].toString()),
-                        ((Number) rawKline[6]).longValue(),
-                        new BigDecimal(rawKline[7].toString()),
-                        ((Number) rawKline[8]).intValue(),
-                        new BigDecimal(rawKline[9].toString()),
-                        new BigDecimal(rawKline[10].toString())));
-            }
+        if (rawResponse == null) {
+            return List.of();
         }
-        return result;
+
+        return Arrays.stream(rawResponse)
+                .map(BinanceKline::fromArray)
+                .collect(Collectors.toList());
     }
 }
