@@ -4,6 +4,8 @@ import com.coinflow.replay.client.BinanceKlineClient;
 import com.coinflow.replay.client.dto.BinanceKline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.coinflow.replay.common.exception.ReplayErrorCode;
+import com.coinflow.replay.common.exception.ReplayException;
 import org.springframework.batch.item.ItemReader;
 
 import java.util.LinkedList;
@@ -26,16 +28,16 @@ public class BinanceKlineReader implements ItemReader<BinanceKline> {
     public BinanceKlineReader(BinanceKlineClient binanceKlineClient, String symbol, String interval, long startTime,
             long endTime) {
         if (binanceKlineClient == null) {
-            throw new IllegalArgumentException("BinanceKlineClient must not be null");
+            throw new ReplayException(ReplayErrorCode.INVALID_BATCH_PARAMETER);
         }
         if (symbol == null || symbol.trim().isEmpty()) {
-            throw new IllegalArgumentException("Symbol must not be null or empty");
+            throw new ReplayException(ReplayErrorCode.INVALID_BATCH_PARAMETER);
         }
         if (interval == null || interval.trim().isEmpty()) {
-            throw new IllegalArgumentException("Interval must not be null or empty");
+            throw new ReplayException(ReplayErrorCode.INVALID_BATCH_PARAMETER);
         }
         if (startTime > endTime) {
-            throw new IllegalArgumentException("startTime must be less than or equal to endTime");
+            throw new ReplayException(ReplayErrorCode.INVALID_BATCH_PARAMETER);
         }
 
         this.binanceKlineClient = binanceKlineClient;
