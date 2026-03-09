@@ -29,7 +29,7 @@ class MutableKlineSnapshotTest {
         MutableKlineSnapshot mutable = new MutableKlineSnapshot(initialSnapshot);
 
         // When - Apply a late tick that breaks the high
-        mutable.applyLateTick(new BigDecimal("115"), 50L);
+        mutable.applyLateTick(new BigDecimal("115"), 50_000_000_00L); // 50 * 10^8
 
         // Then
         KlineSnapshot afterFirst = mutable.toSnapshot();
@@ -37,11 +37,11 @@ class MutableKlineSnapshotTest {
         assertEquals(new BigDecimal("115"), afterFirst.high(), "High must update");
         assertEquals(new BigDecimal("90"), afterFirst.low(), "Low must be unchanged");
         assertEquals(new BigDecimal("115"), afterFirst.close(), "Close must update to latest tick price");
-        assertEquals(new BigDecimal("550"), afterFirst.volume(), "Volume must accumulate");
+        assertEquals(new BigDecimal("550"), afterFirst.volume().stripTrailingZeros(), "Volume must accumulate");
         assertEquals(11, afterFirst.trades(), "Trade count must increase");
 
         // When - Apply a late tick that breaks the low
-        mutable.applyLateTick(new BigDecimal("80"), 100L);
+        mutable.applyLateTick(new BigDecimal("80"), 100_000_000_00L); // 100 * 10^8
 
         // Then
         KlineSnapshot afterSecond = mutable.toSnapshot();
@@ -49,7 +49,7 @@ class MutableKlineSnapshotTest {
         assertEquals(new BigDecimal("115"), afterSecond.high(), "High must be unchanged");
         assertEquals(new BigDecimal("80"), afterSecond.low(), "Low must update");
         assertEquals(new BigDecimal("80"), afterSecond.close(), "Close must update to latest tick price");
-        assertEquals(new BigDecimal("650"), afterSecond.volume(), "Volume must accumulate");
+        assertEquals(new BigDecimal("650"), afterSecond.volume().stripTrailingZeros(), "Volume must accumulate");
         assertEquals(12, afterSecond.trades(), "Trade count must increase");
     }
 
