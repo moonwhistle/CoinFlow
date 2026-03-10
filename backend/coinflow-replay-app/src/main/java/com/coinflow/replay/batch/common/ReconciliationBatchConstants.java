@@ -18,10 +18,12 @@ public final class ReconciliationBatchConstants {
     public static final String PARAM_RUN_ID = "run.id";
 
     // Default Values
-    public static final String DEFAULT_SYMBOL = "BTCUSDT";
+    public static final String DEFAULT_SYMBOL = "btcusdt";
     public static final String DEFAULT_INTERVAL = "1m";
+    public static final int DEFAULT_WINDOW_MINUTES = 5;
 
     // Time Constants (ms)
     public static final long ONE_MINUTE_MS = 60_000L;
     public static final long FIVE_MINUTES_MS = 300_000L;
+    public static final long INITIAL_DELAY_MS = 10_000L;
 }

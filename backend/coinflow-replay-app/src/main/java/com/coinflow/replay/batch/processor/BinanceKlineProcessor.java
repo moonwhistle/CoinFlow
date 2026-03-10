@@ -22,7 +22,7 @@ import java.util.Optional;
 
 public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, ReconciliationResult> {
     private static final Logger log = LoggerFactory.getLogger(BinanceKlineProcessor.class);
-    private static final BigDecimal TOLERANCE_PERCENT = BigDecimal.ZERO; // 금융 도메인에 맞춰 정밀도 100% (오차 허용 안 함)
+    private static final BigDecimal TOLERANCE_PERCENT = BigDecimal.ZERO; // 100% precision (no gap allowed)
 
     private final String symbolName;
     private final String intervalType;
