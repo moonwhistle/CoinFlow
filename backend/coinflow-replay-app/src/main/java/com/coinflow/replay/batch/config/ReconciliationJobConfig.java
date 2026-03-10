@@ -1,12 +1,12 @@
 package com.coinflow.replay.batch.config;
 
 import com.coinflow.domain.log.service.MissingTickLogService;
-import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.replay.batch.processor.BinanceKlineProcessor;
 import com.coinflow.replay.batch.reader.BinanceKlineReader;
 import com.coinflow.replay.batch.writer.BinanceKlineWriter;
+import com.coinflow.replay.batch.processor.ReconciliationResult;
 import com.coinflow.replay.client.BinanceKlineClient;
 import com.coinflow.replay.client.dto.BinanceKline;
 import org.springframework.batch.core.Job;
@@ -42,7 +42,7 @@ public class ReconciliationJobConfig {
             BinanceKlineProcessor klineProcessor,
             BinanceKlineWriter klineWriter) {
         return new StepBuilder(STEP_NAME, jobRepository)
-                .<BinanceKline, Ohlc1m>chunk(CHUNK_SIZE, transactionManager)
+                .<BinanceKline, ReconciliationResult>chunk(CHUNK_SIZE, transactionManager)
                 .reader(klineReader)
                 .processor(klineProcessor)
                 .writer(klineWriter)
@@ -73,14 +73,13 @@ public class ReconciliationJobConfig {
             @Value("#{jobParameters['symbol']}") String symbol,
             @Value("#{jobParameters['interval']}") String interval,
             SymbolService symbolService,
-            Ohlc1mService ohlc1mService,
-            MissingTickLogService missingTickLogService) {
-        return new BinanceKlineProcessor(symbol, interval, symbolService, ohlc1mService, missingTickLogService);
+            Ohlc1mService ohlc1mService) {
+        return new BinanceKlineProcessor(symbol, interval, symbolService, ohlc1mService);
     }
 
     @Bean
     @StepScope
-    public BinanceKlineWriter klineWriter(Ohlc1mService ohlc1mService) {
-        return new BinanceKlineWriter(ohlc1mService);
+    public BinanceKlineWriter klineWriter(Ohlc1mService ohlc1mService, MissingTickLogService missingTickLogService) {
+        return new BinanceKlineWriter(ohlc1mService, missingTickLogService);
     }
 }
