@@ -3,6 +3,7 @@ package com.coinflow.replay.batch.config;
 import com.coinflow.domain.log.service.MissingTickLogService;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.service.SymbolService;
+import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import com.coinflow.replay.batch.processor.BinanceKlineProcessor;
 import com.coinflow.replay.batch.reader.BinanceKlineReader;
 import com.coinflow.replay.batch.writer.BinanceKlineWriter;
@@ -46,9 +47,9 @@ public class ReconciliationJobConfig {
                 .reader(klineReader)
                 .processor(klineProcessor)
                 .writer(klineWriter)
-                .faultTolerant() // 장애 허용 기능 활성화
-                .skipLimit(100) // 최대 100건까지 에러 수용 (건너뛰기)
-                .skip(Exception.class) // 예외 발생 시 해당 건 skip 후 진행
+                .faultTolerant()
+                .skipLimit(100)
+                .skip(Exception.class)
                 .build();
     }
 
@@ -56,10 +57,10 @@ public class ReconciliationJobConfig {
     @StepScope
     public BinanceKlineReader klineReader(
             BinanceKlineClient binanceKlineClient,
-            @Value("#{jobParameters['symbol']}") String symbol,
-            @Value("#{jobParameters['interval']}") String interval,
-            @Value("#{jobParameters['startTime']}") Long startTime,
-            @Value("#{jobParameters['endTime']}") Long endTime) {
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_INTERVAL + "']}") String interval,
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_START_TIME + "']}") Long startTime,
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_END_TIME + "']}") Long endTime) {
 
         long start = startTime != null ? startTime : 0L;
         long end = endTime != null ? endTime : 0L;
@@ -70,8 +71,8 @@ public class ReconciliationJobConfig {
     @Bean
     @StepScope
     public BinanceKlineProcessor klineProcessor(
-            @Value("#{jobParameters['symbol']}") String symbol,
-            @Value("#{jobParameters['interval']}") String interval,
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_INTERVAL + "']}") String interval,
             SymbolService symbolService,
             Ohlc1mService ohlc1mService) {
         return new BinanceKlineProcessor(symbol, interval, symbolService, ohlc1mService);

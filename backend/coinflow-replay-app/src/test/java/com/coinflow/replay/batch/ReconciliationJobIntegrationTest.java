@@ -41,7 +41,6 @@ import org.springframework.web.client.RestTemplate;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@Transactional
 class ReconciliationJobIntegrationTest {
 
     @Autowired
@@ -71,6 +70,10 @@ class ReconciliationJobIntegrationTest {
     @BeforeEach
     void setUp() {
         mockServer = MockRestServiceServer.createServer(restTemplate);
+        ohlc1mRepository.deleteAll();
+        missingTickLogRepository.deleteAll();
+        symbolRepository.deleteAll();
+
         testSymbol = symbolRepository.save(Symbol.builder()
                 .symbol("btcusdt")
                 .exchange("binance")

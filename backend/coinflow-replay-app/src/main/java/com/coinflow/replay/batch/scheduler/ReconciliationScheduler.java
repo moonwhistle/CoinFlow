@@ -1,16 +1,18 @@
 package com.coinflow.replay.batch.scheduler;
 
-import com.coinflow.replay.batch.config.ReconciliationJobConfig;
+import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -18,46 +20,55 @@ import java.time.temporal.ChronoUnit;
 public class ReconciliationScheduler {
 
     private final JobLauncher jobLauncher;
-    private final ReconciliationJobConfig jobConfig; // To get the Job bean
+    private final Job klineReconciliationJob;
 
-    // Initially for BTCUSDT, can be expanded to a list of symbols
-    private static final String DEFAULT_SYMBOL = "BTCUSDT";
-    private static final String DEFAULT_INTERVAL = "1m";
+    @Value("${coinflow.batch.reconciliation.symbols:btcusdt}")
+    private List<String> targetSymbols;
+
+    @Value("${coinflow.batch.reconciliation.default-interval:1m}")
+    private String defaultInterval;
+
+    @Value("${coinflow.batch.reconciliation.window-minutes:5}")
+    private int windowMinutes;
 
     /**
-     * Run reconciliation every 5 minutes.
-     * Uses a fixed delay to prevent overlapping runs if one takes longer than 5
-     * mins.
+     * Run reconciliation periodically for all configured symbols.
+     * Uses a fixed delay to prevent overlapping runs.
      */
     @Scheduled(fixedDelayString = "${coinflow.batch.reconciliation.interval:300000}", initialDelay = 10000)
     public void runReconciliation() {
-        log.info("Starting scheduled kline reconciliation for {}", DEFAULT_SYMBOL);
+        if (targetSymbols == null || targetSymbols.isEmpty()) {
+            log.warn("No target symbols configured for reconciliation.");
+            return;
+        }
 
+        log.info("Starting scheduled kline reconciliation for symbols: {}", targetSymbols);
+
+        long nowMs = Instant.now().toEpochMilli();
+        long endTime = (nowMs / ReconciliationBatchConstants.ONE_MINUTE_MS) * ReconciliationBatchConstants.ONE_MINUTE_MS
+                - ReconciliationBatchConstants.ONE_MINUTE_MS;
+        long startTime = endTime - ((long) windowMinutes * ReconciliationBatchConstants.ONE_MINUTE_MS);
+
+        for (String symbol : targetSymbols) {
+            triggerJob(symbol.toLowerCase(), startTime, endTime, nowMs);
+        }
+    }
+
+    private void triggerJob(String symbol, long startTime, long endTime, long runId) {
         try {
-            // Calculate time window:
-            // endTime: Current time - 1 minute (rounded down to nearest minute to ensure
-            // candle is closed)
-            // startTime: endTime - 5 minutes
-            long nowMs = Instant.now().toEpochMilli();
-            long endTime = (nowMs / 60000) * 60000 - 60000; // Last closed minute
-            long startTime = endTime - (5 * 60000); // 5 minutes window
-
             JobParameters params = new JobParametersBuilder()
-                    .addString("symbol", DEFAULT_SYMBOL)
-                    .addString("interval", DEFAULT_INTERVAL)
-                    .addLong("startTime", startTime)
-                    .addLong("endTime", endTime)
-                    .addLong("run.id", nowMs) // Ensure uniqueness
+                    .addString(ReconciliationBatchConstants.PARAM_SYMBOL, symbol)
+                    .addString(ReconciliationBatchConstants.PARAM_INTERVAL,
+                            defaultInterval != null ? defaultInterval : ReconciliationBatchConstants.DEFAULT_INTERVAL)
+                    .addLong(ReconciliationBatchConstants.PARAM_START_TIME, startTime)
+                    .addLong(ReconciliationBatchConstants.PARAM_END_TIME, endTime)
+                    .addLong(ReconciliationBatchConstants.PARAM_RUN_ID, runId)
                     .toJobParameters();
 
-            jobLauncher.run(jobConfig.klineReconciliationJob(null, null), params); // JobRepository/Step are injected by
-                                                                                   // Spring
-
-            log.info("Scheduled kline reconciliation triggered successfully for {}. Range: {} to {}",
-                    DEFAULT_SYMBOL, startTime, endTime);
-
+            jobLauncher.run(klineReconciliationJob, params);
+            log.info("Successfully triggered reconciliation for {}. Range: {} to {}", symbol, startTime, endTime);
         } catch (Exception e) {
-            log.error("Failed to trigger scheduled kline reconciliation job", e);
+            log.error("Failed to trigger reconciliation for {}", symbol, e);
         }
     }
 }

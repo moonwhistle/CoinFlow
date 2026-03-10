@@ -17,3 +17,12 @@ spring:
 binance:
   api:
     base-url: "https://api.binance.com"
+
+coinflow:
+  batch:
+    reconciliation:
+      interval: 300000 # 5 minutes in milliseconds
+      symbols:
+        - "btcusdt"
+      default-interval: "1m"
+      window-minutes: 5
