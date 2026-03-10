@@ -20,6 +20,7 @@ export const TradingChart = () => {
     const volumeChartRef = useRef<IChartApi | null>(null);
     const mainSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const lastCandleTimeRef = useRef<number>(0);
 
     // Default to M1 as per req
     const [activeTimeframe, setActiveTimeframe] = useState<OhlcInterval>('M1');
@@ -33,30 +34,31 @@ export const TradingChart = () => {
             // Filter: only render the active timeframe
             if (msg.interval !== activeTimeframe) return;
 
-            const candleTime = msg.startTime as Time;
+            const candleTime = msg.startTime as number;
+            const isHistorical = candleTime < lastCandleTimeRef.current;
 
             try {
-                // By passing true as the second argument (historicalUpdate),
-                // lightweight-charts v5 natively supports re-rendering/updating past closed candles (e.g., late ticks)
                 mainSeriesRef.current.update({
-                    time: candleTime,
+                    time: candleTime as Time,
                     open: msg.open,
                     high: msg.high,
                     low: msg.low,
                     close: msg.close,
-                }, true);
+                }, isHistorical);
 
                 volumeSeriesRef.current.update({
-                    time: candleTime,
+                    time: candleTime as Time,
                     value: msg.volume,
                     color: msg.close >= msg.open
                         ? CHART_COLORS.UP_TRANSPARENT
                         : CHART_COLORS.DOWN_TRANSPARENT,
-                }, true);
+                }, isHistorical);
+
+                if (!isHistorical) {
+                    lastCandleTimeRef.current = Math.max(lastCandleTimeRef.current, candleTime);
+                }
             } catch (err) {
-                // If historicalUpdate still fails (e.g. time is completely before the oldest chart data),
-                // gracefully ignore and warn.
-                console.warn(`[TradingChart] Ignored past candle update for time ${candleTime}:`, err);
+                console.warn(`[TradingChart] Failed to update candle for time ${candleTime}:`, err);
             }
         }
         else if (isTickerEvent(msg)) {
@@ -184,6 +186,11 @@ export const TradingChart = () => {
 
                 mainSeries.setData(filledCandles);
                 volumeSeries.setData(filledVolumes);
+
+                if (filledCandles.length > 0) {
+                    const maxTime = Math.max(...filledCandles.map(c => c.time as number));
+                    lastCandleTimeRef.current = maxTime;
+                }
             } catch (err) {
                 console.error("Failed to load chart data", err);
             } finally {
