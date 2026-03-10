@@ -2,7 +2,6 @@ package com.coinflow.replay.batch.processor;
 
 import com.coinflow.domain.log.domain.MissingTickLog;
 import com.coinflow.domain.log.domain.vo.ReconciliationReason;
-import com.coinflow.domain.log.service.MissingTickLogService;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
@@ -13,6 +12,7 @@ import com.coinflow.replay.common.exception.ReplayException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.item.ItemProcessor;
+import org.springframework.lang.NonNull;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,22 +20,20 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 
-public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Ohlc1m> {
+public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, ReconciliationResult> {
     private static final Logger log = LoggerFactory.getLogger(BinanceKlineProcessor.class);
-    private static final BigDecimal TOLERANCE_PERCENT = new BigDecimal("0.0001"); // 0.01% 오차범위 수용
+    private static final BigDecimal TOLERANCE_PERCENT = BigDecimal.ZERO; // 금융 도메인에 맞춰 정밀도 100% (오차 허용 안 함)
 
     private final String symbolName;
     private final String intervalType;
     private final SymbolService symbolService;
     private final Ohlc1mService ohlc1mService;
-    private final MissingTickLogService missingTickLogService;
 
     private Symbol cachedSymbol;
 
     public BinanceKlineProcessor(String symbolName, String intervalType,
             SymbolService symbolService,
-            Ohlc1mService ohlc1mService,
-            MissingTickLogService missingTickLogService) {
+            Ohlc1mService ohlc1mService) {
         if (symbolName == null || symbolName.trim().isEmpty()) {
             throw new ReplayException(ReplayErrorCode.INVALID_BATCH_PARAMETER);
         }
@@ -47,11 +45,10 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Ohlc1m
         this.intervalType = intervalType;
         this.symbolService = symbolService;
         this.ohlc1mService = ohlc1mService;
-        this.missingTickLogService = missingTickLogService;
     }
 
     @Override
-    public Ohlc1m process(BinanceKline item) {
+    public ReconciliationResult process(@NonNull BinanceKline item) {
         if (cachedSymbol == null) {
             cachedSymbol = symbolService.findBySymbol(symbolName);
         }
@@ -74,8 +71,9 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Ohlc1m
                     .volume(item.volume().longValue())
                     .build();
 
-            saveMissingTickLog(bucketTime, ReconciliationReason.MISSING, item.close(), null);
-            return newOhlc;
+            MissingTickLog logEntry = createMissingTickLog(bucketTime, ReconciliationReason.MISSING, item.close(),
+                    null);
+            return new ReconciliationResult(newOhlc, logEntry);
         }
 
         Ohlc1m existingOhlc = existingOhlcOpt.get();
@@ -83,15 +81,15 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Ohlc1m
         // Case 2: 불일치 발생 (Mismatch)
         if (isMismatch(existingOhlc, item)) {
             log.warn("Mismatched 1m candle found for {} at {}. Updating to Binance values.", symbolName, bucketTime);
-            saveMissingTickLog(bucketTime, ReconciliationReason.MISMATCH, item.close(),
+            MissingTickLog logEntry = createMissingTickLog(bucketTime, ReconciliationReason.MISMATCH, item.close(),
                     existingOhlc.getClosePrice());
 
             existingOhlc.apply(item.open(), item.high(), item.low(), item.close(), item.volume().longValue());
-            return existingOhlc;
+            return new ReconciliationResult(existingOhlc, logEntry);
         }
 
         // Case 3: 정상 (정합성 완벽 일치, DB 조작 생략)
-        return null; // Writer에 아무것도 넘기지 않음
+        return null;
     }
 
     private boolean isMismatch(Ohlc1m existing, BinanceKline binance) {
@@ -114,9 +112,9 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Ohlc1m
         return diff.compareTo(tolerance) <= 0;
     }
 
-    private void saveMissingTickLog(LocalDateTime bucketTime, ReconciliationReason reason,
+    private MissingTickLog createMissingTickLog(LocalDateTime bucketTime, ReconciliationReason reason,
             BigDecimal expectedClose, BigDecimal actualClose) {
-        MissingTickLog logEntry = MissingTickLog.builder()
+        return MissingTickLog.builder()
                 .symbol(cachedSymbol)
                 .intervalType(intervalType)
                 .bucketTime(bucketTime)
@@ -124,7 +122,5 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Ohlc1m
                 .expectedClosePrice(expectedClose)
                 .actualClosePrice(actualClose)
                 .build();
-
-        missingTickLogService.save(logEntry);
     }
 }
