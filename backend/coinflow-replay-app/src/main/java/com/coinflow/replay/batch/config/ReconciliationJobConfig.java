@@ -46,6 +46,9 @@ public class ReconciliationJobConfig {
                 .reader(klineReader)
                 .processor(klineProcessor)
                 .writer(klineWriter)
+                .faultTolerant() // 장애 허용 기능 활성화
+                .skipLimit(100) // 최대 100건까지 에러 수용 (건너뛰기)
+                .skip(Exception.class) // 예외 발생 시 해당 건 skip 후 진행
                 .build();
     }
 
