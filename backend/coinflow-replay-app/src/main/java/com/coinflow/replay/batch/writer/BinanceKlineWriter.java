@@ -33,12 +33,12 @@ public class BinanceKlineWriter implements ItemWriter<ReconciliationResult> {
         }
 
         List<Ohlc1m> candles = chunk.getItems().stream()
-                .map(ReconciliationResult::getOhlc1m)
+                .map(ReconciliationResult::ohlc1m)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
         List<MissingTickLog> logs = chunk.getItems().stream()
-                .map(ReconciliationResult::getMissingTickLog)
+                .map(ReconciliationResult::missingTickLog)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
