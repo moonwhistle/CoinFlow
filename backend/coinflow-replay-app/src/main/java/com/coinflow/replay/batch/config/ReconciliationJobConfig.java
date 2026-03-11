@@ -14,26 +14,61 @@ import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.partition.support.Partitioner;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
+import com.coinflow.replay.batch.partitioner.SymbolPartitioner;
+
+import java.util.List;
 
 @Configuration
 public class ReconciliationJobConfig {
 
-    public static final String JOB_NAME = "klineReconciliationJob";
-    public static final String STEP_NAME = "klineReconciliationStep";
+    public static final String JOB_NAME = ReconciliationBatchConstants.JOB_NAME;
+    public static final String STEP_NAME = ReconciliationBatchConstants.WORKER_STEP_NAME;
 
     private static final int CHUNK_SIZE = 500;
 
+    @Value("${coinflow.batch.reconciliation.symbols:btcusdt}")
+    private List<String> targetSymbols;
+
     @Bean
-    public Job klineReconciliationJob(JobRepository jobRepository, Step klineReconciliationStep) {
+    public Job klineReconciliationJob(JobRepository jobRepository, Step managerStep) {
         return new JobBuilder(JOB_NAME, jobRepository)
-                .start(klineReconciliationStep)
+                .start(managerStep)
                 .build();
+    }
+
+    @Bean
+    public Step managerStep(JobRepository jobRepository, Step klineReconciliationStep, Partitioner symbolPartitioner,
+            TaskExecutor taskExecutor) {
+        return new StepBuilder(ReconciliationBatchConstants.MANAGER_STEP_NAME, jobRepository)
+                .partitioner(klineReconciliationStep.getName(), symbolPartitioner)
+                .step(klineReconciliationStep)
+                .gridSize(targetSymbols.size())
+                .taskExecutor(taskExecutor)
+                .build();
+    }
+
+    @Bean
+    public Partitioner symbolPartitioner() {
+        return new SymbolPartitioner(targetSymbols);
+    }
+
+    @Bean
+    public TaskExecutor taskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(ReconciliationBatchConstants.DEFAULT_THREAD_POOL_SIZE);
+        executor.setMaxPoolSize(ReconciliationBatchConstants.DEFAULT_THREAD_POOL_SIZE);
+        executor.setThreadNamePrefix("batch-thread-");
+        executor.initialize();
+        return executor;
     }
 
     @Bean
@@ -57,7 +92,7 @@ public class ReconciliationJobConfig {
     @StepScope
     public BinanceKlineReader klineReader(
             BinanceKlineClient binanceKlineClient,
-            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
+            @Value("#{stepExecutionContext['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
             @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_INTERVAL + "']}") String interval,
             @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_START_TIME + "']}") Long startTime,
             @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_END_TIME + "']}") Long endTime) {
@@ -71,7 +106,7 @@ public class ReconciliationJobConfig {
     @Bean
     @StepScope
     public BinanceKlineProcessor klineProcessor(
-            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
+            @Value("#{stepExecutionContext['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
             @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_INTERVAL + "']}") String interval,
             SymbolService symbolService,
             Ohlc1mService ohlc1mService) {
