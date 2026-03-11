@@ -49,26 +49,19 @@ public class ReconciliationScheduler {
                 - ReconciliationBatchConstants.ONE_MINUTE_MS;
         long startTime = endTime - ((long) windowMinutes * ReconciliationBatchConstants.ONE_MINUTE_MS);
 
-        for (String symbol : targetSymbols) {
-            triggerJob(symbol.toLowerCase(), startTime, endTime, nowMs);
-        }
-    }
-
-    private void triggerJob(String symbol, long startTime, long endTime, long runId) {
         try {
             JobParameters params = new JobParametersBuilder()
-                    .addString(ReconciliationBatchConstants.PARAM_SYMBOL, symbol)
                     .addString(ReconciliationBatchConstants.PARAM_INTERVAL,
                             defaultInterval != null ? defaultInterval : ReconciliationBatchConstants.DEFAULT_INTERVAL)
                     .addLong(ReconciliationBatchConstants.PARAM_START_TIME, startTime)
                     .addLong(ReconciliationBatchConstants.PARAM_END_TIME, endTime)
-                    .addLong(ReconciliationBatchConstants.PARAM_RUN_ID, runId)
+                    .addLong(ReconciliationBatchConstants.PARAM_RUN_ID, nowMs)
                     .toJobParameters();
 
             jobLauncher.run(klineReconciliationJob, params);
-            log.info("Successfully triggered reconciliation for {}. Range: {} to {}", symbol, startTime, endTime);
+            log.info("Successfully triggered reconciliation job. Range: {} to {}", startTime, endTime);
         } catch (Exception e) {
-            log.error("Failed to trigger reconciliation for {}", symbol, e);
+            log.error("Failed to trigger reconciliation job", e);
         }
     }
 }
