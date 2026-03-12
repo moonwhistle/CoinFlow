@@ -88,14 +88,33 @@ class OhlcRollupReaderTest {
     void read_ReturnsNullWhenRangeTooShort() {
         // given
         // 10:00 ~ 10:04 (5분 미만)
+        // 5분봉 인터벌의 경우 10:00 버킷은 10:05:00.000에 닫힘.
+        // endMs가 10:05:00.000보다 작으면 해당 버킷은 '닫히지 않은' 것으로 간주하여 생성하지 않음.
         long startMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 0));
-        long endMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 4));
+        long endMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 5)) - 1; // 10:04:59.999
 
         OhlcRollupReader reader = new OhlcRollupReader(symbolName, ReconciliationBatchConstants.INTERVAL_5M_MINUTES,
                 startMs,
                 endMs, symbolService);
 
         // when & then
+        assertThat(reader.read()).isNull();
+    }
+
+    @Test
+    @DisplayName("경계 조건: endMs가 인터벌 종료 시점과 정확히 일치할 때만 버킷을 생성한다")
+    void read_BoundaryTest() {
+        // given
+        long startMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 0));
+        // 정확히 10:05:00.000
+        long exactlyEndMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 5));
+
+        OhlcRollupReader reader = new OhlcRollupReader(symbolName, ReconciliationBatchConstants.INTERVAL_5M_MINUTES,
+                startMs,
+                exactlyEndMs, symbolService);
+
+        // when & then
+        assertThat(reader.read()).isNotNull(); // 10:00 버킷 생성됨 (종료시간 10:05 <= endBoundary 10:05)
         assertThat(reader.read()).isNull();
     }
 
