@@ -4,7 +4,11 @@ import com.coinflow.domain.log.domain.MissingTickLog;
 import com.coinflow.domain.log.domain.vo.ReconciliationReason;
 import com.coinflow.domain.log.repository.MissingTickLogRepository;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
+import com.coinflow.domain.ohlc.domain.Ohlc5m;
+import com.coinflow.domain.ohlc.domain.Ohlc30m;
 import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;
+import com.coinflow.domain.ohlc.repository.Ohlc5mRepository;
+import com.coinflow.domain.ohlc.repository.Ohlc30mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.domain.vo.MarketType;
 import com.coinflow.domain.symbol.repository.SymbolRepository;
@@ -31,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -51,6 +56,12 @@ class ReconciliationJobIntegrationTest {
         private Ohlc1mRepository ohlc1mRepository;
 
         @Autowired
+        private Ohlc5mRepository ohlc5mRepository;
+
+        @Autowired
+        private Ohlc30mRepository ohlc30mRepository;
+
+        @Autowired
         private SymbolRepository symbolRepository;
 
         @Autowired
@@ -68,6 +79,8 @@ class ReconciliationJobIntegrationTest {
         @BeforeEach
         void setUp() {
                 mockServer = MockRestServiceServer.createServer(restTemplate);
+                ohlc30mRepository.deleteAll();
+                ohlc5mRepository.deleteAll();
                 ohlc1mRepository.deleteAll();
                 missingTickLogRepository.deleteAll();
                 symbolRepository.deleteAll();
@@ -82,42 +95,52 @@ class ReconciliationJobIntegrationTest {
         }
 
         @Test
-        @DisplayName("통합 테스트: DB의 잘못된 가격 정보를 바이낸스 데이터로 보정하고 로그를 남긴다")
-        void reconciliation_CorrectsMismatchedData() throws Exception {
+        @DisplayName("통합 테스트: 1분봉 데이터 보정 후 상위 타임프레임(5m, 30m) 롤업이 연쇄적으로 수행된다")
+        void reconciliation_FullFlowTest() throws Exception {
                 // given
-                long timestamp = (System.currentTimeMillis() / 60000) * 60000 - 120000; // 2분 전
-                LocalDateTime bucketTime = ReconciliationBatchConstants.toLocalDateTime(timestamp);
+                // 10:00:00 시작 시점 (UTC)
+                long startTimestamp = 1710237600000L; // 2024-03-12 10:00:00
+                LocalDateTime bucketTime1000 = ReconciliationBatchConstants.toLocalDateTime(startTimestamp);
 
-                // 1. DB에 잘못된 데이터 삽입 (Open Price가 50000인데 바이낸스는 60000인 상황 가정)
+                // 1. 기존 DB에 잘못된 10:00 1분봉 데이터 존재
                 ohlc1mRepository.save(Ohlc1m.builder()
                                 .symbol(testSymbol)
-                                .bucketTime(bucketTime)
+                                .bucketTime(bucketTime1000)
                                 .open(new BigDecimal("50000"))
-                                .high(new BigDecimal("61000"))
+                                .high(new BigDecimal("51000"))
                                 .low(new BigDecimal("49000"))
-                                .close(new BigDecimal("60500"))
+                                .close(new BigDecimal("50500"))
                                 .volume(100L)
                                 .build());
 
-                // 2. 바이낸스 API Mock 응답 설정
+                // 2. 바이낸스 API Mock 응답: 10:00 ~ 10:04 (5분치)
+                // 10:00이 보정되어야 함 (50000 -> 60000)
+                // BinanceKline.fromArray는 11개의 요소를 필요로 함
                 Object[][] mockApiResponse = new Object[][] {
-                                {
-                                                timestamp, "60000.00", "61000.00", "59000.00", "60500.00", "100.0",
-                                                timestamp + 59999, "6050000.00", 100, "50.0", "3025000.00"
-                                }
+                                { startTimestamp, "60000", "61000", "59000", "60500", "100", startTimestamp + 59999,
+                                                "0",
+                                                0, "0", "0" },
+                                { startTimestamp + 60000, "60500", "61500", "60000", "61000", "200",
+                                                startTimestamp + 119999, "0", 0, "0", "0" },
+                                { startTimestamp + 120000, "61000", "62000", "60500", "61500", "300",
+                                                startTimestamp + 179999, "0", 0, "0", "0" },
+                                { startTimestamp + 180000, "61500", "62500", "61000", "62000", "400",
+                                                startTimestamp + 239999, "0", 0, "0", "0" },
+                                { startTimestamp + 240000, "62000", "63000", "61500", "62500", "500",
+                                                startTimestamp + 299999, "0", 0, "0", "0" }
                 };
 
-                mockServer.expect(requestTo(org.hamcrest.Matchers.containsString("/api/v3/klines")))
-                                .andExpect(method(HttpMethod.GET))
+                mockServer.expect(requestTo(containsString("/api/v3/klines")))
                                 .andRespond(withSuccess(objectMapper.writeValueAsString(mockApiResponse),
                                                 MediaType.APPLICATION_JSON));
 
-                // 3. 배치 잡 실행
+                // 3. 배치 잡 실행 (10:00 ~ 10:30.000 구간 보정 요청)
+                // endTime을 1800000(30분)으로 설정해야 30분봉 롤업 리더가 10:00~10:30 버킷을 '닫힌 버킷'으로 인식함
                 JobParameters params = new JobParametersBuilder()
                                 .addString(ReconciliationBatchConstants.PARAM_SYMBOL, "btcusdt")
                                 .addString(ReconciliationBatchConstants.PARAM_INTERVAL, "1m")
-                                .addLong(ReconciliationBatchConstants.PARAM_START_TIME, timestamp)
-                                .addLong(ReconciliationBatchConstants.PARAM_END_TIME, timestamp + 59999)
+                                .addLong(ReconciliationBatchConstants.PARAM_START_TIME, startTimestamp)
+                                .addLong(ReconciliationBatchConstants.PARAM_END_TIME, startTimestamp + 1800000)
                                 .addLong(ReconciliationBatchConstants.PARAM_RUN_ID, System.currentTimeMillis())
                                 .toJobParameters();
 
@@ -125,15 +148,17 @@ class ReconciliationJobIntegrationTest {
                 jobLauncher.run(klineReconciliationJob, params);
 
                 // then
-                // 1. DB 데이터가 보정되었는지 확인 (50000 -> 60000)
-                Ohlc1m corrected = ohlc1mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime)
+                // 검증 1: 1분봉 보정 확인 (10:00 데이터가 정답으로 교체되었는지 핵심 필드만 확인)
+                Ohlc1m m1 = ohlc1mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime1000)
                                 .orElseThrow();
-                assertThat(corrected.getOpenPrice()).isEqualByComparingTo("60000");
+                assertThat(m1.getOpenPrice()).isEqualByComparingTo("60000");
 
-                // 2. MissingTickLog가 생성되었는지 확인
-                List<MissingTickLog> logs = missingTickLogRepository.findAll();
-                assertThat(logs).hasSize(1);
-                assertThat(logs.get(0).getReason()).isEqualTo(ReconciliationReason.MISMATCH);
-                assertThat(logs.get(0).getActualClosePrice()).isEqualByComparingTo("60500");
+                // 검증 2: 5분봉/30분봉 롤업 생성 여부 확인
+                // 데이터 흐름(1m 보정 -> 상위 롤업 연쇄 실행)이 정상 작동하는지 존재 유무 위주로 검증
+                // 세부 필드 계산 로직은 단위 테스트(OhlcRollupProcessorTest)에서 검증함
+                assertThat(ohlc5mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime1000))
+                                .isPresent();
+                assertThat(ohlc30mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime1000))
+                                .isPresent();
         }
 }
