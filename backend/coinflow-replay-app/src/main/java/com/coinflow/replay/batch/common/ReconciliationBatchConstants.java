@@ -16,6 +16,7 @@ public final class ReconciliationBatchConstants {
     public static final String PARAM_START_TIME = "startTime";
     public static final String PARAM_END_TIME = "endTime";
     public static final String PARAM_RUN_ID = "run.id";
+    public static final String CONTEXT_DIRTY_BUCKETS = "dirtyBuckets";
 
     // Step/Bean Names
     public static final String JOB_NAME = "klineReconciliationJob";
@@ -26,7 +27,7 @@ public final class ReconciliationBatchConstants {
     // Default Values
     public static final String DEFAULT_SYMBOL = "btcusdt";
     public static final String DEFAULT_INTERVAL = "1m";
-    public static final int DEFAULT_WINDOW_MINUTES = 5;
+    public static final int DEFAULT_WINDOW_MINUTES = 120;
 
     // Time Constants (ms)
     public static final long ONE_MINUTE_MS = 60_000L;
