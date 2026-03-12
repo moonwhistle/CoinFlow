@@ -33,7 +33,7 @@ public class BinanceKlineClient {
         this.baseUrl = baseUrl;
     }
 
-    @Retryable(retryFor = { HttpServerErrorException.class, ResourceAccessException.class }, noRetryFor = {
+    @Retryable(retryFor = { RestClientException.class }, noRetryFor = {
             HttpClientErrorException.class }, backoff = @Backoff(delay = 1000, multiplier = 2.0))
     public List<BinanceKline> fetchKlines(String symbol, String interval, long startTime, long endTime, int limit) {
         String url = UriComponentsBuilder.fromUriString(baseUrl)

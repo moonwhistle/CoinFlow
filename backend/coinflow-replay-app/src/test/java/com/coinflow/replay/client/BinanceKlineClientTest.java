@@ -1,6 +1,7 @@
 package com.coinflow.replay.client;
 
 import com.coinflow.replay.client.dto.BinanceKline;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,15 +65,14 @@ class BinanceKlineClientTest {
     }
 
     @Test
-    void fetchKlines_returnsEmptyList_whenResponseIsNull() {
+    void fetchKlines_throwsException_whenResponseIsNull() {
         // given
         when(restTemplate.getForObject(any(String.class), eq(Object[][].class)))
                 .thenReturn(null);
 
-        // when
-        List<BinanceKline> result = client.fetchKlines("BTCUSDT", "1m", 1672531200000L, 1672531259999L, 1);
-
-        // then
-        assertThat(result).isEmpty();
+        // when & then
+        Assertions.assertThrows(IllegalStateException.class, () -> {
+            client.fetchKlines("BTCUSDT", "1m", 1672531200000L, 1672531259999L, 1);
+        });
     }
 }
