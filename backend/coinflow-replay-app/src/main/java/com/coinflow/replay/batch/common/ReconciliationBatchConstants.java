@@ -1,5 +1,9 @@
 package com.coinflow.replay.batch.common;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
 /**
  * Constants used throughout the reconciliation batch process.
  * Prevents Magic Strings and ensures consistency between Scheduler, Reader, and
@@ -10,13 +14,18 @@ public final class ReconciliationBatchConstants {
     private ReconciliationBatchConstants() {
     }
 
+    public static final ZoneId BATCH_ZONE = ZoneId.of("UTC");
+
+    public static LocalDateTime toLocalDateTime(long epochMillis) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), BATCH_ZONE);
+    }
+
     // Job Parameter Keys
     public static final String PARAM_SYMBOL = "symbol";
     public static final String PARAM_INTERVAL = "interval";
     public static final String PARAM_START_TIME = "startTime";
     public static final String PARAM_END_TIME = "endTime";
     public static final String PARAM_RUN_ID = "run.id";
-    public static final String CONTEXT_DIRTY_BUCKETS = "dirtyBuckets";
 
     // Step/Bean Names
     public static final String JOB_NAME = "klineReconciliationJob";

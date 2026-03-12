@@ -5,6 +5,7 @@ import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
+import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import com.coinflow.replay.client.dto.BinanceKline;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,9 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,7 +74,7 @@ class BinanceKlineProcessorTest {
         long timestamp = 1710000000000L;
         BinanceKline binanceKline = createBinanceKline(timestamp, "100", "110", "90", "105", "1000");
 
-        LocalDateTime bucketTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
+        LocalDateTime bucketTime = ReconciliationBatchConstants.toLocalDateTime(timestamp);
         Ohlc1m existingOhlc = Ohlc1m.builder()
                 .symbol(mockSymbol)
                 .bucketTime(bucketTime)
@@ -105,7 +104,7 @@ class BinanceKlineProcessorTest {
         long timestamp = 1710000000000L;
         BinanceKline binanceKline = createBinanceKline(timestamp, "100", "110", "90", "105", "1000");
 
-        LocalDateTime bucketTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
+        LocalDateTime bucketTime = ReconciliationBatchConstants.toLocalDateTime(timestamp);
         Ohlc1m existingOhlc = Ohlc1m.builder()
                 .symbol(mockSymbol)
                 .bucketTime(bucketTime)
