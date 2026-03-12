@@ -2,6 +2,7 @@ package com.coinflow.replay.batch.reader;
 
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
+import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import com.coinflow.replay.batch.model.RollupTarget;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,10 +39,12 @@ class OhlcRollupReaderTest {
     void read_GeneratesCorrectBuckets() {
         // given
         // 10:00:00 ~ 10:15:00 (총 15분 범위)
-        long startMs = LocalDateTime.of(2024, 3, 12, 10, 0).toInstant(ZoneOffset.UTC).toEpochMilli();
-        long endMs = LocalDateTime.of(2024, 3, 12, 10, 15).toInstant(ZoneOffset.UTC).toEpochMilli() - 1; // 10:14:59.999
+        long startMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 0));
+        long endMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 15)) - 1; // 10:14:59.999
 
-        OhlcRollupReader reader = new OhlcRollupReader(symbolName, 5, startMs, endMs, symbolService);
+        OhlcRollupReader reader = new OhlcRollupReader(symbolName, ReconciliationBatchConstants.INTERVAL_5M_MINUTES,
+                startMs,
+                endMs, symbolService);
 
         // when & then
         // 10:00, 10:05 (10:10은 10:15에 종료되므로 10:14:59 범위에서는 생성되지 않아야 함)
@@ -53,7 +56,7 @@ class OhlcRollupReaderTest {
         assertThat(target2).isNotNull();
         assertThat(target2.getBucketTime()).isEqualTo(LocalDateTime.of(2024, 3, 12, 10, 5));
 
-        assertThat(reader.read()).isNull(); // 10:10 ~ 10:15는 범위 밖 (EndBoundary가 10:14:59이므로)
+        assertThat(reader.read()).isNull();
     }
 
     @Test
@@ -61,10 +64,12 @@ class OhlcRollupReaderTest {
     void read_AlignsStartTimeToFloor() {
         // given
         // 10:03:00 시작 -> 10:00:00으로 정렬되어야 함
-        long startMs = LocalDateTime.of(2024, 3, 12, 10, 3).toInstant(ZoneOffset.UTC).toEpochMilli();
-        long endMs = LocalDateTime.of(2024, 3, 12, 10, 10).toInstant(ZoneOffset.UTC).toEpochMilli();
+        long startMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 3));
+        long endMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 10));
 
-        OhlcRollupReader reader = new OhlcRollupReader(symbolName, 5, startMs, endMs, symbolService);
+        OhlcRollupReader reader = new OhlcRollupReader(symbolName, ReconciliationBatchConstants.INTERVAL_5M_MINUTES,
+                startMs,
+                endMs, symbolService);
 
         // when & then
         RollupTarget target1 = reader.read();
@@ -83,12 +88,18 @@ class OhlcRollupReaderTest {
     void read_ReturnsNullWhenRangeTooShort() {
         // given
         // 10:00 ~ 10:04 (5분 미만)
-        long startMs = LocalDateTime.of(2024, 3, 12, 10, 0).toInstant(ZoneOffset.UTC).toEpochMilli();
-        long endMs = LocalDateTime.of(2024, 3, 12, 10, 4).toInstant(ZoneOffset.UTC).toEpochMilli();
+        long startMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 0));
+        long endMs = toEpochMillis(LocalDateTime.of(2024, 3, 12, 10, 4));
 
-        OhlcRollupReader reader = new OhlcRollupReader(symbolName, 5, startMs, endMs, symbolService);
+        OhlcRollupReader reader = new OhlcRollupReader(symbolName, ReconciliationBatchConstants.INTERVAL_5M_MINUTES,
+                startMs,
+                endMs, symbolService);
 
         // when & then
         assertThat(reader.read()).isNull();
+    }
+
+    private long toEpochMillis(LocalDateTime ldt) {
+        return ldt.atZone(ReconciliationBatchConstants.BATCH_ZONE).toInstant().toEpochMilli();
     }
 }
