@@ -57,7 +57,7 @@ class OhlcRollupProcessorTest {
     void process_CreateNewOhlc5m() {
         // given
         LocalDateTime start = LocalDateTime.of(2024, 3, 12, 10, 0);
-        RollupTarget target = new RollupTarget(mockSymbol, start, 5);
+        RollupTarget target = new RollupTarget(mockSymbol, start, ReconciliationBatchConstants.INTERVAL_5M_MINUTES);
 
         List<Ohlc1m> sources = List.of(
                 createOhlc1m(start, "100", "110", "95", "105", 1000L),
@@ -82,11 +82,35 @@ class OhlcRollupProcessorTest {
     }
 
     @Test
+    @DisplayName("30분봉 롤업: 1분봉 데이터들을 합쳐서 새로운 Ohlc30m을 생성한다")
+    void process_CreateNewOhlc30m() {
+        // given
+        LocalDateTime start = LocalDateTime.of(2024, 3, 12, 10, 0);
+        RollupTarget target = new RollupTarget(mockSymbol, start, ReconciliationBatchConstants.INTERVAL_30M_MINUTES);
+
+        List<Ohlc1m> sources = List.of(
+                createOhlc1m(start, "100", "110", "95", "105", 1000L),
+                createOhlc1m(start.plusMinutes(29), "200", "210", "195", "205", 2000L));
+
+        when(ohlc1mService.findCandlesInBucketRange(eq(mockSymbol.getId()), eq(start), any())).thenReturn(sources);
+        when(ohlc30mService.findBySymbolIdAndBucketTime(mockSymbol.getId(), start)).thenReturn(Optional.empty());
+
+        // when
+        AbstractOhlc result = processor.process(target);
+
+        // then
+        assertThat(result).isInstanceOf(com.coinflow.domain.ohlc.domain.Ohlc30m.class);
+        assertThat(result.getOpenPrice()).isEqualByComparingTo("100");
+        assertThat(result.getClosePrice()).isEqualByComparingTo("205");
+        assertThat(result.getVolume()).isEqualTo(3000L);
+    }
+
+    @Test
     @DisplayName("동일 데이터 스킵: 기존 데이터가 보정 결과와 완벽히 일치하면 null을 반환한다")
     void process_SkipWhenMatched() {
         // given
         LocalDateTime start = LocalDateTime.of(2024, 3, 12, 10, 0);
-        RollupTarget target = new RollupTarget(mockSymbol, start, 5);
+        RollupTarget target = new RollupTarget(mockSymbol, start, ReconciliationBatchConstants.INTERVAL_5M_MINUTES);
 
         List<Ohlc1m> sources = List.of(
                 createOhlc1m(start, "100", "110", "95", "105", 1000L));
@@ -96,8 +120,8 @@ class OhlcRollupProcessorTest {
         existing.apply(new BigDecimal("100"), new BigDecimal("110"), new BigDecimal("95"), new BigDecimal("105"),
                 1000L);
 
-        when(ohlc1mService.findCandlesInBucketRange(anyLong(), any(), any())).thenReturn(sources);
-        when(ohlc5mService.findBySymbolIdAndBucketTime(anyLong(), any())).thenReturn(Optional.of(existing));
+        when(ohlc1mService.findCandlesInBucketRange(mockSymbol.getId(), start, any())).thenReturn(sources);
+        when(ohlc5mService.findBySymbolIdAndBucketTime(mockSymbol.getId(), start)).thenReturn(Optional.of(existing));
 
         // when
         AbstractOhlc result = processor.process(target);
@@ -111,9 +135,10 @@ class OhlcRollupProcessorTest {
     void process_ReturnNullWhenNoSource() {
         // given
         LocalDateTime start = LocalDateTime.of(2024, 3, 12, 10, 0);
-        RollupTarget target = new RollupTarget(mockSymbol, start, 5);
+        RollupTarget target = new RollupTarget(mockSymbol, start, ReconciliationBatchConstants.INTERVAL_5M_MINUTES);
 
-        when(ohlc1mService.findCandlesInBucketRange(anyLong(), any(), any())).thenReturn(Collections.emptyList());
+        when(ohlc1mService.findCandlesInBucketRange(eq(mockSymbol.getId()), eq(start), any()))
+                .thenReturn(Collections.emptyList());
 
         // when
         AbstractOhlc result = processor.process(target);
