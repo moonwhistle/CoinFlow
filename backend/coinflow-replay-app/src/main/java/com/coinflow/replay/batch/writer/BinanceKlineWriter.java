@@ -1,10 +1,5 @@
 package com.coinflow.replay.batch.writer;
 
-import com.coinflow.domain.log.domain.MissingTickLog;
-import com.coinflow.domain.log.service.MissingTickLogService;
-import com.coinflow.domain.ohlc.domain.Ohlc1m;
-import com.coinflow.domain.ohlc.service.Ohlc1mService;
-import com.coinflow.replay.batch.processor.ReconciliationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.item.Chunk;
@@ -14,6 +9,12 @@ import org.springframework.lang.NonNull;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+
+import com.coinflow.domain.log.domain.MissingTickLog;
+import com.coinflow.domain.log.service.MissingTickLogService;
+import com.coinflow.domain.ohlc.domain.Ohlc1m;
+import com.coinflow.domain.ohlc.service.Ohlc1mService;
+import com.coinflow.replay.batch.processor.ReconciliationResult;
 
 public class BinanceKlineWriter implements ItemWriter<ReconciliationResult> {
     private static final Logger log = LoggerFactory.getLogger(BinanceKlineWriter.class);
@@ -33,12 +34,12 @@ public class BinanceKlineWriter implements ItemWriter<ReconciliationResult> {
         }
 
         List<Ohlc1m> candles = chunk.getItems().stream()
-                .map(ReconciliationResult::getOhlc1m)
+                .map(ReconciliationResult::ohlc1m)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
         List<MissingTickLog> logs = chunk.getItems().stream()
-                .map(ReconciliationResult::getMissingTickLog)
+                .map(ReconciliationResult::missingTickLog)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
