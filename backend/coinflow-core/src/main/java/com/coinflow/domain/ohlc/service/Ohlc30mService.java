@@ -6,6 +6,7 @@ import com.coinflow.domain.symbol.domain.Symbol;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,5 +41,15 @@ public class Ohlc30mService {
     public List<Ohlc30m> findCandlesInBucketRange(Long symbolId, LocalDateTime startInclusive,
             LocalDateTime endExclusive) {
         return ohlc30mRepository.findCandlesInBucketRange(symbolId, startInclusive, endExclusive);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Ohlc30m> findBySymbolIdAndBucketTime(Long symbolId, LocalDateTime bucketTime) {
+        return ohlc30mRepository.findBySymbolIdAndBucketTime(symbolId, bucketTime);
+    }
+
+    @Transactional
+    public void saveAll(List<Ohlc30m> candles) {
+        ohlc30mRepository.saveAll(candles);
     }
 }

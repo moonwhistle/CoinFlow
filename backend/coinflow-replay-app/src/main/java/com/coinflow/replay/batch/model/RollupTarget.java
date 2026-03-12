@@ -12,5 +12,5 @@ import java.time.LocalDateTime;
 public class RollupTarget {
     Symbol symbol;
     LocalDateTime bucketTime;
-    String targetInterval; // e.g., "5m", "30m"
+    int intervalMinutes;
 }

@@ -7,6 +7,7 @@ import com.coinflow.domain.ohlc.domain.Ohlc5m;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
+import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import com.coinflow.replay.batch.model.RollupTarget;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -30,7 +31,7 @@ public class OhlcRollupProcessor implements ItemProcessor<RollupTarget, Abstract
     @Override
     public AbstractOhlc process(RollupTarget target) {
         LocalDateTime start = target.getBucketTime();
-        int intervalMinutes = Integer.parseInt(target.getTargetInterval().replace("m", ""));
+        int intervalMinutes = target.getIntervalMinutes();
         LocalDateTime end = start.plusMinutes(intervalMinutes);
 
         List<Ohlc1m> sourceCandles = ohlc1mService.findCandlesInBucketRange(target.getSymbol().getId(), start, end);
@@ -67,7 +68,7 @@ public class OhlcRollupProcessor implements ItemProcessor<RollupTarget, Abstract
     private Optional<? extends AbstractOhlc> fetchExisting(RollupTarget target) {
         Long symbolId = target.getSymbol().getId();
         LocalDateTime time = target.getBucketTime();
-        if (target.getTargetInterval().equals("5m")) {
+        if (target.getIntervalMinutes() == ReconciliationBatchConstants.INTERVAL_5M_MINUTES) {
             return ohlc5mService.findBySymbolIdAndBucketTime(symbolId, time);
         } else {
             return ohlc30mService.findBySymbolIdAndBucketTime(symbolId, time);
@@ -76,7 +77,7 @@ public class OhlcRollupProcessor implements ItemProcessor<RollupTarget, Abstract
 
     private AbstractOhlc createNew(RollupTarget target, BigDecimal o, BigDecimal h, BigDecimal l, BigDecimal c,
             long v) {
-        if (target.getTargetInterval().equals("5m")) {
+        if (target.getIntervalMinutes() == ReconciliationBatchConstants.INTERVAL_5M_MINUTES) {
             Ohlc5m candle = Ohlc5m.builder().symbol(target.getSymbol()).bucketTime(target.getBucketTime()).build();
             candle.apply(o, h, l, c, v);
             return candle;
