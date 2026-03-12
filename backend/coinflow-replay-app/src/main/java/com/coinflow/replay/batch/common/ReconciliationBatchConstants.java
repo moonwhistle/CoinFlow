@@ -22,7 +22,18 @@ public final class ReconciliationBatchConstants {
     public static final String JOB_NAME = "klineReconciliationJob";
     public static final String MANAGER_STEP_NAME = "managerStep";
     public static final String WORKER_STEP_NAME = "klineReconciliationStep";
+    public static final String WORKER_STEP_SINGLE_NAME = "workerStep";
+    public static final String WORKER_FLOW_NAME = "workerFlow";
+    public static final String ROLLUP_5M_STEP_NAME = "ohlc5mRollupStep";
+    public static final String ROLLUP_30M_STEP_NAME = "ohlc30mRollupStep";
     public static final String TASK_EXECUTOR_BEAN = "batchTaskExecutor";
+
+    // Intervals
+    public static final String INTERVAL_1M = "1m";
+    public static final String INTERVAL_5M = "5m";
+    public static final String INTERVAL_30M = "30m";
+    public static final int INTERVAL_5M_MINUTES = 5;
+    public static final int INTERVAL_30M_MINUTES = 30;
 
     // Default Values
     public static final String DEFAULT_SYMBOL = "btcusdt";
@@ -37,4 +48,6 @@ public final class ReconciliationBatchConstants {
     // Partitioning & Parallelism
     public static final int DEFAULT_GRID_SIZE = 5;
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
+    public static final String BATCH_THREAD_PREFIX = "batch-thread-";
+    public static final int CHUNK_SIZE = 500;
 }

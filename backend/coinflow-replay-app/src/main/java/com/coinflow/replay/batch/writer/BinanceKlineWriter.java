@@ -22,6 +22,7 @@ import com.coinflow.domain.log.domain.MissingTickLog;
 import com.coinflow.domain.log.service.MissingTickLogService;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
+import com.coinflow.replay.batch.common.DirtyBucketTracker;
 import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import com.coinflow.replay.batch.processor.ReconciliationResult;
 
@@ -30,11 +31,14 @@ public class BinanceKlineWriter implements ItemWriter<ReconciliationResult>, Ste
 
     private final Ohlc1mService ohlc1mService;
     private final MissingTickLogService missingTickLogService;
+    private final DirtyBucketTracker dirtyBucketTracker;
     private final Set<LocalDateTime> dirtyBuckets = new HashSet<>();
 
-    public BinanceKlineWriter(Ohlc1mService ohlc1mService, MissingTickLogService missingTickLogService) {
+    public BinanceKlineWriter(Ohlc1mService ohlc1mService, MissingTickLogService missingTickLogService,
+            DirtyBucketTracker dirtyBucketTracker) {
         this.ohlc1mService = ohlc1mService;
         this.missingTickLogService = missingTickLogService;
+        this.dirtyBucketTracker = dirtyBucketTracker;
     }
 
     @Override
@@ -69,6 +73,10 @@ public class BinanceKlineWriter implements ItemWriter<ReconciliationResult>, Ste
     @Override
     public void beforeStep(@NonNull StepExecution stepExecution) {
         dirtyBuckets.clear();
+        String symbol = stepExecution.getExecutionContext().getString(ReconciliationBatchConstants.PARAM_SYMBOL);
+        if (symbol != null) {
+            dirtyBucketTracker.clear(symbol);
+        }
     }
 
     @Override
@@ -81,6 +89,13 @@ public class BinanceKlineWriter implements ItemWriter<ReconciliationResult>, Ste
                     .collect(Collectors.joining(","));
 
             stepExecution.getExecutionContext().putString(ReconciliationBatchConstants.CONTEXT_DIRTY_BUCKETS, dirtyStr);
+
+            // Also record to the shared tracker for subsequent rollup steps in this
+            // partition
+            String symbol = stepExecution.getExecutionContext().getString(ReconciliationBatchConstants.PARAM_SYMBOL);
+            if (symbol != null) {
+                dirtyBucketTracker.addDirtyBuckets(symbol, dirtyBuckets);
+            }
             log.info("{} records {} dirty buckets for subsequent rollup steps",
                     stepExecution.getStepName(), dirtyBuckets.size());
         }
