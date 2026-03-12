@@ -82,6 +82,7 @@ public class ReconciliationJobConfig {
                 .reader(klineReader)
                 .processor(klineProcessor)
                 .writer(klineWriter)
+                .listener(klineWriter) // Add this to enable Dirty Tracking
                 .faultTolerant()
                 .skipLimit(100)
                 .skip(Exception.class)
