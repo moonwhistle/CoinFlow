@@ -27,9 +27,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,98 +41,99 @@ import org.springframework.web.client.RestTemplate;
 @ActiveProfiles("test")
 class ReconciliationJobIntegrationTest {
 
-    @Autowired
-    private JobLauncher jobLauncher;
+        @Autowired
+        private JobLauncher jobLauncher;
 
-    @Autowired
-    private Job klineReconciliationJob;
+        @Autowired
+        private Job klineReconciliationJob;
 
-    @Autowired
-    private Ohlc1mRepository ohlc1mRepository;
+        @Autowired
+        private Ohlc1mRepository ohlc1mRepository;
 
-    @Autowired
-    private SymbolRepository symbolRepository;
+        @Autowired
+        private SymbolRepository symbolRepository;
 
-    @Autowired
-    private MissingTickLogRepository missingTickLogRepository;
+        @Autowired
+        private MissingTickLogRepository missingTickLogRepository;
 
-    @Autowired
-    private RestTemplate restTemplate;
+        @Autowired
+        private RestTemplate restTemplate;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+        @Autowired
+        private ObjectMapper objectMapper;
 
-    private MockRestServiceServer mockServer;
-    private Symbol testSymbol;
+        private MockRestServiceServer mockServer;
+        private Symbol testSymbol;
 
-    @BeforeEach
-    void setUp() {
-        mockServer = MockRestServiceServer.createServer(restTemplate);
-        ohlc1mRepository.deleteAll();
-        missingTickLogRepository.deleteAll();
-        symbolRepository.deleteAll();
+        @BeforeEach
+        void setUp() {
+                mockServer = MockRestServiceServer.createServer(restTemplate);
+                ohlc1mRepository.deleteAll();
+                missingTickLogRepository.deleteAll();
+                symbolRepository.deleteAll();
 
-        testSymbol = symbolRepository.save(Symbol.builder()
-                .symbol("btcusdt")
-                .exchange("binance")
-                .name("Bitcoin")
-                .active(true)
-                .marketType(MarketType.SPOT)
-                .build());
-    }
+                testSymbol = symbolRepository.save(Symbol.builder()
+                                .symbol("btcusdt")
+                                .exchange("binance")
+                                .name("Bitcoin")
+                                .active(true)
+                                .marketType(MarketType.SPOT)
+                                .build());
+        }
 
-    @Test
-    @DisplayName("통합 테스트: DB의 잘못된 가격 정보를 바이낸스 데이터로 보정하고 로그를 남긴다")
-    void reconciliation_CorrectsMismatchedData() throws Exception {
-        // given
-        long timestamp = (System.currentTimeMillis() / 60000) * 60000 - 120000; // 2분 전
-        LocalDateTime bucketTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
+        @Test
+        @DisplayName("통합 테스트: DB의 잘못된 가격 정보를 바이낸스 데이터로 보정하고 로그를 남긴다")
+        void reconciliation_CorrectsMismatchedData() throws Exception {
+                // given
+                long timestamp = (System.currentTimeMillis() / 60000) * 60000 - 120000; // 2분 전
+                LocalDateTime bucketTime = ReconciliationBatchConstants.toLocalDateTime(timestamp);
 
-        // 1. DB에 잘못된 데이터 삽입 (Open Price가 50000인데 바이낸스는 60000인 상황 가정)
-        ohlc1mRepository.save(Ohlc1m.builder()
-                .symbol(testSymbol)
-                .bucketTime(bucketTime)
-                .open(new BigDecimal("50000"))
-                .high(new BigDecimal("61000"))
-                .low(new BigDecimal("49000"))
-                .close(new BigDecimal("60500"))
-                .volume(100L)
-                .build());
+                // 1. DB에 잘못된 데이터 삽입 (Open Price가 50000인데 바이낸스는 60000인 상황 가정)
+                ohlc1mRepository.save(Ohlc1m.builder()
+                                .symbol(testSymbol)
+                                .bucketTime(bucketTime)
+                                .open(new BigDecimal("50000"))
+                                .high(new BigDecimal("61000"))
+                                .low(new BigDecimal("49000"))
+                                .close(new BigDecimal("60500"))
+                                .volume(100L)
+                                .build());
 
-        // 2. 바이낸스 API Mock 응답 설정
-        Object[][] mockApiResponse = new Object[][] {
-                {
-                        timestamp, "60000.00", "61000.00", "59000.00", "60500.00", "100.0",
-                        timestamp + 59999, "6050000.00", 100, "50.0", "3025000.00"
-                }
-        };
+                // 2. 바이낸스 API Mock 응답 설정
+                Object[][] mockApiResponse = new Object[][] {
+                                {
+                                                timestamp, "60000.00", "61000.00", "59000.00", "60500.00", "100.0",
+                                                timestamp + 59999, "6050000.00", 100, "50.0", "3025000.00"
+                                }
+                };
 
-        mockServer.expect(requestTo(org.hamcrest.Matchers.containsString("/api/v3/klines")))
-                .andExpect(method(HttpMethod.GET))
-                .andRespond(withSuccess(objectMapper.writeValueAsString(mockApiResponse), MediaType.APPLICATION_JSON));
+                mockServer.expect(requestTo(org.hamcrest.Matchers.containsString("/api/v3/klines")))
+                                .andExpect(method(HttpMethod.GET))
+                                .andRespond(withSuccess(objectMapper.writeValueAsString(mockApiResponse),
+                                                MediaType.APPLICATION_JSON));
 
-        // 3. 배치 잡 실행
-        JobParameters params = new JobParametersBuilder()
-                .addString(ReconciliationBatchConstants.PARAM_SYMBOL, "btcusdt")
-                .addString(ReconciliationBatchConstants.PARAM_INTERVAL, "1m")
-                .addLong(ReconciliationBatchConstants.PARAM_START_TIME, timestamp)
-                .addLong(ReconciliationBatchConstants.PARAM_END_TIME, timestamp + 59999)
-                .addLong(ReconciliationBatchConstants.PARAM_RUN_ID, System.currentTimeMillis())
-                .toJobParameters();
+                // 3. 배치 잡 실행
+                JobParameters params = new JobParametersBuilder()
+                                .addString(ReconciliationBatchConstants.PARAM_SYMBOL, "btcusdt")
+                                .addString(ReconciliationBatchConstants.PARAM_INTERVAL, "1m")
+                                .addLong(ReconciliationBatchConstants.PARAM_START_TIME, timestamp)
+                                .addLong(ReconciliationBatchConstants.PARAM_END_TIME, timestamp + 59999)
+                                .addLong(ReconciliationBatchConstants.PARAM_RUN_ID, System.currentTimeMillis())
+                                .toJobParameters();
 
-        // when
-        jobLauncher.run(klineReconciliationJob, params);
+                // when
+                jobLauncher.run(klineReconciliationJob, params);
 
-        // then
-        // 1. DB 데이터가 보정되었는지 확인 (50000 -> 60000)
-        Ohlc1m corrected = ohlc1mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime)
-                .orElseThrow();
-        assertThat(corrected.getOpenPrice()).isEqualByComparingTo("60000");
+                // then
+                // 1. DB 데이터가 보정되었는지 확인 (50000 -> 60000)
+                Ohlc1m corrected = ohlc1mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime)
+                                .orElseThrow();
+                assertThat(corrected.getOpenPrice()).isEqualByComparingTo("60000");
 
-        // 2. MissingTickLog가 생성되었는지 확인
-        List<MissingTickLog> logs = missingTickLogRepository.findAll();
-        assertThat(logs).hasSize(1);
-        assertThat(logs.get(0).getReason()).isEqualTo(ReconciliationReason.MISMATCH);
-        assertThat(logs.get(0).getActualClosePrice()).isEqualByComparingTo("60500");
-    }
+                // 2. MissingTickLog가 생성되었는지 확인
+                List<MissingTickLog> logs = missingTickLogRepository.findAll();
+                assertThat(logs).hasSize(1);
+                assertThat(logs.get(0).getReason()).isEqualTo(ReconciliationReason.MISMATCH);
+                assertThat(logs.get(0).getActualClosePrice()).isEqualByComparingTo("60500");
+        }
 }

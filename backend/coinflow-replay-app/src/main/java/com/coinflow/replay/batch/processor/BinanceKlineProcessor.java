@@ -6,6 +6,7 @@ import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
+import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import com.coinflow.replay.client.dto.BinanceKline;
 import com.coinflow.replay.common.exception.ReplayErrorCode;
 import com.coinflow.replay.common.exception.ReplayException;
@@ -15,9 +16,7 @@ import org.springframework.batch.item.ItemProcessor;
 import org.springframework.lang.NonNull;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Optional;
 
 public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, ReconciliationResult> {
@@ -53,8 +52,7 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Reconc
             cachedSymbol = symbolService.findBySymbol(symbolName);
         }
 
-        LocalDateTime bucketTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(item.openTime()),
-                ZoneId.systemDefault());
+        LocalDateTime bucketTime = ReconciliationBatchConstants.toLocalDateTime(item.openTime());
         Optional<Ohlc1m> existingOhlcOpt = ohlc1mService.findBySymbolIdAndBucketTime(cachedSymbol.getId(),
                 bucketTime);
 

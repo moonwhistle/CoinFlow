@@ -6,7 +6,6 @@ import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
 import com.coinflow.domain.symbol.service.SymbolService;
-import com.coinflow.replay.batch.common.DirtyBucketTracker;
 import com.coinflow.replay.batch.common.ReconciliationBatchConstants;
 import com.coinflow.replay.batch.model.RollupTarget;
 import com.coinflow.replay.batch.partitioner.SymbolPartitioner;
@@ -53,17 +52,15 @@ public class ReconciliationJobConfig {
     private final Ohlc30mService ohlc30mService;
     private final SymbolService symbolService;
     private final MissingTickLogService missingTickLogService;
-    private final DirtyBucketTracker dirtyBucketTracker;
 
     public ReconciliationJobConfig(Ohlc1mService ohlc1mService, Ohlc5mService ohlc5mService,
             Ohlc30mService ohlc30mService, SymbolService symbolService,
-            MissingTickLogService missingTickLogService, DirtyBucketTracker dirtyBucketTracker) {
+            MissingTickLogService missingTickLogService) {
         this.ohlc1mService = ohlc1mService;
         this.ohlc5mService = ohlc5mService;
         this.ohlc30mService = ohlc30mService;
         this.symbolService = symbolService;
         this.missingTickLogService = missingTickLogService;
-        this.dirtyBucketTracker = dirtyBucketTracker;
     }
 
     @Bean
@@ -126,7 +123,6 @@ public class ReconciliationJobConfig {
                 .reader(klineReader)
                 .processor(klineProcessor)
                 .writer(klineWriter)
-                .listener(klineWriter)
                 .build();
     }
 
@@ -186,27 +182,31 @@ public class ReconciliationJobConfig {
     @Bean
     @StepScope
     public BinanceKlineWriter klineWriter() {
-        return new BinanceKlineWriter(ohlc1mService, missingTickLogService, dirtyBucketTracker);
+        return new BinanceKlineWriter(ohlc1mService, missingTickLogService);
     }
 
     @Bean
     @StepScope
     public OhlcRollupReader rollup5mReader(
             @Value("#{stepExecutionContext['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_START_TIME + "']}") Long startTime,
             @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_END_TIME + "']}") Long endTime) {
-        long end = endTime != null ? endTime : 0L;
-        return new OhlcRollupReader(symbol, ReconciliationBatchConstants.INTERVAL_5M_MINUTES, end, dirtyBucketTracker,
-                symbolService);
+        return createRollupReader(symbol, ReconciliationBatchConstants.INTERVAL_5M_MINUTES, startTime, endTime);
     }
 
     @Bean
     @StepScope
     public OhlcRollupReader rollup30mReader(
             @Value("#{stepExecutionContext['" + ReconciliationBatchConstants.PARAM_SYMBOL + "']}") String symbol,
+            @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_START_TIME + "']}") Long startTime,
             @Value("#{jobParameters['" + ReconciliationBatchConstants.PARAM_END_TIME + "']}") Long endTime) {
+        return createRollupReader(symbol, ReconciliationBatchConstants.INTERVAL_30M_MINUTES, startTime, endTime);
+    }
+
+    private OhlcRollupReader createRollupReader(String symbol, int intervalMinutes, Long startTime, Long endTime) {
+        long start = startTime != null ? startTime : 0L;
         long end = endTime != null ? endTime : 0L;
-        return new OhlcRollupReader(symbol, ReconciliationBatchConstants.INTERVAL_30M_MINUTES, end, dirtyBucketTracker,
-                symbolService);
+        return new OhlcRollupReader(symbol, intervalMinutes, start, end, symbolService);
     }
 
     @Bean
