@@ -13,6 +13,8 @@ spring:
     hibernate:
       ddl-auto: update
   batch:
+    job:
+      enabled: false
     jdbc:
       initialize-schema: always # Spring Batch Meta 테이블 자동 생성 속성 켜기
 
@@ -27,4 +29,4 @@ coinflow:
       symbols:
         - "btcusdt"
       default-interval: "1m"
-      window-minutes: 5
+      window-minutes: 120
