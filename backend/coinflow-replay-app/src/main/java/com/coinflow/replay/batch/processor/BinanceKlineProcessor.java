@@ -3,6 +3,7 @@ package com.coinflow.replay.batch.processor;
 import com.coinflow.domain.log.domain.MissingTickLog;
 import com.coinflow.domain.log.domain.vo.ReconciliationReason;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
@@ -66,7 +67,7 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Reconc
                     .high(item.high())
                     .low(item.low())
                     .close(item.close())
-                    .volume(item.volume().longValue())
+                    .volume(VolumeScaler.toLong(item.volume()))
                     .build();
 
             MissingTickLog logEntry = createMissingTickLog(bucketTime, ReconciliationReason.MISSING, item.close(),
@@ -82,7 +83,7 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Reconc
             MissingTickLog logEntry = createMissingTickLog(bucketTime, ReconciliationReason.MISMATCH, item.close(),
                     existingOhlc.getClosePrice());
 
-            existingOhlc.apply(item.open(), item.high(), item.low(), item.close(), item.volume().longValue());
+            existingOhlc.apply(item.open(), item.high(), item.low(), item.close(), VolumeScaler.toLong(item.volume()));
             return new ReconciliationResult(existingOhlc, logEntry);
         }
 
@@ -95,7 +96,7 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Reconc
                 || !isWithinTolerance(existing.getHighPrice(), binance.high())
                 || !isWithinTolerance(existing.getLowPrice(), binance.low())
                 || !isWithinTolerance(existing.getClosePrice(), binance.close())
-                || existing.getVolume().longValue() != binance.volume().longValue(); // 볼륨은 오차 없이 정수 형태 동등 비교
+                || existing.getVolume().longValue() != VolumeScaler.toLong(binance.volume()); // 볼륨은 스케일링 후 정수 형태로 비교
     }
 
     private boolean isWithinTolerance(BigDecimal dbValue, BigDecimal binanceValue) {
