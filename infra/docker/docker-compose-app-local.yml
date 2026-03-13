@@ -72,3 +72,18 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - consumer-app
+
+  replay-app:
+    build:
+      context: ../../backend/coinflow-replay-app
+      dockerfile: Dockerfile
+    container_name: coinflow-replay-local
+    environment:
+      - SPRING_CONFIG_NAME=application-replay
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATA_REDIS_HOST=redis-local
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
+      - SPRING_DATASOURCE_USERNAME=ohlc_user
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
