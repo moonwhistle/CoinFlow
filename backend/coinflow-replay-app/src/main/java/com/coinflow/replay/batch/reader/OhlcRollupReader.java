@@ -52,29 +52,20 @@ public class OhlcRollupReader implements ItemReader<RollupTarget> {
         LocalDateTime startBoundary = ReconciliationBatchConstants.toLocalDateTime(startTimeMs);
         LocalDateTime endBoundary = ReconciliationBatchConstants.toLocalDateTime(endTimeMs);
 
-        // Calculate the first bucket that contains startBoundary
-        int startMinute = startBoundary.getMinute();
-        int truncatedStartMinute = (startMinute / intervalMinutes) * intervalMinutes;
-        LocalDateTime current = startBoundary.withMinute(truncatedStartMinute).withSecond(0).withNano(0);
-
-        // Calculate the last bucket that overlaps with the range [startBoundary,
-        // endBoundary)
-        // endBoundary is exclusive, so the last relevant minute is endBoundary - 1m
-        LocalDateTime lastRelevantMinute = endBoundary.minusMinutes(1);
-        int lastMinute = lastRelevantMinute.getMinute();
-        int truncatedLastMinute = (lastMinute / intervalMinutes) * intervalMinutes;
-        LocalDateTime lastBucket = lastRelevantMinute.withMinute(truncatedLastMinute).withSecond(0).withNano(0);
+        // Align startBoundary to the interval start (floor)
+        int minute = startBoundary.getMinute();
+        int truncatedMinute = (minute / intervalMinutes) * intervalMinutes;
+        LocalDateTime current = startBoundary.withMinute(truncatedMinute).withSecond(0).withNano(0);
 
         List<RollupTarget> list = new ArrayList<>();
-        // Iterate while current bucket is not after the last bucket
-        while (!current.isAfter(lastBucket)) {
+        // Iterate while the bucket end time is within the endBoundary
+        while (!current.plusMinutes(intervalMinutes).isAfter(endBoundary)) {
             list.add(new RollupTarget(symbol, current, intervalMinutes));
             current = current.plusMinutes(intervalMinutes);
         }
 
-        log.info("Symbol {} has {} rollup targets for {}m interval within range {} to {} (Buckets: {} to {})",
-                symbolName, list.size(), intervalMinutes, startBoundary, endBoundary,
-                startBoundary.withMinute(truncatedStartMinute).withSecond(0).withNano(0), lastBucket);
+        log.info("Symbol {} has {} rollup targets for {}m interval within range {} to {}",
+                symbolName, list.size(), intervalMinutes, startBoundary, endBoundary);
 
         targetIterator = list.iterator();
         initialized = true;
