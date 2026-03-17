@@ -6,11 +6,7 @@ import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapsho
 import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
 import com.coinflow.aggregation.service.kline.KlineSnapshotBroadcaster;
 import com.coinflow.aggregation.service.ticker.TickerBroadcaster;
-import com.coinflow.domain.ohlc.service.Ohlc1mService;
-import com.coinflow.domain.ohlc.service.Ohlc30mService;
-import com.coinflow.domain.ohlc.service.Ohlc5mService;
-import com.coinflow.domain.symbol.domain.Symbol;
-import com.coinflow.domain.symbol.service.SymbolService;
+import com.coinflow.aggregation.service.persist.DbPersistService;
 import com.coinflow.tick.event.TickRawEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,13 +34,7 @@ class TickProcessServiceTest {
     @Mock
     private TickerBroadcaster tickerBroadcaster;
     @Mock
-    private SymbolService symbolService;
-    @Mock
-    private Ohlc1mService ohlc1mService;
-    @Mock
-    private Ohlc5mService ohlc5mService;
-    @Mock
-    private Ohlc30mService ohlc30mService;
+    private DbPersistService dbPersistService;
 
     @InjectMocks
     private TickProcessService tickProcessService;
@@ -54,8 +44,6 @@ class TickProcessServiceTest {
     @BeforeEach
     void setUp() {
         testEvent = new TickRawEvent("btcusdt", new BigDecimal("100"), new BigDecimal("10"), Instant.now(), "stream1");
-        Symbol symbol = Symbol.builder().id(1L).symbol("btcusdt").build();
-        lenient().when(symbolService.findBySymbol("btcusdt")).thenReturn(symbol);
     }
 
     @Test
@@ -82,12 +70,10 @@ class TickProcessServiceTest {
         // 1. Ticker must be broadcasted
         verify(tickerBroadcaster, times(1)).broadcast(any());
 
-        // 2. Late snapshots must be broadcasted and saved
+        // 2. Late snapshots must be broadcasted
         verify(klineBroadcaster, times(1)).broadcastAndSave("btcusdt", "M1", lateSnapshot);
 
-        // 3. Since interval is "M1", Ohlc1mService must be called to persist the exact
-        // SSOT
-        verify(ohlc1mService, times(1)).applyAndSave(any(), any(), any(), any(), any(), any(), anyLong());
-        verify(ohlc5mService, never()).applyAndSave(any(), any(), any(), any(), any(), any(), anyLong());
+        // 3. DbPersistService must be called asynchronously
+        verify(dbPersistService, times(1)).persistClosedCandleAsync(eq("btcusdt"), eq(closedKlineSnapshot));
     }
 }
