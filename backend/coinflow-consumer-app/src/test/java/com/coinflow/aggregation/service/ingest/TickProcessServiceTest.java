@@ -69,10 +69,8 @@ class TickProcessServiceTest {
         // Then
         // 1. Ticker must be broadcasted
         verify(tickerBroadcaster, times(1)).broadcast(any());
-
         // 2. Late snapshots must be broadcasted
         verify(klineBroadcaster, times(1)).broadcastAndSave("btcusdt", "M1", lateSnapshot);
-
         // 3. DbPersistService must be called asynchronously
         verify(dbPersistService, times(1)).persistClosedCandleAsync(eq("btcusdt"), eq(closedKlineSnapshot));
     }
