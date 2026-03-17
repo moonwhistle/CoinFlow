@@ -73,7 +73,7 @@ public class TickProcessAsyncPerformanceTest {
         Symbol testSymbol = Symbol.builder()
                 .symbol("btcusdt")
                 .exchange("BINANCE")
-                .name("Bitcoin/USDT")
+                .name("btcusdt")
                 .active(true)
                 .marketType(MarketType.SPOT)
                 .build();
