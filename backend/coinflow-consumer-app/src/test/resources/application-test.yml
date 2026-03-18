@@ -18,7 +18,7 @@ coinflow:
     db-persist:
       core-pool-size: 3
       max-pool-size: 5
-      queue-capacity: 5000
+      queue-capacity: 300
       keep-alive-seconds: 60
       thread-name-prefix: test-db-
       max-attempts: 3

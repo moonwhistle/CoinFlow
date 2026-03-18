@@ -50,5 +50,3 @@ out/
 
 ### VS Code ###
 .vscode/
-
-### Spring local config (DO NOT COMMIT SECRETS) ###
