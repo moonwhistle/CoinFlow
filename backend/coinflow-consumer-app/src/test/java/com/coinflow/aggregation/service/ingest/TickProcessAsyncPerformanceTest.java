@@ -6,13 +6,11 @@ import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapsho
 import com.coinflow.aggregation.service.kline.KlineSnapshotBroadcaster;
 import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
 import com.coinflow.aggregation.service.ticker.TickerBroadcaster;
+import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
-import com.coinflow.domain.ohlc.service.Ohlc30mService;
-import com.coinflow.domain.ohlc.service.Ohlc5mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.domain.vo.MarketType;
 import com.coinflow.domain.symbol.repository.SymbolRepository;
-import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.tick.event.TickRawEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
@@ -27,10 +25,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +46,9 @@ public class TickProcessAsyncPerformanceTest {
     @Autowired
     private SymbolRepository symbolRepository;
 
+    @Autowired
+    private Ohlc1mRepository ohlc1mRepository;
+
     @MockitoBean
     private KlineAggregator klineAggregator;
 
@@ -57,19 +58,13 @@ public class TickProcessAsyncPerformanceTest {
     @MockitoBean
     private TickerBroadcaster tickerBroadcaster;
 
-    @MockitoBean
-    private SymbolService symbolService;
-
-    @MockitoBean
-    private Ohlc5mService ohlc5mService;
-
-    @MockitoBean
-    private Ohlc30mService ohlc30mService;
-
     @Test
     @DisplayName("실제 DB 저장 상황에서 비동기 처리가 Redis Consume 속도에 미치는 영향 측정")
     void measureAsyncPerformance() throws InterruptedException {
         // [준비] 테스트 데이터 설정 및 DB 초기화
+        // DB 초기화: 이전 테스트 결과 잔여물로 인한 충돌 방지
+        ohlc1mRepository.deleteAllInBatch();
+        
         Symbol testSymbol = Symbol.builder()
                 .symbol("btcusdt")
                 .exchange("BINANCE")
@@ -80,16 +75,21 @@ public class TickProcessAsyncPerformanceTest {
         testSymbol = symbolRepository.save(testSymbol);
         
         final Symbol savedSymbol = testSymbol;
-        when(symbolService.findBySymbol(anyString())).thenReturn(savedSymbol);
         
         LocalDateTime bucketTime = LocalDateTime.now();
         
-        KlineSnapshot snapshot = new KlineSnapshot(100L, 159L, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
-                BigDecimal.ONE, BigDecimal.ONE, 0, true);
-        ClosedKlineSnapshot closedSnapshot = new ClosedKlineSnapshot("M1", snapshot);
-        AggregationResult result = new AggregationResult(List.of(closedSnapshot), List.of(), List.of());
-        
-        when(klineAggregator.processTickAndGetResult(eq("btcusdt"), any(), any(), anyLong())).thenReturn(result);
+        // Mock 설정: 호출될 때마다 1분씩 증가하는 캔들 시간을 반환하여 낙관적 락 충돌 방지
+        var callCount = new AtomicLong(0);
+        when(klineAggregator.processTickAndGetResult(eq("btcusdt"), any(), any(), anyLong()))
+                .thenAnswer(invocation -> {
+                    long baseTime = 159L; 
+                    long currentCall = callCount.getAndIncrement();
+                    KlineSnapshot dynSnapshot = new KlineSnapshot(100L, baseTime + (currentCall * 60), 
+                        BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 0, true);
+                    ClosedKlineSnapshot dynClosed = new ClosedKlineSnapshot("M1", dynSnapshot);
+                    return new AggregationResult(List.of(dynClosed), List.of(), List.of());
+                });
+
         TickRawEvent event = new TickRawEvent("btcusdt", BigDecimal.valueOf(50000), BigDecimal.valueOf(1),
                 Instant.now(), "s1");
 
