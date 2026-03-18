@@ -52,5 +52,3 @@ out/
 .vscode/
 
 ### Spring local config (DO NOT COMMIT SECRETS) ###
-**/application-consumer.yml
-**/application-api.yml
