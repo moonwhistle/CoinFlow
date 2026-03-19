@@ -5,7 +5,6 @@ import com.coinflow.handler.TickRawMessageHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.MapRecord;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.stereotype.Component;
 
@@ -15,22 +14,19 @@ import org.springframework.stereotype.Component;
 public class TickRawEventConsumer implements StreamListener<String, MapRecord<String, String, String>> {
 
     private final TickRawMessageHandler handler;
-    private final RedisTemplate<String, String> redisTemplate;
     private final TickConsumerProperties properties;
 
     @Override
     public void onMessage(MapRecord<String, String, String> record) {
-        boolean success = handler.handle(record.getValue(), record.getId().getValue());
+        // 실제 ACK는 비동기 작업(DB 저장 등)이 완료된 후 TickProcessService에서 수행함
+        boolean submitted = handler.handle(
+                record.getValue(), 
+                properties.streamKey(), 
+                properties.group(), 
+                record.getId());
 
-        if (success) {
-            redisTemplate.opsForStream()
-                    .acknowledge(
-                            properties.streamKey(),
-                            properties.group(),
-                            record.getId());
-        } else {
-            // 실패 > pending 유지
-            log.debug("Processing failed. keep pending. recordId={}", record.getId());
+        if (!submitted) {
+            log.error("Failed to submit message for processing. recordId={}", record.getId());
         }
     }
 }

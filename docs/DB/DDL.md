@@ -46,6 +46,7 @@ CREATE TABLE ohlc_1m/5m/30m/1d (
     close_price NUMERIC(18, 6) NOT NULL,
     volume BIGINT NOT NULL,
     updated_at TIMESTAMP NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
 
     CONSTRAINT fk_ohlc_1m/5m/30m/1d_symbol
         FOREIGN KEY (symbol_id) REFERENCES symbol(id),

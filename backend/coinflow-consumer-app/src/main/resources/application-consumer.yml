@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ohlc
+    username: ohlc_user
+    password: 1234
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+redis:
+  stream:
+    tick:
+      stream-key: tick:raw
+      group: tick-consumer-group
+      consumer-name: consumer-1
+
+coinflow:
+  async:
+    db-persist:
+      core-pool-size: 10
+      max-pool-size: 10
+      queue-capacity: 500
+      keep-alive-seconds: 60
+      thread-name-prefix: db-persist-
+      max-attempts: 3
+      retry-delay: 1000
+      retry-multiplier: 2
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+    com.coinflow: debug
