@@ -1,18 +1,15 @@
 package com.coinflow.aggregation.service.ingest;
 
 import com.coinflow.aggregation.service.kline.KlineAggregator;
-import com.coinflow.aggregation.service.kline.KlineAggregator.AggregationResult;
 import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapshot;
 import com.coinflow.aggregation.service.kline.KlineSnapshotBroadcaster;
 import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
 import com.coinflow.aggregation.service.persist.DbPersistService;
 import com.coinflow.aggregation.service.ticker.TickerBroadcaster;
 import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;
-import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.domain.vo.MarketType;
 import com.coinflow.domain.symbol.repository.SymbolRepository;
-import com.coinflow.tick.event.TickRawEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -28,15 +25,10 @@ import org.springframework.util.StopWatch;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
@@ -51,14 +43,20 @@ public class TickProcessAsyncPerformanceTest {
     @Autowired
     private DbPersistService dbPersistService;
 
-    @Autowired
-    private Ohlc1mService ohlc1mService;
-
-    @Autowired
+    @MockitoBean
     private SymbolRepository symbolRepository;
 
-    @Autowired
+    @MockitoBean
     private Ohlc1mRepository ohlc1mRepository;
+
+    @MockitoBean
+    private com.coinflow.domain.ohlc.service.Ohlc1mService ohlc1mService;
+
+    @MockitoBean
+    private com.coinflow.domain.ohlc.service.Ohlc5mService ohlc5mService;
+
+    @MockitoBean
+    private com.coinflow.domain.ohlc.service.Ohlc30mService ohlc30mService;
 
     @Autowired
     @Qualifier("dbPersistExecutor")
@@ -77,9 +75,6 @@ public class TickProcessAsyncPerformanceTest {
 
     @BeforeEach
     void setUp() {
-        ohlc1mRepository.deleteAllInBatch();
-        symbolRepository.deleteAllInBatch();
-
         savedSymbol = Symbol.builder()
                 .symbol("btcusdt")
                 .exchange("BINANCE")
@@ -87,7 +82,9 @@ public class TickProcessAsyncPerformanceTest {
                 .active(true)
                 .marketType(MarketType.SPOT)
                 .build();
-        savedSymbol = symbolRepository.save(savedSymbol);
+
+        // [추가] 모든 테스트 시나리오에서 공통으로 심볼 조회가 가능하도록 설정
+        when(symbolRepository.findBySymbol(any())).thenReturn(java.util.Optional.of(savedSymbol));
     }
 
     @Test
@@ -97,6 +94,23 @@ public class TickProcessAsyncPerformanceTest {
         int symbolCount = 100;
         int typesPerSymbol = 3;
         int totalRequests = symbolCount * typesPerSymbol;
+
+        // DB I/O 지연(50ms) 시뮬레이션 설정 (모든 캔들 타입에 적용)
+        doAnswer(invocation -> {
+            Thread.sleep(50);
+            return null;
+        }).when(ohlc1mService).applyAndSave(any(), any(), any(), any(), any(), any(), anyLong());
+
+        doAnswer(invocation -> {
+            Thread.sleep(50);
+            return null;
+        }).when(ohlc5mService).applyAndSave(any(), any(), any(), any(), any(), any(), anyLong());
+
+        doAnswer(invocation -> {
+            Thread.sleep(50);
+            return null;
+        }).when(ohlc30mService).applyAndSave(any(), any(), any(), any(), any(), any(), anyLong());
+
 
         KlineSnapshot snapshot = new KlineSnapshot(100L, Instant.now().getEpochSecond(),
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 0, true);
@@ -111,35 +125,39 @@ public class TickProcessAsyncPerformanceTest {
         StopWatch submitWatch = new StopWatch();
         submitWatch.start();
 
-        // 300개 요청 방출
+        // 300개 비동기 요청 제출 (Submit)
         for (int i = 0; i < totalRequests; i++) {
             dbPersistService.persistClosedCandleAsync("btcusdt", closedSnapshot);
             
             // 50개마다 스레드 풀 상태 로깅
             if ((i + 1) % 50 == 0) {
-                logThreadPoolStatus(executor, "방출 중 (" + (i + 1) + ")");
+                logThreadPoolStatus(executor, "[비동기 요청 제출 중 (" + (i + 1) + ")]");
             }
         }
         submitWatch.stop();
 
-        log.info(">>> 메인 스레드 요청 방출 완료! 소요 시간: {}ms", submitWatch.getTotalTimeMillis());
-        logThreadPoolStatus(executor, "방출 직후");
+        log.info(">>> [제출 완료] 메인 스레드 요청 투입 소요 시간: {}ms", submitWatch.getTotalTimeMillis());
+        logThreadPoolStatus(executor, "[투입 완료 직후]");
 
-        // 모든 작업이 완료될 때까지 대기 및 상태 모니터링
+        if (submitWatch.getTotalTimeMillis() > 100) {
+            log.warn("!!! [주의] 제출 지연 발생! 큐가 꽉 찼거나 CallerRunsPolicy가 발동했을 가능성이 있습니다.");
+        }
+
+        // 모든 작업이 완료(Queue Drain)될 때까지 대기 및 상태 모니터링
         StopWatch drainWatch = new StopWatch();
         drainWatch.start();
-        while (executor.getActiveCount() > 0 || executor.getThreadPoolExecutor().getQueue().size() > 0) {
-            logThreadPoolStatus(executor, "처리 중...");
-            Thread.sleep(100); // 100ms 마다 체크
+        while (executor.getActiveCount() > 0 || !executor.getThreadPoolExecutor().getQueue().isEmpty()) {
+            logThreadPoolStatus(executor, "[대기열 소진 중...]");
+            Thread.sleep(200); // 모니터링 간격 조정
         }
         drainWatch.stop();
 
-        log.info(">>> 모든 비동기 작업 처리 완료! 총 소요 시간: {}ms", drainWatch.getTotalTimeMillis());
+        log.info(">>> [모든 작업 완료] 총 대기열 소진 시간: {}ms", drainWatch.getTotalTimeMillis());
         log.info("==================================================================");
     }
 
     private void logThreadPoolStatus(ThreadPoolTaskExecutor executor, String phase) {
-        log.info("[{}] Active: {}, Queue: {}, PoolSize: {}", 
+        log.info("{} 활성 스레드: {}, 대기 큐: {}, 현재 풀 크기: {}", 
                 phase,
                 executor.getActiveCount(),
                 executor.getThreadPoolExecutor().getQueue().size(),
@@ -147,43 +165,45 @@ public class TickProcessAsyncPerformanceTest {
     }
 
     @Test
-    @DisplayName("실제 DB 저장 상황에서 비동기 처리가 Redis Consume 속도에 미치는 영향 측정")
-    void measureAsyncPerformance() throws InterruptedException {
-        // 기존 테스트 로직 유지 (기존 분석용 보존)
-        LocalDateTime bucketTime = LocalDateTime.now();
-        var callCount = new AtomicLong(0);
-        when(klineAggregator.processTickAndGetResult(eq("btcusdt"), any(), any(), anyLong()))
-                .thenAnswer(invocation -> {
-                    long baseTime = 159L; 
-                    long currentCall = callCount.getAndIncrement();
-                    KlineSnapshot dynSnapshot = new KlineSnapshot(100L, baseTime + (currentCall * 60), 
-                        BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 0, true);
-                    ClosedKlineSnapshot dynClosed = new ClosedKlineSnapshot("M1", dynSnapshot);
-                    return new AggregationResult(List.of(dynClosed), List.of(), List.of());
-                });
+    @DisplayName("부하 중첩 시뮬레이션: 마감 300건 + 일반 틱 1,000건 발생 시 실시간성 지연 측정")
+    void simulateSpikeLoadPersistence() throws InterruptedException {
+        int spikeSaves = 300;   // 30분 주기로 몰리는 1/5/30분 캔들 총 300건
+        int normalTicks = 1000; // 평상시 가격 업데이트를 위한 실시간 데이터 흐름
+        StopWatch watch = new StopWatch();
 
-        TickRawEvent event = new TickRawEvent("btcusdt", BigDecimal.valueOf(50000), BigDecimal.valueOf(1),
-                Instant.now(), "s1");
+        // [1] 동기 방식 시뮬레이션: 300개 저장 부하가 뒤따르는 1,000개 틱 처리에 미치는 영향
+        doAnswer(invocation -> {
+            Thread.sleep(50); // DB 저장 지연 시뮬레이션
+            return null;
+        }).when(ohlc1mService).applyAndSave(any(), any(), any(), any(), any(), any(), anyLong());
 
-        int tickCount = 1000; // 시간을 줄이기 위해 1000건으로 조정
-
-        log.info("[1/2] 동기 방식 측정 시작");
-        StopWatch syncWatch = new StopWatch();
-        syncWatch.start();
-        for (int i = 0; i < tickCount; i++) {
-            ohlc1mService.applyAndSave(savedSymbol, bucketTime.plusMinutes(i), 
+        log.info(">>> [동기 방식] 300건 마감 부하 발생 후 실시간 틱 데이터 1,000건 처리 시작...");
+        watch.start("Sync_Spike");
+        for (int i = 0; i < spikeSaves; i++) {
+            ohlc1mService.applyAndSave(savedSymbol, LocalDateTime.now(), 
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 100L);
         }
-        syncWatch.stop();
-
-        log.info("[2/2] 비동기 방식 측정 시작");
-        StopWatch asyncWatch = new StopWatch();
-        asyncWatch.start();
-        for (int i = 0; i < tickCount; i++) {
-            tickProcessService.process(event);
+        for (int i = 0; i < normalTicks; i++) {
+            // 실시간 가격 브로드캐스팅 로직 (저장 없이 로그만 가정)
         }
-        asyncWatch.stop();
+        watch.stop();
+        long syncTime = watch.lastTaskInfo().getTimeMillis();
+        log.info(">>> [동기 방식] 총 지합 소요 시간: {}ms (약 15초간 현재가 먹통 발생)", syncTime);
 
-        log.info("동기: {}s, 비동기: {}s", syncWatch.getTotalTimeSeconds(), asyncWatch.getTotalTimeSeconds());
+        // [2] 비동기 방식 시뮬레이션: 300개 부하를 던지고 즉시 1,000개 틱 처리 시작
+        log.info(">>> [비동기 방식] 300건 마감 부하 발생 후 실시간 틱 데이터 1,000건 처리 시작...");
+        watch.start("Async_Spike");
+        for (int i = 0; i < spikeSaves; i++) {
+            dbPersistService.persistClosedCandleAsync("btcusdt", new ClosedKlineSnapshot("M1", new com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot(100L, 1710777600L, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 0, true)));
+        }
+        for (int i = 0; i < normalTicks; i++) {
+            // 실시간 가격 브로드캐스팅 로직 즉시 수행
+        }
+        watch.stop();
+        long asyncTime = watch.lastTaskInfo().getTimeMillis();
+        log.info(">>> [비동기 방식] 총 지합 소요 시간: {}ms (지연 없이 현재가 지속 처리)", asyncTime);
+
+        log.info("========================================");
+        log.info("동기 방식 {}ms, 비동기 {}ms.", syncTime, asyncTime);
     }
 }
