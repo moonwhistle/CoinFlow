@@ -18,6 +18,7 @@ import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -41,7 +42,7 @@ public class DbPersistService {
                     multiplierExpression = "${coinflow.async.db-persist.retry-multiplier}"
             )
     )
-    public void persistClosedCandleAsync(String symbolCode, ClosedKlineSnapshot closedSnapshot) {
+    public CompletableFuture<Void> persistClosedCandleAsync(String symbolCode, ClosedKlineSnapshot closedSnapshot) {
         log.debug("[DB-ASYNC] Started persistence for {} candle, symbol={}", closedSnapshot.interval(), symbolCode);
 
         Symbol symbol = symbolService.findBySymbol(symbolCode);
@@ -53,6 +54,8 @@ public class DbPersistService {
 
         log.info("[DB-ASYNC] Successfully persisted {} candle for {} at {}",
                 closedSnapshot.interval(), symbolCode, bucketTime);
+
+        return CompletableFuture.completedFuture(null);
     }
 
     private void saveByInterval(Symbol symbol, LocalDateTime bucketTime, ClosedKlineSnapshot closedSnapshot, long volume) {
@@ -77,8 +80,10 @@ public class DbPersistService {
      * 모든 재시도가 실패시 실행
      */
     @Recover
-    public void recover(Exception e, String symbolCode, ClosedKlineSnapshot closedSnapshot) {
+    public CompletableFuture<Void> recover(Exception e, String symbolCode, ClosedKlineSnapshot closedSnapshot) {
         log.error("[DB-ASYNC-FATAL] All retry attempts failed for {} {} candle. Batch will reconcile later. error={}",
                 symbolCode, closedSnapshot.interval(), e.getMessage());
+
+        return CompletableFuture.completedFuture(null);
     }
 }

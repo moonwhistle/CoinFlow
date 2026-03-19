@@ -29,8 +29,8 @@ redis:
 coinflow:
   async:
     db-persist:
-      core-pool-size: 3
-      max-pool-size: 5
+      core-pool-size: 10
+      max-pool-size: 10
       queue-capacity: 500
       keep-alive-seconds: 60
       thread-name-prefix: db-persist-

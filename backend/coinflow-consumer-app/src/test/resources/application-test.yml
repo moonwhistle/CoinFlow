@@ -16,9 +16,9 @@ spring:
 coinflow:
   async:
     db-persist:
-      core-pool-size: 3
+      core-pool-size: 5
       max-pool-size: 5
-      queue-capacity: 300
+      queue-capacity: 500
       keep-alive-seconds: 60
       thread-name-prefix: test-db-
       max-attempts: 3
