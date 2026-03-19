@@ -87,6 +87,15 @@ To aggregate the volume without sacrificing precision or system latency, Use a *
 
 For more details.. [click here](https://sanghu-i.tistory.com/125)
 
+### Candle Data Storage Strategy(For Real-time)
+To keep tickers fast, send candle data to a separate **Async Thread Pool**. 
+
+Since data can arrive late or duplicated, we use a **Unique Index** and **Optimistic Locking** to keep charts accurate. 
+
+This ensures maximum speed without sacrificing data integrity on a single CPU resource.
+
+For more details.. [click here](https://sanghu-i.tistory.com/127)
+
 ### Save scaled volume to DB (why not decimal?)
 - **B-Tree Indexing efficiency**: (To be updated)
 - **Aggregation Performance**: (To be updated)

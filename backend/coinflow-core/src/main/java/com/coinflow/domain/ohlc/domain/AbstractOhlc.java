@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
@@ -55,6 +56,9 @@ public abstract class AbstractOhlc implements OhlcCandle {
 
     @Column(nullable = false)
     protected LocalDateTime updatedAt;
+
+    @Version
+    protected Long version;
 
     @PrePersist
     protected void prePersist() {

@@ -3,6 +3,7 @@ package com.coinflow.domain.ohlc.domain;
 import com.coinflow.domain.symbol.domain.Symbol;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
@@ -10,7 +11,12 @@ import lombok.Builder;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "ohlc_1m")
+@Table(name = "ohlc_1m", uniqueConstraints = {
+        @UniqueConstraint(
+                name = "uk_ohlc_1m_symbol_bucket",
+                columnNames = {"symbol_id", "bucket_time"}
+        )
+})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Ohlc1m extends AbstractOhlc {
 
