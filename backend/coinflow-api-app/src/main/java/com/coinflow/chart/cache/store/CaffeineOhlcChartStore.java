@@ -41,11 +41,11 @@ public class CaffeineOhlcChartStore implements OhlcChartStore {
         List<OhlcCandleSnapshot> cached = cache.getIfPresent(key);
 
         if (cached != null) {
-            log.debug("⚡ L1 Cache Hit! [Key: {}]", key);
+            log.debug("L1 Cache Hit! [Key: {}]", key);
             return Optional.of(cached);
         }
 
-        log.debug("❄️ L1 Cache Miss! [Key: {}]", key);
+        log.debug("L1 Cache Miss! [Key: {}]", key);
         return Optional.empty();
     }
 
@@ -59,6 +59,6 @@ public class CaffeineOhlcChartStore implements OhlcChartStore {
     ) {
         String key = OhlcCacheKey.chartKey(symbolId, interval, candles, endExclusive);
         cache.put(key, snapshots);
-        log.debug("💾 L1 Cache Put! [Key: {}]", key);
+        log.debug("L1 Cache Put! [Key: {}]", key);
     }
 }

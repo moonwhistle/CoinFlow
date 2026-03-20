@@ -3,12 +3,14 @@ package com.coinflow.chart.service;
 import com.coinflow.common.exception.ApiErrorCode;
 import com.coinflow.common.exception.ApiException;
 import com.coinflow.domain.ohlc.cache.OhlcChartStore;
+import com.coinflow.chart.cache.store.CaffeineOhlcChartStore;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
+import com.coinflow.domain.ohlc.domain.AbstractOhlc;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
@@ -30,7 +32,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class OhlcChartService {
 
-    private final OhlcChartStore chartStore;
+    private final CaffeineOhlcChartStore chartStore;
     private final Clock clock;
     private final Ohlc1mService ohlc1mService;
     private final Ohlc5mService ohlc5mService;
@@ -63,30 +65,17 @@ public class OhlcChartService {
             LocalDateTime endExclusive) {
         LocalDateTime startInclusive = endExclusive.minus(interval.duration().multipliedBy(candles));
 
-        if (interval == OhlcInterval.M1) {
-            List<Ohlc1m> candles1m = ohlc1mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive);
-            return candles1m.stream()
-                    .map(OhlcCandleSnapshot::from)
-                    .toList();
-        }
+        return switch (interval) {
+            case M1 -> toSnapshots(ohlc1mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive));
+            case M5 -> toSnapshots(ohlc5mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive));
+            case M30 -> toSnapshots(ohlc30mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive));
+        };
+    }
 
-        if (interval == OhlcInterval.M5) {
-            return ohlc5mService
-                    .findCandlesInBucketRange(symbolId, startInclusive, endExclusive)
-                    .stream()
-                    .map(OhlcCandleSnapshot::from)
-                    .toList();
-        }
-
-        if (interval == OhlcInterval.M30) {
-            return ohlc30mService
-                    .findCandlesInBucketRange(symbolId, startInclusive, endExclusive)
-                    .stream()
-                    .map(OhlcCandleSnapshot::from)
-                    .toList();
-        }
-
-        throw new ApiException(ApiErrorCode.UNSUPPORTED_OHLC_INTERVAL);
+    private List<OhlcCandleSnapshot> toSnapshots(List<? extends AbstractOhlc> candles) {
+        return candles.stream()
+                .map(OhlcCandleSnapshot::from)
+                .toList();
     }
 
     /**
