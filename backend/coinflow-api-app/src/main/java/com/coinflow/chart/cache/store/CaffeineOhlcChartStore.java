@@ -6,26 +6,42 @@ import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import java.time.Duration;
+import com.github.benmanes.caffeine.cache.Expiry;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.index.qual.NonNegative;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 public class CaffeineOhlcChartStore implements OhlcChartStore {
 
-    /** 마감된 데이터는 분 단위로 키가 바뀌므로 60초면 충분함 */
-    private static final Duration TTL = Duration.ofSeconds(60);
     private static final long MAX_SIZE = 500;
 
-    private final Cache<String, List<OhlcCandleSnapshot>> cache;
+    private final Cache<String, CachedChart> cache;
 
     public CaffeineOhlcChartStore() {
         this.cache = Caffeine.newBuilder()
-                .expireAfterWrite(TTL)
+                .expireAfter(new Expiry<String, CachedChart>() {
+                    @Override
+                    public long expireAfterCreate(String key, CachedChart value, long currentTime) {
+                        return value.ttlNanos();
+                    }
+
+                    @Override
+                    public long expireAfterUpdate(String key, CachedChart value,
+                            long currentTime, @NonNegative long currentDuration) {
+                        return value.ttlNanos();
+                    }
+
+                    @Override
+                    public long expireAfterRead(String key, CachedChart value,
+                            long currentTime, @NonNegative long currentDuration) {
+                        return currentDuration;
+                    }
+                })
                 .maximumSize(MAX_SIZE)
                 .build();
     }
@@ -38,14 +54,14 @@ public class CaffeineOhlcChartStore implements OhlcChartStore {
             LocalDateTime endExclusive
     ) {
         String key = OhlcCacheKey.chartKey(symbolId, interval, candles, endExclusive);
-        List<OhlcCandleSnapshot> cached = cache.getIfPresent(key);
+        CachedChart cached = cache.getIfPresent(key);
 
         if (cached != null) {
-            log.debug("L1 Cache Hit! [Key: {}]", key);
-            return Optional.of(cached);
+            log.debug("L1 Cache Hit [key={}, interval={}]", key, interval);
+            return Optional.of(cached.snapshots());
         }
 
-        log.debug("L1 Cache Miss! [Key: {}]", key);
+        log.debug("L1 Cache Miss [key={}, interval={}]", key, interval);
         return Optional.empty();
     }
 
@@ -58,7 +74,10 @@ public class CaffeineOhlcChartStore implements OhlcChartStore {
             List<OhlcCandleSnapshot> snapshots
     ) {
         String key = OhlcCacheKey.chartKey(symbolId, interval, candles, endExclusive);
-        cache.put(key, snapshots);
-        log.debug("L1 Cache Put! [Key: {}]", key);
+        cache.put(key, new CachedChart(snapshots, interval.cacheTtl().toNanos()));
+        log.debug("L1 Cache Put [key={}, interval={}, ttl={}s]", key, interval, interval.cacheTtl().toSeconds());
+    }
+
+    private record CachedChart(List<OhlcCandleSnapshot> snapshots, long ttlNanos) {
     }
 }
