@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 public class RedisOhlcChartStore implements OhlcChartStore {
 
     /** 조회 성능에 따라 interval 별로 TTL 변경 고려*/
-    private static final Duration TTL = Duration.ofSeconds(2);
+    private static final Duration TTL = Duration.ofSeconds(60);
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
