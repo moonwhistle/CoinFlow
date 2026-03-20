@@ -3,7 +3,6 @@ package com.coinflow.chart.service;
 import com.coinflow.common.exception.ApiErrorCode;
 import com.coinflow.common.exception.ApiException;
 import com.coinflow.domain.ohlc.cache.OhlcChartStore;
-import com.coinflow.chart.cache.store.CaffeineOhlcChartStore;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
@@ -32,7 +31,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class OhlcChartService {
 
-    private final CaffeineOhlcChartStore chartStore;
+    private final OhlcChartStore chartStore;
     private final Clock clock;
     private final Ohlc1mService ohlc1mService;
     private final Ohlc5mService ohlc5mService;
