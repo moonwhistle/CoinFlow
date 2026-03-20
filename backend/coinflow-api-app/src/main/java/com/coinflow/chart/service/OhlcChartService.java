@@ -43,51 +43,47 @@ public class OhlcChartService {
         LocalDateTime base1mBucket = TimeBucket.to1m(nowInstant);
         LocalDateTime endExclusive = interval.resolveBucketStart(base1mBucket);
 
-        return chartStore.get(symbolId, interval, candles, endExclusive)
-                .orElseGet(() -> loadAndCache(
-                        symbolId,
-                        interval,
-                        candles,
-                        endExclusive,
-                        base1mBucket));
+        // 1. 마감된(Closed) 캔들만 캐시 또는 DB에서 조회 (캐싱 주체)
+        List<OhlcCandleSnapshot> closedCandles = chartStore.get(symbolId, interval, candles, endExclusive)
+                .orElseGet(() -> loadAndCache(symbolId, interval, candles, endExclusive));
+
+        // 2. 현재 진행 중인(Live) 캔들은 항상 Redis에서 실시간으로 조회하여 병합 (캐싱 제외)
+        return mergeRealTimeCandleIntoSnapshot(closedCandles, symbolId, base1mBucket, interval);
     }
 
     private List<OhlcCandleSnapshot> loadAndCache(Long symbolId, OhlcInterval interval, int candles,
-            LocalDateTime endExclusive, LocalDateTime base1mBucket) {
-        List<OhlcCandleSnapshot> result = loadFromDataSource(symbolId, interval, candles, endExclusive, base1mBucket);
+            LocalDateTime endExclusive) {
+        List<OhlcCandleSnapshot> result = loadClosedCandles(symbolId, interval, candles, endExclusive);
         chartStore.put(symbolId, interval, candles, endExclusive, result);
 
         return result;
     }
 
-    private List<OhlcCandleSnapshot> loadFromDataSource(Long symbolId, OhlcInterval interval, int candles,
-            LocalDateTime endExclusive, LocalDateTime base1mBucket) {
+    private List<OhlcCandleSnapshot> loadClosedCandles(Long symbolId, OhlcInterval interval, int candles,
+            LocalDateTime endExclusive) {
         LocalDateTime startInclusive = endExclusive.minus(interval.duration().multipliedBy(candles));
 
         if (interval == OhlcInterval.M1) {
             List<Ohlc1m> candles1m = ohlc1mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive);
-            List<OhlcCandleSnapshot> snapshots = new ArrayList<>(candles1m.stream()
+            return candles1m.stream()
                     .map(OhlcCandleSnapshot::from)
-                    .toList());
-            return mergeRealTimeCandleIntoSnapshot(snapshots, symbolId, base1mBucket, interval);
+                    .toList();
         }
 
         if (interval == OhlcInterval.M5) {
-            List<OhlcCandleSnapshot> snapshots = ohlc5mService
+            return ohlc5mService
                     .findCandlesInBucketRange(symbolId, startInclusive, endExclusive)
                     .stream()
                     .map(OhlcCandleSnapshot::from)
                     .toList();
-            return mergeRealTimeCandleIntoSnapshot(snapshots, symbolId, base1mBucket, interval);
         }
 
         if (interval == OhlcInterval.M30) {
-            List<OhlcCandleSnapshot> snapshots = ohlc30mService
+            return ohlc30mService
                     .findCandlesInBucketRange(symbolId, startInclusive, endExclusive)
                     .stream()
                     .map(OhlcCandleSnapshot::from)
                     .toList();
-            return mergeRealTimeCandleIntoSnapshot(snapshots, symbolId, base1mBucket, interval);
         }
 
         throw new ApiException(ApiErrorCode.UNSUPPORTED_OHLC_INTERVAL);
