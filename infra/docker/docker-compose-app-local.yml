@@ -17,6 +17,12 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
+      - JAVA_TOOL_OPTIONS=-Xmx512m -Xms512m
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
