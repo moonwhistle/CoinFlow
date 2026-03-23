@@ -9,7 +9,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.NonNegative;
 import org.springframework.stereotype.Component;
@@ -47,35 +47,23 @@ public class CaffeineOhlcChartStore implements OhlcChartStore {
     }
 
     @Override
-    public Optional<List<OhlcCandleSnapshot>> get(
-            Long symbolId,
-            OhlcInterval interval,
-            int candles,
-            LocalDateTime endExclusive
-    ) {
-        String key = OhlcCacheKey.chartKey(symbolId, interval, candles, endExclusive);
-        CachedChart cached = cache.getIfPresent(key);
-
-        if (cached != null) {
-            log.debug("L1 Cache Hit [key={}, interval={}]", key, interval);
-            return Optional.of(cached.snapshots());
-        }
-
-        log.debug("L1 Cache Miss [key={}, interval={}]", key, interval);
-        return Optional.empty();
-    }
-
-    @Override
-    public void put(
+    public List<OhlcCandleSnapshot> getOrLoad(
             Long symbolId,
             OhlcInterval interval,
             int candles,
             LocalDateTime endExclusive,
-            List<OhlcCandleSnapshot> snapshots
+            Supplier<List<OhlcCandleSnapshot>> loader
     ) {
         String key = OhlcCacheKey.chartKey(symbolId, interval, candles, endExclusive);
-        cache.put(key, new CachedChart(snapshots, interval.cacheTtl().toNanos()));
-        log.debug("L1 Cache Put [key={}, interval={}, ttl={}s]", key, interval, interval.cacheTtl().toSeconds());
+
+        CachedChart cached = cache.get(key, k -> {
+            log.debug("L1 Cache Miss → Loading from DB [key={}, interval={}]", k, interval);
+            List<OhlcCandleSnapshot> result = loader.get();
+            return new CachedChart(result, interval.cacheTtl().toNanos());
+        });
+
+        log.debug("L1 Cache Hit [key={}, interval={}]", key, interval);
+        return cached.snapshots();
     }
 
     private record CachedChart(List<OhlcCandleSnapshot> snapshots, long ttlNanos) {

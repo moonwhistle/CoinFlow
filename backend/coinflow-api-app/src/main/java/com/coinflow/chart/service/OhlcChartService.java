@@ -1,10 +1,8 @@
 package com.coinflow.chart.service;
 
-import com.coinflow.common.exception.ApiErrorCode;
-import com.coinflow.common.exception.ApiException;
 import com.coinflow.domain.ohlc.cache.OhlcChartStore;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
-import com.coinflow.domain.ohlc.domain.Ohlc1m;
+
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
@@ -44,20 +42,14 @@ public class OhlcChartService {
         LocalDateTime base1mBucket = TimeBucket.to1m(nowInstant);
         LocalDateTime endExclusive = interval.resolveBucketStart(base1mBucket);
 
-        // 1. 마감된(Closed) 캔들만 캐시 또는 DB에서 조회 (캐싱 주체)
-        List<OhlcCandleSnapshot> closedCandles = chartStore.get(symbolId, interval, candles, endExclusive)
-                .orElseGet(() -> loadAndCache(symbolId, interval, candles, endExclusive));
+        // 1. 마감된(Closed) 캔들: 캐시에 있으면 반환, 없으면 loader(DB 조회)를 1회만 실행
+        List<OhlcCandleSnapshot> closedCandles = chartStore.getOrLoad(
+                symbolId, interval, candles, endExclusive,
+                () -> loadClosedCandles(symbolId, interval, candles, endExclusive)
+        );
 
         // 2. 현재 진행 중인(Live) 캔들은 항상 Redis에서 실시간으로 조회하여 병합 (캐싱 제외)
         return mergeRealTimeCandleIntoSnapshot(closedCandles, symbolId, base1mBucket, interval);
-    }
-
-    private List<OhlcCandleSnapshot> loadAndCache(Long symbolId, OhlcInterval interval, int candles,
-            LocalDateTime endExclusive) {
-        List<OhlcCandleSnapshot> result = loadClosedCandles(symbolId, interval, candles, endExclusive);
-        chartStore.put(symbolId, interval, candles, endExclusive, result);
-
-        return result;
     }
 
     private List<OhlcCandleSnapshot> loadClosedCandles(Long symbolId, OhlcInterval interval, int candles,
