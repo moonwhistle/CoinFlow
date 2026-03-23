@@ -363,3 +363,45 @@ List<OhlcCandleSnapshot> result = cache.get(key, k -> {
 
 이 변경으로 인해 **Cache-Aside의 안정성**(캐시 장애 시 DB fallback 가능)은 그대로 유지하면서도, 동시 요청이 몰리는 Cache Miss 시점에서 **DB 쿼리를 단 1회로 제한**할 수 있게 되었습니다.
 
+## Symbol 검증을 통한 Cache penetration 방어
+
+캐시 관통(Cache Penetration) 문제를 해결하기 위해 어떤 방법이 가장 효과적일까 고민을 많이 했습니다. 일반적으로 알려진 **Null Caching** 전략이나 **Bloom Filter** 도입을 검토했지만, 현재 프로젝트의 특수한 상황을 고려했을 때 최선의 선택은 아니라고 판단했습니다.
+
+### 1. 고려했던 전략들과 기회비용
+
+**Null Caching (빈 결과 캐싱)**
+- **방식**: 존재하지 않는 데이터에 대해 "응답 없음" 이라는 결과 자체를 짧은 TTL로 캐싱하는 방법
+- **포기한 이유**: 공격자가 무작위 ID(10000, 10001...)로 대량 요청을 보낼 경우, 캐시 공간(최대 500개)이 의미 없는 Null 데이터로 가득 차게 됩니다. 정작 중요한 실시간 차트 데이터가 캐시에서 밀려나는 **캐시 오염(Cache Pollution)** 문제가 더 크다고 판단했습니다.
+
+**Bloom Filter**
+- **방식**: 대량의 데이터 셋에서 "이 키가 존재하는가?"를 확률적으로 빠르게 판단하는 필터링 기법
+- **포기한 이유**: Bloom Filter는 수만 건 이상의 방대한 키를 다룰 때 성능 이점이 생깁니다. 하지만 현재 코인플로우 서비스에서 다루는 **종목(심볼)이 최대 100개 내외**라는 점을 고려하면, 별도의 자료구조를 관리하고 해시 충돌 가능성을 고려하는 것 자체가 과도한 설계(**Over-engineering**)라고 생각했습니다.
+
+### 2. 해결: 입구에서의 Symbol 유효성 검증 (Early Validation)
+
+결국 가장 단순하면서도 확실한 방법인 **"입구에서 차단하기"**를 선택했습니다. 캐시나 DB를 찌르기 전에, 요청받은 `symbolId`가 우리 서비스에서 관리하는 유효한 ID인지 먼저 확인하는 방식입니다.
+
+**변경 전 (Penetration 발생)**
+```java
+public List<OhlcCandleSnapshot> show(Long symbolId, ...) {
+    // 1. 유효성 검증 없이 바로 캐시/DB 조회 진입
+    List<OhlcCandleSnapshot> closedCandles = chartStore.getOrLoad(...);
+    
+    // 2. 한참 뒤에야 Symbol 필터링 발생 (이미 DB 자원을 소모한 뒤)
+    return mergeRealTimeCandleIntoSnapshot(...);
+}
+```
+
+**변경 후 (Early Validation 적용)**
+```java
+public List<OhlcCandleSnapshot> show(Long symbolId, ...) {
+    // 0. 캐시/DB에 접근하기 전에 Symbol 존재 여부 즉시 확인
+    Symbol symbol = symbolService.findSymbol(symbolId); // 없으면 여기서 예외 발생
+    
+    // 1. 이미 검증된 Symbol에 대해서만 비용이 큰 조회 로직 실행
+    List<OhlcCandleSnapshot> closedCandles = chartStore.getOrLoad(...);
+    ...
+}
+```
+
+이 방식을 통해 존재하지 않는 ID에 대한 악의적인 요청이 캐시 레이어나 DB 커넥션 풀에 영향을 주기 전에 즉시 예외로 처리되어, 시스템의 안정성을 확보할 수 있었습니다.

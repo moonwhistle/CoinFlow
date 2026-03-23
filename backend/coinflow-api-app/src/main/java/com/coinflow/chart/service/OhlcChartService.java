@@ -2,21 +2,20 @@ package com.coinflow.chart.service;
 
 import com.coinflow.domain.ohlc.cache.OhlcChartStore;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
-
+import com.coinflow.domain.ohlc.domain.AbstractOhlc;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
-import com.coinflow.domain.ohlc.domain.AbstractOhlc;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.util.TimeBucket;
-import java.time.ZoneOffset;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +37,9 @@ public class OhlcChartService {
     private final SymbolService symbolService;
 
     public List<OhlcCandleSnapshot> show(Long symbolId, OhlcInterval interval, int candles) {
+        // 0. 존재하지 않는 Symbol은 캐시/DB 조회 전에 즉시 차단 (Cache Penetration 방어)
+        Symbol symbol = symbolService.findSymbol(symbolId);
+
         Instant nowInstant = Instant.now(clock);
         LocalDateTime base1mBucket = TimeBucket.to1m(nowInstant);
         LocalDateTime endExclusive = interval.resolveBucketStart(base1mBucket);
@@ -49,7 +51,7 @@ public class OhlcChartService {
         );
 
         // 2. 현재 진행 중인(Live) 캔들은 항상 Redis에서 실시간으로 조회하여 병합 (캐싱 제외)
-        return mergeRealTimeCandleIntoSnapshot(closedCandles, symbolId, base1mBucket, interval);
+        return mergeRealTimeCandleIntoSnapshot(closedCandles, symbol, base1mBucket, interval);
     }
 
     private List<OhlcCandleSnapshot> loadClosedCandles(Long symbolId, OhlcInterval interval, int candles,
@@ -73,14 +75,13 @@ public class OhlcChartService {
      * 지정된 Snapshot 리스트에 현재 처리 중인 (Redis) 실시간 캔들을 덮어쓰기 병합한다.
      */
     private List<OhlcCandleSnapshot> mergeRealTimeCandleIntoSnapshot(
-            List<OhlcCandleSnapshot> snapshots, Long symbolId,
+            List<OhlcCandleSnapshot> snapshots, Symbol symbol,
             LocalDateTime baseBucket, OhlcInterval interval) {
 
         if (liveKlineRepository.isEmpty()) {
             return snapshots;
         }
 
-        Symbol symbol = symbolService.findSymbol(symbolId);
         Optional<KlineEvent> liveKlineOpt = liveKlineRepository.get().findBySymbolAndInterval(
                 symbol.getSymbol(), interval.name());
 
@@ -91,7 +92,6 @@ public class OhlcChartService {
         KlineEvent liveKline = liveKlineOpt.get();
         LocalDateTime liveBucketTime = LocalDateTime.ofEpochSecond(liveKline.startTime(), 0, ZoneOffset.UTC);
 
-        // Ensure that the live kline matches the requested timeframe
         if (!liveBucketTime.equals(baseBucket)) {
             return snapshots;
         }
@@ -107,7 +107,6 @@ public class OhlcChartService {
 
         List<OhlcCandleSnapshot> result = new ArrayList<>(snapshots);
 
-        // 해당 M5/M30 버킷을 찾아서 OHLCV 합산
         boolean replaced = false;
         for (int i = 0; i < result.size(); i++) {
             if (result.get(i).bucketTime().equals(baseBucket)) {
@@ -124,3 +123,4 @@ public class OhlcChartService {
         return result;
     }
 }
+
