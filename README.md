@@ -95,10 +95,14 @@ This ensures maximum speed without sacrificing data integrity on a single CPU re
 
 For more details.. [click here](https://sanghu-i.tistory.com/127)
 
-### Save scaled volume to DB (why not decimal?)
-- **B-Tree Indexing efficiency**: (To be updated)
-- **Aggregation Performance**: (To be updated)
-- **Data Integrity**: (To be updated)
+### Improve Chart API Latency with Caffeine Local Cache
+Applied **Caffeine Cache** to eliminate many DB queries for historical chart data, reducing API latency.
+
+- **Thundering Herd Prevention**: Used **Atomic Loading** (`cache.get(key, loader)`) to ensure that even with thousands of concurrent requests on a cache miss, only **exactly one** thread queries the DB while others wait for the result.
+
+- **Cache Penetration Defense**: Implemented **Early Validation** to reject requests for invalid symbols at the API entry point.
+
+For more details.. [click here](https://sanghu-i.tistory.com/128)
 
 ## Disclaimer
 This project is a personal, educational project built for learning purposes only.
