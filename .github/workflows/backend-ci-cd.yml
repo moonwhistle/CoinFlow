@@ -69,3 +69,6 @@ jobs:
 
           # 4. Nginx 재시작 (업스트림 컨테이너들의 변경된 내부 IP를 새로 인식시키기 위함)
           docker compose -f docker-compose-prod.yml restart nginx
+
+          # 5. 이전 배포에서 남은 미사용 Docker 이미지 정리 (디스크 풀 방지)
+          docker image prune -f
