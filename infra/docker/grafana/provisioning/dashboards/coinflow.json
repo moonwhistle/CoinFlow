@@ -47,7 +47,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(cache_gets_total{name=\"ohlc_chart_cache\", result=\"hit\"}[1m])) / sum(rate(cache_gets_total{name=\"ohlc_chart_cache\"}[1m])) * 100",
+          "expr": "sum(rate(cache_gets_total{cache=\"ohlc_chart_cache\", result=\"hit\"}[1m])) / sum(rate(cache_gets_total{cache=\"ohlc_chart_cache\"}[1m])) * 100",
           "legendFormat": "Hit Rate (%)"
         }
       ]
