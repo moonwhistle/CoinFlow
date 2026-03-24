@@ -42,73 +42,77 @@ public class TickProcessService {
     public void process(TickRawEvent event, String streamKey, String group, RecordId recordId) {
         log.debug("Processing tick event: {}", event);
 
-        // 1. Broadcast 100% real-time Ticker Event (only if it's newer than last broadcasted)
+        // 1. 실시간 시세 (Ticker) 브로드캐스팅 방어 및 전파
+        broadcastTickerIfNewer(event);
+
+        try {
+            // 2. 인메모리 캔들 (Kline) 생성 로직 (SSOT)
+            AggregationResult result = aggregateKline(event);
+
+            // 3. 집계된 스냅샷 전파 및 백그라운드 DB 갱신 예약
+            List<CompletableFuture<Void>> dbFutures = processAndPersistSnapshots(event.symbol(), result);
+
+            // 4. 모든 비동기 작업 종료 확인 후 Redis ACK 전송
+            acknowledgeAfterPersist(dbFutures, streamKey, group, recordId, event.symbol());
+
+            log.debug("[Consumer] Successfully processed or enqueued tick event - symbol={}", event.symbol());
+        } catch (Exception e) {
+            log.error("[Consumer] Failed to process tick event - symbol={}, price={}", event.symbol(), event.price(), e);
+            throw e;
+        }
+    }
+
+    private void broadcastTickerIfNewer(TickRawEvent event) {
         long currentEventTime = event.eventTime().toEpochMilli();
         long lastTime = lastBroadcastingTimeMap.getOrDefault(event.symbol(), 0L);
 
         if (currentEventTime >= lastTime) {
-            TickerEvent tickerEvent = new TickerEvent(
-                    event.symbol(),
-                    event.price(),
-                    event.quantity(),
-                    currentEventTime);
+            TickerEvent tickerEvent = new TickerEvent(event.symbol(), event.price(), event.quantity(), currentEventTime);
             tickerBroadcaster.broadcast(tickerEvent);
             lastBroadcastingTimeMap.put(event.symbol(), currentEventTime);
         } else {
             log.info("[Broadcaster] Skipping stale ticker broadcast. symbol={}, eventTime={}, lastTime={}",
                     event.symbol(), currentEventTime, lastTime);
         }
+    }
 
-        try {
-            // In-Memory Real-time Kline Aggregation (SSOT track)
-            AggregationResult result = klineAggregator.processTickAndGetResult(
-                    event.symbol(),
-                    event.price(),
-                    event.quantity(),
-                    event.eventTime().toEpochMilli());
+    private AggregationResult aggregateKline(TickRawEvent event) {
+        return klineAggregator.processTickAndGetResult(
+                event.symbol(),
+                event.price(),
+                event.quantity(),
+                event.eventTime().toEpochMilli()
+        );
+    }
 
-            List<CompletableFuture<Void>> futures = new ArrayList<>();
+    private List<CompletableFuture<Void>> processAndPersistSnapshots(String symbol, AggregationResult result) {
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-            // 1. Broadcast & Save Late Snapshots
-            for (ClosedKlineSnapshot c : result.lateUpdatedSnapshots()) {
-                klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
-                futures.add(dbPersistService.persistClosedCandleAsync(event.symbol(), c));
-            }
+        // 완료/지연 캔들 처리 (Live 캐시 + DB 영속화 병행)
+        result.lateUpdatedSnapshots().forEach(c -> processClosedSnapshot(symbol, c, futures));
+        result.closedSnapshots().forEach(c -> processClosedSnapshot(symbol, c, futures));
 
-            // 2. Broadcast & Save Closed Snapshots
-            for (ClosedKlineSnapshot c : result.closedSnapshots()) {
-                klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
-                futures.add(dbPersistService.persistClosedCandleAsync(event.symbol(), c));
-            }
+        // 진행중 캔들 처리 (Live 캐시 전용)
+        result.liveSnapshots().forEach(c -> klineBroadcaster.broadcastAndSave(symbol, c.interval(), c.snapshot()));
 
-            // 3. Broadcast & Save Live Snapshots
-            if (!result.liveSnapshots().isEmpty()) {
-                for (ClosedKlineSnapshot c : result.liveSnapshots()) {
-                    klineBroadcaster.broadcastAndSave(event.symbol(), c.interval(), c.snapshot());
-                }
-            }
+        return futures;
+    }
 
-            // Acknowledge after ALL async persistence tasks complete
-            if (futures.isEmpty()) {
-                acknowledge(streamKey, group, recordId);
-            } else {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .thenRun(() -> acknowledge(streamKey, group, recordId))
-                        .exceptionally(ex -> {
-                            log.error("Async persistence tasks failed for symbol={}. Message will NOT be ACKnowledged.", event.symbol(), ex);
-                            return null;
-                        });
-            }
+    private void processClosedSnapshot(String symbol, ClosedKlineSnapshot snapshot, List<CompletableFuture<Void>> futures) {
+        klineBroadcaster.broadcastAndSave(symbol, snapshot.interval(), snapshot.snapshot());
+        futures.add(dbPersistService.persistClosedCandleAsync(symbol, snapshot));
+    }
 
-            log.debug("[Consumer] Successfully processed or enqueued tick event - symbol={}", event.symbol());
-        } catch (Exception e) {
-            log.error(
-                    "[Consumer] Failed to process tick event - symbol={}, price={}",
-                    event.symbol(),
-                    event.price(),
-                    e);
-
-            throw e;
+    private void acknowledgeAfterPersist(List<CompletableFuture<Void>> futures, String streamKey, String group, RecordId recordId, String symbol) {
+        if (futures.isEmpty()) {
+            acknowledge(streamKey, group, recordId);
+        } else {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .thenRun(() -> acknowledge(streamKey, group, recordId))
+                    .exceptionally(ex -> {
+                        log.error("Async persistence tasks failed for symbol={}. Message will NOT be ACKnowledged.", symbol, ex);
+                        return null;
+                    });
         }
     }
 
