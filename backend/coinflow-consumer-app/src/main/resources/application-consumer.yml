@@ -42,3 +42,15 @@ logging:
   level:
     org.hibernate.SQL: debug
     com.coinflow: debug
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, metrics, health
+  metrics:
+    tags:
+      application: coinflow-consumer

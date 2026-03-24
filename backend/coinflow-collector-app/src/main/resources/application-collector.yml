@@ -5,8 +5,20 @@ binance:
     symbols:
       - btcusdt
   main:
-    web-application-type: none
+    web-application-type: servlet
 
 logging:
   level:
     com.coinflow: debug
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, metrics, health
+  metrics:
+    tags:
+      application: coinflow-collector

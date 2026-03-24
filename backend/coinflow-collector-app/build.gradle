@@ -6,6 +6,9 @@ dependencies {
     implementation project(':coinflow-common')
     implementation project(':coinflow-infra-redis')
 
+    // web (for actuator HTTP endpoints)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
     // JSON
     implementation 'org.springframework.boot:spring-boot-starter-json'
 
