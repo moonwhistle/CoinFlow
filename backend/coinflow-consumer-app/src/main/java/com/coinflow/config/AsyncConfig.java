@@ -10,6 +10,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.beans.factory.ObjectProvider;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 
 @Configuration
 @EnableAsync
@@ -21,7 +24,7 @@ public class AsyncConfig {
     private final AsyncDbPersistProperties properties;
 
     @Bean(name = "dbPersistExecutor")
-    public Executor dbPersistExecutor() {
+    public Executor dbPersistExecutor(ObjectProvider<MeterRegistry> meterRegistryProvider) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
 
         executor.setCorePoolSize(properties.corePoolSize()); // 기본으로 유지할 스레드 수
@@ -32,6 +35,14 @@ public class AsyncConfig {
         executor.setThreadNamePrefix(properties.threadNamePrefix()); // 스레드 이름 접두사
         executor.setRejectedExecutionHandler(new CallerRunsPolicy()); // 큐가 가득 찼을 때의 정책: 호출한 스레드에서 직접 실행
         executor.initialize();
+
+        meterRegistryProvider.ifAvailable(registry -> 
+            ExecutorServiceMetrics.monitor(
+                registry, 
+                executor.getThreadPoolExecutor(), 
+                "dbPersistExecutor"
+            )
+        );
 
         return executor;
     }

@@ -14,6 +14,10 @@ import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.coinflow.monitoring.MetricRecorder;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_LATENCY;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +34,7 @@ public class TickProcessService {
     private final TickerBroadcaster tickerBroadcaster;
     private final DbPersistService dbPersistService;
     private final RedisTemplate<String, String> redisTemplate;
+    private final MetricRecorder metricRecorder;
 
     // symbol -> last processed eventTime (ms) to prevent out-of-order broadcasting
     private final Map<String, Long> lastBroadcastingTimeMap = new ConcurrentHashMap<>();
@@ -108,7 +113,13 @@ public class TickProcessService {
     }
 
     private void acknowledge(String streamKey, String group, RecordId recordId) {
-        redisTemplate.opsForStream().acknowledge(streamKey, group, recordId);
+        metricRecorder.recordTime(
+                STREAM_ACK_LATENCY,
+                () -> {
+                    redisTemplate.opsForStream().acknowledge(streamKey, group, recordId);
+                    metricRecorder.increment(STREAM_ACK_COUNT);
+                }
+        );
         log.debug("Acknowledged stream message: {}", recordId);
     }
 }
