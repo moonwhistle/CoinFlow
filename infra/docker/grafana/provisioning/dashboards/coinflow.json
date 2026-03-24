@@ -1,0 +1,62 @@
+{
+  "title": "CoinFlow Real-Time Metrics",
+  "uid": "coinflow-custom-dashboard",
+  "tags": ["coinflow", "monitoring"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "1. WebSocket Tick Receive Rate (TPS)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(tick_receive_count_total[1m])",
+          "legendFormat": "TPS ({{application}})"
+        }
+      ]
+    },
+    {
+      "title": "2. DB Persist Executor Active Threads",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "executor_active_threads{name=\"dbPersistExecutor\"}",
+          "legendFormat": "Active Threads"
+        }
+      ]
+    },
+    {
+      "title": "3. Redis XADD / ACK Latency (Avg ms)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(stream_publish_latency_seconds_sum[1m]) / rate(stream_publish_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "XADD Latency (ms)"
+        },
+        {
+          "expr": "rate(stream_ack_latency_seconds_sum[1m]) / rate(stream_ack_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "ACK Latency (ms)"
+        }
+      ]
+    },
+    {
+      "title": "4. API Caffeine Cache Hit Rate (%)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(cache_gets_total{name=\"ohlc_chart_cache\", result=\"hit\"}[1m])) / sum(rate(cache_gets_total{name=\"ohlc_chart_cache\"}[1m])) * 100",
+          "legendFormat": "Hit Rate (%)"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}
