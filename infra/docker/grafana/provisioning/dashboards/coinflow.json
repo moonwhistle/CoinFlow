@@ -7,7 +7,6 @@
     {
       "title": "1. WebSocket Tick Receive Rate (TPS)",
       "type": "timeseries",
-      "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
@@ -19,7 +18,6 @@
     {
       "title": "2. DB Persist Executor Active Threads",
       "type": "timeseries",
-      "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
@@ -31,7 +29,6 @@
     {
       "title": "3. Redis XADD / ACK Latency (Avg ms)",
       "type": "timeseries",
-      "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
         {
@@ -47,7 +44,6 @@
     {
       "title": "4. API Caffeine Cache Hit Rate (%)",
       "type": "timeseries",
-      "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "targets": [
         {
