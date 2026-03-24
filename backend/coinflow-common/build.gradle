@@ -8,9 +8,9 @@ dependencies {
     compileOnly 'org.springframework:spring-context'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     
-    // Monitoring (Actuator & Micrometer)
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'io.micrometer:micrometer-registry-prometheus'
+    // Monitoring (Actuator & Micrometer) - Exposed via api so dependent modules can access
+    api 'org.springframework.boot:spring-boot-starter-actuator'
+    api 'io.micrometer:micrometer-registry-prometheus'
 }
 
 bootJar { enabled = false }
