@@ -51,6 +51,36 @@
           "legendFormat": "Hit Rate (%)"
         }
       ]
+    },
+    {
+      "title": "5. Redis XADD Latency (P95, P99 ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "stream_publish_latency_seconds{quantile=\"0.95\"} * 1000",
+          "legendFormat": "XADD P95"
+        },
+        {
+          "expr": "stream_publish_latency_seconds{quantile=\"0.99\"} * 1000",
+          "legendFormat": "XADD P99"
+        }
+      ]
+    },
+    {
+      "title": "6. Redis ACK Latency (P95, P99 ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "stream_ack_latency_seconds{quantile=\"0.95\"} * 1000",
+          "legendFormat": "ACK P95"
+        },
+        {
+          "expr": "stream_ack_latency_seconds{quantile=\"0.99\"} * 1000",
+          "legendFormat": "ACK P99"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,
