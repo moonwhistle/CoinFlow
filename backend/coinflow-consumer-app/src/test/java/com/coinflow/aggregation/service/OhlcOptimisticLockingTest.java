@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,24 +41,24 @@ public class OhlcOptimisticLockingTest {
 
     @BeforeEach
     void setUp() {
-        transactionTemplate = new TransactionTemplate(transactionManager);
+        transactionTemplate = new TransactionTemplate(Objects.requireNonNull(transactionManager));
 
         // 데이터 초기화
         ohlc1mRepository.deleteAllInBatch();
         symbolRepository.deleteAllInBatch();
 
-        savedSymbol = symbolRepository.save(Symbol.builder()
+        savedSymbol = symbolRepository.save(Objects.requireNonNull(Symbol.builder()
                 .symbol("btcusdt")
                 .exchange("BINANCE")
                 .name("btcusdt")
                 .active(true)
                 .marketType(MarketType.SPOT)
-                .build());
+                .build()));
 
         bucketTime = LocalDateTime.of(2024, 1, 1, 0, 0);
 
         // 최초 데이터 저장 (Version: 0)
-        ohlc1mRepository.save(Ohlc1m.builder()
+        ohlc1mRepository.save(Objects.requireNonNull(Ohlc1m.builder()
                 .symbol(savedSymbol)
                 .bucketTime(bucketTime)
                 .open(BigDecimal.TEN)
@@ -65,7 +66,7 @@ public class OhlcOptimisticLockingTest {
                 .low(BigDecimal.TEN)
                 .close(BigDecimal.TEN)
                 .volume(100L)
-                .build());
+                .build()));
     }
 
     @Test

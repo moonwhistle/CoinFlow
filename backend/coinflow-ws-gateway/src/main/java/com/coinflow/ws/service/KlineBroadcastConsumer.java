@@ -13,6 +13,8 @@ import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Flux;
 
+import java.util.Objects;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -37,7 +39,7 @@ public class KlineBroadcastConsumer implements MessageListener {
                 WebSocketSession session = sessionManager.getSession(sessionId);
                 if (session != null && session.isOpen()) {
                     WebSocketMessage wsMessage = session.textMessage(json);
-                    session.send(Flux.just(wsMessage))
+                    session.send(Objects.requireNonNull(Flux.just(wsMessage)))
                             .doOnError(e -> log.warn("Failed to send kline to session {}", sessionId, e))
                             .subscribe();
                 }
