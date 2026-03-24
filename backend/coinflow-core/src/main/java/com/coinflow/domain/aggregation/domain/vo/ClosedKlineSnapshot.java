@@ -1,4 +1,4 @@
-package com.coinflow.aggregation.domain.model.dto;
+package com.coinflow.domain.aggregation.domain.vo;
 
 /**
  * Combined data of an interval and its snapshot.

@@ -6,7 +6,7 @@ import static com.coinflow.tick.event.constant.TickStreamFields.QUANTITY;
 import static com.coinflow.tick.event.constant.TickStreamFields.SYMBOL;
 
 import com.coinflow.tick.event.TickRawEvent;
-import com.coinflow.aggregation.service.ingest.TickProcessService;
+import com.coinflow.aggregation.service.TickProcessService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;

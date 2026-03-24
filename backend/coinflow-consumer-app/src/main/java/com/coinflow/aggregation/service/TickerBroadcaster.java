@@ -3,7 +3,7 @@ package com.coinflow.aggregation.service;
 import com.coinflow.event.ticker.TickerEvent;
  
 /**
- * Interface for ticker broadcasting.
+ * SRP: Responsibility is ONLY to propagate ticker events.
  */
 public interface TickerBroadcaster {
     void broadcast(TickerEvent event);

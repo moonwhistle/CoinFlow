@@ -1,6 +1,6 @@
-package com.coinflow.aggregation.domain.model;
+package com.coinflow.domain.aggregation.domain;
 
-import com.coinflow.aggregation.domain.model.dto.KlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import java.math.BigDecimal;
 

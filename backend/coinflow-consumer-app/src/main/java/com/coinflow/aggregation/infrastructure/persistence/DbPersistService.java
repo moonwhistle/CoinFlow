@@ -1,6 +1,6 @@
 package com.coinflow.aggregation.infrastructure.persistence;
 
-import com.coinflow.aggregation.domain.model.ClosedKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;

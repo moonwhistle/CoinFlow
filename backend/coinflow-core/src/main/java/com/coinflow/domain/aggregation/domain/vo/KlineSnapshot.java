@@ -1,4 +1,4 @@
-package com.coinflow.aggregation.domain.model.dto;
+package com.coinflow.domain.aggregation.domain.vo;
 
 import java.math.BigDecimal;
 

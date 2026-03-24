@@ -1,4 +1,4 @@
-package com.coinflow.aggregation.service.ingest;
+package com.coinflow.aggregation.service;
 
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
 import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;

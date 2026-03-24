@@ -1,4 +1,4 @@
-package com.coinflow.aggregation.infrastructure.adapter.redis;
+package com.coinflow.aggregation.infrastructure.redis;
  
 import com.coinflow.aggregation.service.TickerBroadcaster;
 import com.coinflow.event.ticker.TickerEvent;
@@ -9,7 +9,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
  
 /**
- * Redis implementation for ticker broadcasting.
+ * SRP: ONLY handles Redis Pub/Sub broadcasting for tickers.
  */
 @Slf4j
 @Service
