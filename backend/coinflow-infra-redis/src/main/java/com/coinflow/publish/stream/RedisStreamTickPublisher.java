@@ -15,6 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.RedisTemplate;
 
+import com.coinflow.monitoring.MetricRecorder;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_LATENCY;
+
 @RequiredArgsConstructor
 @Slf4j
 public class RedisStreamTickPublisher implements TickPublisher {
@@ -22,6 +25,7 @@ public class RedisStreamTickPublisher implements TickPublisher {
     public static final String RAW_TICK_STREAM = "tick:raw";
 
     private final RedisTemplate<String, String> redisTemplate;
+    private final MetricRecorder metricRecorder;
 
     @Override
     public void publish(TickRawEvent event) {
@@ -33,8 +37,10 @@ public class RedisStreamTickPublisher implements TickPublisher {
                     EVENT_TIME, event.eventTime().toString()
             );
 
-            RecordId recordId = redisTemplate.opsForStream()
-                    .add(RAW_TICK_STREAM, fields);
+            RecordId recordId = metricRecorder.recordTime(
+                    STREAM_PUBLISH_LATENCY, 
+                    () -> redisTemplate.opsForStream().add(RAW_TICK_STREAM, fields)
+            );
 
             if (recordId == null) {
                 throw new PublishException(

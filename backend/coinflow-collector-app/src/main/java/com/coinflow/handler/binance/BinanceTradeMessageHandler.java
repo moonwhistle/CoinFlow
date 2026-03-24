@@ -16,16 +16,21 @@ import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import com.coinflow.monitoring.MetricRecorder;
+import static com.coinflow.monitoring.constant.MetricConstants.WEBSOCKET_RECEIVE_COUNT;
+
 @RequiredArgsConstructor
 @Slf4j
 public class BinanceTradeMessageHandler implements TickMessageHandler {
 
     private final ObjectMapper objectMapper;
     private final TickPublisher publisher;
+    private final MetricRecorder metricRecorder;
 
     @Override
     public void handle(String message) {
         log.info("Received raw message: {}", message);
+        metricRecorder.increment(WEBSOCKET_RECEIVE_COUNT);
         try {
             JsonNode root = objectMapper.readTree(message);
             JsonNode data = root.get(DATA);
