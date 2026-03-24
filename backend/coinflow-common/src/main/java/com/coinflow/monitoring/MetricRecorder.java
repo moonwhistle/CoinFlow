@@ -22,18 +22,24 @@ public class MetricRecorder {
     }
     
     /**
-     * 반환값이 없는 메서드의 수행 시간을 측정합니다.
+     * 반환값이 없는 메서드의 수행 시간과 백분위수(P95, P99 등)를 함께 측정합니다.
      */
     public void recordTime(String metricName, Runnable runnable, String... tags) {
-        Timer timer = meterRegistry.timer(metricName, tags);
+        Timer timer = Timer.builder(metricName)
+                .tags(tags)
+                .publishPercentiles(0.5, 0.9, 0.95, 0.99) // P50, P90, P95, P99 지표 전송 자동화
+                .register(meterRegistry);
         timer.record(runnable);
     }
 
     /**
-     * 반환값이 있는 메서드의 수행 시간을 측정하고 결과를 반환합니다.
+     * 반환값이 있는 메서드의 수행 시간과 백분위수(P95, P99 등)를 함께 측정하고 결과를 반환합니다.
      */
     public <T> T recordTime(String metricName, Callable<T> callable, String... tags) {
-        Timer timer = meterRegistry.timer(metricName, tags);
+        Timer timer = Timer.builder(metricName)
+                .tags(tags)
+                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
+                .register(meterRegistry);
         try {
             return timer.recordCallable(callable);
         } catch (Exception e) {
