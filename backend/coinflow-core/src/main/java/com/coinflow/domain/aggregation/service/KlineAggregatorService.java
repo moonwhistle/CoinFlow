@@ -1,10 +1,10 @@
-package com.coinflow.aggregation.domain.service;
+package com.coinflow.domain.aggregation.service;
 
-import com.coinflow.aggregation.domain.model.KlineState;
-import com.coinflow.aggregation.domain.model.MutableKlineSnapshot;
-import com.coinflow.aggregation.domain.model.dto.ClosedKlineSnapshot;
-import com.coinflow.aggregation.domain.model.dto.KlineSnapshot;
-import com.coinflow.aggregation.domain.service.dto.AggregationResult;
+import com.coinflow.domain.aggregation.domain.KlineState;
+import com.coinflow.domain.aggregation.domain.MutableKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import java.math.BigDecimal;
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-public class KlineAggregator {
+public class KlineAggregatorService {
 
     /**
      * Supported intervals for aggregation.

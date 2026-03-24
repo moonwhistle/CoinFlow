@@ -49,4 +49,15 @@ public class MetricRecorder {
             throw new RuntimeException("Metric evaluation failed", e);
         }
     }
+
+    /**
+     * 이미 계산된 밀리초(ms) 단위의 기간을 기록합니다.
+     */
+    public void recordTime(String metricName, long millis, String... tags) {
+        Timer timer = Timer.builder(metricName)
+                .tags(tags)
+                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
+                .register(meterRegistry);
+        timer.record(java.time.Duration.ofMillis(millis));
+    }
 }

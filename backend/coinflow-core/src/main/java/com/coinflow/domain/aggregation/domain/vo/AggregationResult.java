@@ -1,6 +1,5 @@
-package com.coinflow.aggregation.domain.service.dto;
+package com.coinflow.domain.aggregation.domain.vo;
 
-import com.coinflow.aggregation.domain.model.dto.ClosedKlineSnapshot;
 import java.util.List;
 
 /**

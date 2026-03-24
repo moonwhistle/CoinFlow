@@ -1,10 +1,10 @@
 package com.coinflow.aggregation.service;
  
-import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
+import com.coinflow.event.kline.KlineEvent;
  
 /**
- * Interface for kline snapshot broadcasting.
+ * SRP: Responsibility is ONLY to propagate kline events.
  */
 public interface KlineBroadcaster {
-    void broadcastAndSave(String symbol, String interval, KlineSnapshot snapshot);
+    void broadcast(KlineEvent event);
 }

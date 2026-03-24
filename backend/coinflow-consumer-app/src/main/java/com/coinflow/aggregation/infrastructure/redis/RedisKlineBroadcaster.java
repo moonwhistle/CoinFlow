@@ -11,8 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.concurrent.ConcurrentHashMap;
  
 /**
- * SRP: ONLY handles Redis Pub/Sub broadcasting.
- * Decoupled from repository (SSOT Cache).
+ * SRP: Responsibility is ONLY to propagate kline events via Redis Pub/Sub.
  */
 @Slf4j
 @Component
@@ -31,7 +30,7 @@ public class RedisKlineBroadcaster implements KlineBroadcaster {
         String cacheKey = event.symbol().toLowerCase() + ":" + event.interval();
         long now = System.currentTimeMillis();
  
-        // Throttling for live candles
+        // Throttling for live (open) candles
         if (!event.closed()) {
             Long lastTime = lastBroadcastTimes.get(cacheKey);
             if (lastTime != null && (now - lastTime) < BROADCAST_INTERVAL_MS) {
@@ -43,10 +42,6 @@ public class RedisKlineBroadcaster implements KlineBroadcaster {
             String json = objectMapper.writeValueAsString(event);
             redisTemplate.convertAndSend(KLINE_BROADCAST_TOPIC, json);
             lastBroadcastTimes.put(cacheKey, now);
-            
-            if (event.closed()) {
-                log.debug("Broadcasted closed/late kline via Redis: {}:{}", event.symbol(), event.interval());
-            }
         } catch (Exception e) {
             log.error("Failed to broadcast kline for {}:{}", event.symbol(), event.interval(), e);
         }

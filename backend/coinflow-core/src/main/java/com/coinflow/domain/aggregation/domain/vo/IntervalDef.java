@@ -1,4 +1,4 @@
-package com.coinflow.aggregation.domain.service.dto;
+package com.coinflow.domain.aggregation.domain.vo;
 
 /**
  * Definition of an aggregation interval.
