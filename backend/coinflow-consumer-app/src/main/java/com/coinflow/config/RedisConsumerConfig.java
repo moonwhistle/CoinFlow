@@ -5,6 +5,7 @@ import com.coinflow.consumer.TickRawEventConsumer;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -44,17 +45,16 @@ public class RedisConsumerConfig {
 
         initializeConsumerGroup(redisTemplate);
 
-        StreamMessageListenerContainerOptions<String, MapRecord<String, String, String>> options =
-                StreamMessageListenerContainerOptions.builder()
-                        .pollTimeout(Duration.ofSeconds(2))
-                        .build();
+        StreamMessageListenerContainerOptions<String, MapRecord<String, String, String>> options = StreamMessageListenerContainerOptions
+                .builder()
+                .pollTimeout(Duration.ofSeconds(2))
+                .build();
 
         container = StreamMessageListenerContainer.create(connectionFactory, options);
         container.receive(
                 Consumer.from(properties.group(), properties.consumerName()),
                 StreamOffset.create(properties.streamKey(), ReadOffset.lastConsumed()),
-                this.consumer
-        );
+                this.consumer);
         container.start();
 
         return container;
@@ -70,8 +70,9 @@ public class RedisConsumerConfig {
                 log.info("Redis consumer group already exists: {}", properties.group());
             } else if (msg.contains(ERROR_NO_SUCH_KEY) || msg.contains(ERROR_NO_GROUP)) {
                 log.warn("Redis stream does not exist. Creating stream and consumer group manually...");
-                redisTemplate.opsForStream().add(properties.streamKey(), Map.of(DUMMY_EVENT_KEY, DUMMY_EVENT_VALUE));
-                redisTemplate.opsForStream().createGroup(properties.streamKey(), ReadOffset.latest(), properties.group());
+                redisTemplate.opsForStream().add(properties.streamKey(), Objects.requireNonNull(Map.of(DUMMY_EVENT_KEY, DUMMY_EVENT_VALUE)));
+                redisTemplate.opsForStream().createGroup(properties.streamKey(), ReadOffset.latest(),
+                        properties.group());
                 log.info("Successfully created Stream and Consumer Group.");
             } else {
                 log.error("Failed to initialize Redis Consumer Group", e);
