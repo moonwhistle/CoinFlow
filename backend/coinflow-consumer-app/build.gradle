@@ -10,8 +10,10 @@ dependencies {
     // redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
-    // web (for actuator HTTP endpoints)
+    // web & monitoring
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 
     // jpa (for runtime transaction & repository access)
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
