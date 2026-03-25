@@ -20,3 +20,17 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter-local
+    environment:
+      - REDIS_ADDR=redis:6379
+    command:
+      - "-check-streams=true" # Redis Streams Lag 수집 활성화
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
