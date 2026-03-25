@@ -14,6 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.NonNegative;
 import org.springframework.stereotype.Component;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
+
 @Slf4j
 @Component
 public class CaffeineOhlcChartStore implements OhlcChartStore {
@@ -22,8 +25,9 @@ public class CaffeineOhlcChartStore implements OhlcChartStore {
 
     private final Cache<String, CachedChart> cache;
 
-    public CaffeineOhlcChartStore() {
+    public CaffeineOhlcChartStore(MeterRegistry meterRegistry) {
         this.cache = Caffeine.newBuilder()
+                .recordStats() // 캐시 힛/미스 통계 활성화
                 .expireAfter(new Expiry<String, CachedChart>() {
                     @Override
                     public long expireAfterCreate(String key, CachedChart value, long currentTime) {
@@ -44,6 +48,13 @@ public class CaffeineOhlcChartStore implements OhlcChartStore {
                 })
                 .maximumSize(MAX_SIZE)
                 .build();
+
+        // Micrometer 연동 (캐시 메트릭 노출)
+        CaffeineCacheMetrics.monitor(
+                meterRegistry,
+                this.cache,
+                "ohlc_chart_cache"
+        );
     }
 
     @Override

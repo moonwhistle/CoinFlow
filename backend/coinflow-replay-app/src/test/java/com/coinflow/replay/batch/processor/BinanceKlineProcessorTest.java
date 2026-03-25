@@ -2,6 +2,7 @@ package com.coinflow.replay.batch.processor;
 
 import com.coinflow.domain.log.domain.vo.ReconciliationReason;
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.service.SymbolService;
@@ -82,7 +83,7 @@ class BinanceKlineProcessorTest {
                 .high(new BigDecimal("110"))
                 .low(new BigDecimal("90"))
                 .close(new BigDecimal("105"))
-                .volume(1000L)
+                .volume(VolumeScaler.toLong(new BigDecimal("1000")))
                 .build();
 
         when(symbolService.findBySymbol(symbol)).thenReturn(mockSymbol);
@@ -112,7 +113,7 @@ class BinanceKlineProcessorTest {
                 .high(new BigDecimal("110"))
                 .low(new BigDecimal("90"))
                 .close(new BigDecimal("105"))
-                .volume(1000L)
+                .volume(VolumeScaler.toLong(new BigDecimal("1000")))
                 .build();
 
         when(symbolService.findBySymbol(symbol)).thenReturn(mockSymbol);

@@ -1,6 +1,6 @@
-package com.coinflow.aggregation.service.persist;
+package com.coinflow.aggregation.infrastructure.persistence;
 
-import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
@@ -20,6 +20,10 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Infrastructure adapter for persistence.
+ * Handles asynchronous DB storage with retry logic.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -31,7 +35,7 @@ public class DbPersistService {
     private final Ohlc30mService ohlc30mService;
 
     /**
-     * 캔들 데이터를 비동기적으로 DB에 저장하며, 실패 시 재시도
+     * Persists candle data asynchronously to the database with retry logic.
      */
     @Async("dbPersistExecutor")
     @Retryable(
@@ -77,7 +81,7 @@ public class DbPersistService {
     }
 
     /**
-     * 모든 재시도가 실패시 실행
+     * Executes when all retry attempts fail.
      */
     @Recover
     public CompletableFuture<Void> recover(Exception e, String symbolCode, ClosedKlineSnapshot closedSnapshot) {

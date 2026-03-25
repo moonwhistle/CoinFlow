@@ -1,6 +1,12 @@
-package com.coinflow.aggregation.service.kline;
+package com.coinflow.domain.aggregation.service;
 
-import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
+import com.coinflow.domain.aggregation.domain.KlineState;
+import com.coinflow.domain.aggregation.domain.MutableKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
+import com.coinflow.domain.ohlc.constant.OhlcInterval;
+import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -8,24 +14,28 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Manages KlineState instances per symbol × interval.
- * Aggregates incoming ticks into OHLCV candles in memory.
- *
- * Supports M1 (60s), M5 (300s), M30 (1800s) intervals simultaneously.
+ * Domain service for kline aggregation.
+ * Manages KlineState instances per symbol × interval and handles bucket transitions.
  */
 @Slf4j
 @Component
-public class KlineAggregator {
+public class KlineAggregatorService {
 
-    private static final List<IntervalDef> INTERVALS = List.of(
-            new IntervalDef("M1", 60),
-            new IntervalDef("M5", 300),
-            new IntervalDef("M30", 1800));
+    /**
+     * Supported intervals for aggregation.
+     * Uses OhlcInterval Enum to avoid magic strings.
+     */
+    private static final List<OhlcInterval> SUPPORTED_INTERVALS = List.of(
+            OhlcInterval.M1,
+            OhlcInterval.M5,
+            OhlcInterval.M30);
+
+    private static final int MAX_RECENT_BUCKETS = 3;
+    private static final long BUFFER_TTL_MS = 120_000;
 
     // key: "btcusdt:M1"
     private final ConcurrentHashMap<String, KlineState> states = new ConcurrentHashMap<>();
@@ -33,62 +43,47 @@ public class KlineAggregator {
     // key: "btcusdt:M1", Map of bucket startTime -> MutableKlineSnapshot
     private final ConcurrentHashMap<String, Map<Long, MutableKlineSnapshot>> recentlyClosed = new ConcurrentHashMap<>();
 
-    private static final int MAX_RECENT_BUCKETS = 3;
-    private static final long BUFFER_TTL_MS = 120_000;
-
-    public record ClosedKlineSnapshot(String interval, KlineSnapshot snapshot) {
-    }
-
-    public record AggregationResult(
-            List<ClosedKlineSnapshot> closedSnapshots,
-            List<ClosedKlineSnapshot> liveSnapshots,
-            List<ClosedKlineSnapshot> lateUpdatedSnapshots) {
-    }
-
     /**
-     * Process a tick for all supported intervals.
-     * Returns both the updated live snapshots (for immediate broadcast/Redis SET)
-     * and any closed snapshots (due to bucket transition).
+     * Processes a single tick for all supported intervals.
      */
-    public AggregationResult processTickAndGetResult(String symbol, BigDecimal price, BigDecimal quantity,
-            long epochMs) {
+    public AggregationResult processTickAndGetResult(String symbol, BigDecimal price, BigDecimal quantity, long epochMs) {
         long epochSec = epochMs / 1000;
         long scaledQty = VolumeScaler.toLong(quantity);
+
         List<ClosedKlineSnapshot> closedSnapshots = new ArrayList<>();
         List<ClosedKlineSnapshot> liveSnapshots = new ArrayList<>();
         List<ClosedKlineSnapshot> lateUpdatedSnapshots = new ArrayList<>();
 
-        for (IntervalDef interval : INTERVALS) {
-            String key = buildKey(symbol, interval.name());
-            KlineState state = states.computeIfAbsent(key, k -> new KlineState(interval.seconds()));
+        for (OhlcInterval interval : SUPPORTED_INTERVALS) {
+            String intervalName = interval.name();
+            int durationSeconds = (int) interval.duration().toSeconds();
+            String key = buildKey(symbol, intervalName);
 
-            long bucketStart = (epochSec / interval.seconds()) * interval.seconds();
+            KlineState state = states.computeIfAbsent(key, k -> new KlineState(durationSeconds));
+            long bucketStart = (epochSec / durationSeconds) * durationSeconds;
 
-            // 1. Process tick and get closed snapshot (if any, triggered by bucket
-            // transition)
+            // 1. Process tick and get closed snapshot (if any)
             KlineSnapshot closed = state.processTick(price, scaledQty, epochSec);
             if (closed != null) {
-                closedSnapshots.add(new ClosedKlineSnapshot(interval.name(), closed));
+                closedSnapshots.add(new ClosedKlineSnapshot(intervalName, closed));
                 addToRecentlyClosedBuffer(key, closed);
             }
 
             // 2. Late Tick Handling
-            // If the tick didn't trigger a close, has data, and targets an older bucket
-            // than the current one
             if (closed == null && bucketStart < state.getStartTime()) {
                 MutableKlineSnapshot buffered = getFromBuffer(key, bucketStart);
                 if (buffered != null) {
                     buffered.applyLateTick(price, scaledQty);
-                    lateUpdatedSnapshots.add(new ClosedKlineSnapshot(interval.name(), buffered.toSnapshot()));
+                    lateUpdatedSnapshots.add(new ClosedKlineSnapshot(intervalName, buffered.toSnapshot()));
                 } else {
-                    log.debug("Late tick too old, discarding. symbol={}, interval={}, bucket={}", symbol,
-                            interval.name(), bucketStart);
+                    log.debug("Late tick too old, discarding. symbol={}, interval={}, bucket={}", 
+                            symbol, intervalName, bucketStart);
                 }
             } else if (bucketStart >= state.getStartTime()) {
                 // 3. Normal Live Tick
                 KlineSnapshot live = state.takeSnapshot();
-                if (live != null) { // live can be null if tick was skipped somehow, though rare
-                    liveSnapshots.add(new ClosedKlineSnapshot(interval.name(), live));
+                if (live != null) {
+                    liveSnapshots.add(new ClosedKlineSnapshot(intervalName, live));
                 }
             }
         }
@@ -109,12 +104,10 @@ public class KlineAggregator {
 
     private MutableKlineSnapshot getFromBuffer(String key, long bucketStart) {
         Map<Long, MutableKlineSnapshot> buffer = recentlyClosed.get(key);
-        if (buffer == null)
-            return null;
+        if (buffer == null) return null;
 
         MutableKlineSnapshot snapshot = buffer.get(bucketStart);
         if (snapshot != null && snapshot.isExpired(BUFFER_TTL_MS)) {
-            // It exceeded TTL, naturally let it fail / ignore
             return null;
         }
         return snapshot;
@@ -122,8 +115,5 @@ public class KlineAggregator {
 
     private String buildKey(String symbol, String interval) {
         return symbol.toLowerCase() + ":" + interval;
-    }
-
-    public record IntervalDef(String name, int seconds) {
     }
 }

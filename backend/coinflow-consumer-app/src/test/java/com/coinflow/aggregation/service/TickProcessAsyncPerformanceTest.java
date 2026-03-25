@@ -1,15 +1,14 @@
-package com.coinflow.aggregation.service.ingest;
+package com.coinflow.aggregation.service;
 
-import com.coinflow.aggregation.service.kline.KlineAggregator;
-import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapshot;
-import com.coinflow.aggregation.service.kline.KlineSnapshotBroadcaster;
-import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
-import com.coinflow.aggregation.service.persist.DbPersistService;
-import com.coinflow.aggregation.service.ticker.TickerBroadcaster;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
+import com.coinflow.domain.aggregation.service.KlineAggregatorService;
+import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.domain.ohlc.repository.Ohlc1mRepository;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.domain.vo.MarketType;
 import com.coinflow.domain.symbol.repository.SymbolRepository;
+import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -63,10 +62,13 @@ public class TickProcessAsyncPerformanceTest {
     private Executor dbPersistExecutor;
 
     @MockitoBean
-    private KlineAggregator klineAggregator;
+    private KlineAggregatorService klineAggregatorService;
 
     @MockitoBean
-    private KlineSnapshotBroadcaster klineBroadcaster;
+    private LiveKlineRepository liveKlineRepository;
+
+    @MockitoBean
+    private KlineBroadcaster klineBroadcaster;
 
     @MockitoBean
     private TickerBroadcaster tickerBroadcaster;
@@ -83,7 +85,7 @@ public class TickProcessAsyncPerformanceTest {
                 .marketType(MarketType.SPOT)
                 .build();
 
-        // [추가] 모든 테스트 시나리오에서 공통으로 심볼 조회가 가능하도록 설정
+        // 모든 테스트 시나리오에서 공통으로 심볼 조회가 가능하도록 설정
         when(symbolRepository.findBySymbol(any())).thenReturn(java.util.Optional.of(savedSymbol));
     }
 
@@ -111,7 +113,6 @@ public class TickProcessAsyncPerformanceTest {
             return null;
         }).when(ohlc30mService).applyAndSave(any(), any(), any(), any(), any(), any(), anyLong());
 
-
         KlineSnapshot snapshot = new KlineSnapshot(100L, Instant.now().getEpochSecond(),
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 0, true);
         ClosedKlineSnapshot closedSnapshot = new ClosedKlineSnapshot("M1", snapshot);
@@ -119,7 +120,7 @@ public class TickProcessAsyncPerformanceTest {
         ThreadPoolTaskExecutor executor = (ThreadPoolTaskExecutor) dbPersistExecutor;
 
         log.info("=== [성능 테스트 시작] 시나리오: 100개 종목 3종 캔들 동시 마감 (총 {}건) ===", totalRequests);
-        log.info("현재 설정 - Core: {}, Max: {}, Queue: {}", 
+        log.info("현재 설정 - Core: {}, Max: {}, Queue: {}",
                 executor.getCorePoolSize(), executor.getMaxPoolSize(), executor.getQueueCapacity());
 
         StopWatch submitWatch = new StopWatch();
@@ -128,7 +129,7 @@ public class TickProcessAsyncPerformanceTest {
         // 300개 비동기 요청 제출 (Submit)
         for (int i = 0; i < totalRequests; i++) {
             dbPersistService.persistClosedCandleAsync("btcusdt", closedSnapshot);
-            
+
             // 50개마다 스레드 풀 상태 로깅
             if ((i + 1) % 50 == 0) {
                 logThreadPoolStatus(executor, "[비동기 요청 제출 중 (" + (i + 1) + ")]");
@@ -157,7 +158,7 @@ public class TickProcessAsyncPerformanceTest {
     }
 
     private void logThreadPoolStatus(ThreadPoolTaskExecutor executor, String phase) {
-        log.info("{} 활성 스레드: {}, 대기 큐: {}, 현재 풀 크기: {}", 
+        log.info("{} 활성 스레드: {}, 대기 큐: {}, 현재 풀 크기: {}",
                 phase,
                 executor.getActiveCount(),
                 executor.getThreadPoolExecutor().getQueue().size(),
@@ -167,7 +168,7 @@ public class TickProcessAsyncPerformanceTest {
     @Test
     @DisplayName("부하 중첩 시뮬레이션: 마감 300건 + 일반 틱 1,000건 발생 시 실시간성 지연 측정")
     void simulateSpikeLoadPersistence() throws InterruptedException {
-        int spikeSaves = 300;   // 30분 주기로 몰리는 1/5/30분 캔들 총 300건
+        int spikeSaves = 300; // 30분 주기로 몰리는 1/5/30분 캔들 총 300건
         int normalTicks = 1000; // 평상시 가격 업데이트를 위한 실시간 데이터 흐름
         StopWatch watch = new StopWatch();
 
@@ -180,8 +181,8 @@ public class TickProcessAsyncPerformanceTest {
         log.info(">>> [동기 방식] 300건 마감 부하 발생 후 실시간 틱 데이터 1,000건 처리 시작...");
         watch.start("Sync_Spike");
         for (int i = 0; i < spikeSaves; i++) {
-            ohlc1mService.applyAndSave(savedSymbol, LocalDateTime.now(), 
-                BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 100L);
+            ohlc1mService.applyAndSave(savedSymbol, LocalDateTime.now(),
+                    BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 100L);
         }
         for (int i = 0; i < normalTicks; i++) {
             // 실시간 가격 브로드캐스팅 로직 (저장 없이 로그만 가정)
@@ -194,7 +195,9 @@ public class TickProcessAsyncPerformanceTest {
         log.info(">>> [비동기 방식] 300건 마감 부하 발생 후 실시간 틱 데이터 1,000건 처리 시작...");
         watch.start("Async_Spike");
         for (int i = 0; i < spikeSaves; i++) {
-            dbPersistService.persistClosedCandleAsync("btcusdt", new ClosedKlineSnapshot("M1", new com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot(100L, 1710777600L, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 0, true)));
+            dbPersistService.persistClosedCandleAsync("btcusdt",
+                    new ClosedKlineSnapshot("M1", new KlineSnapshot(100L, 1710777600L, BigDecimal.ONE, BigDecimal.ONE,
+                            BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, 0, true)));
         }
         for (int i = 0; i < normalTicks; i++) {
             // 실시간 가격 브로드캐스팅 로직 즉시 수행

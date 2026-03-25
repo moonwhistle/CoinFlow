@@ -7,6 +7,7 @@ import com.coinflow.config.properties.BinanceWebSocketProperties;
 import com.coinflow.handler.TickMessageHandler;
 import com.coinflow.handler.binance.BinanceTradeMessageHandler;
 import com.coinflow.tick.publisher.TickPublisher;
+import com.coinflow.monitoring.MetricRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -19,9 +20,10 @@ public class BinanceCollectorConfig {
     @Bean
     public TickMessageHandler tickMessageHandler(
             ObjectMapper objectMapper,
-            TickPublisher publisher
+            TickPublisher publisher,
+            MetricRecorder metricRecorder
     ) {
-        return new BinanceTradeMessageHandler(objectMapper, publisher);
+        return new BinanceTradeMessageHandler(objectMapper, publisher, metricRecorder);
     }
 
     @Bean

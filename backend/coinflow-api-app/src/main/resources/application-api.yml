@@ -26,3 +26,12 @@ logging:
 
 server:
   port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, metrics, health
+  metrics:
+    tags:
+      application: coinflow-api

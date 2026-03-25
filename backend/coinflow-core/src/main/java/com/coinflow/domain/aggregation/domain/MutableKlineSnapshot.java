@@ -1,6 +1,6 @@
-package com.coinflow.aggregation.service.kline;
+package com.coinflow.domain.aggregation.domain;
 
-import com.coinflow.aggregation.service.kline.KlineState.KlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
 import java.math.BigDecimal;
 
@@ -17,7 +17,7 @@ public class MutableKlineSnapshot {
     private BigDecimal close; // Needs to be updated if the late tick is the true final tick
     private long volume;
     private int trades;
-    private boolean closed;
+    private final boolean closed;
 
     // For TTL eviction logic
     private final long createdAtMs;
