@@ -11,8 +11,6 @@ import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.beans.factory.ObjectProvider;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 
 @Configuration
 @EnableAsync

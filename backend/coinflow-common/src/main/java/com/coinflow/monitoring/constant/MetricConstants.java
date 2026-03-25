@@ -20,8 +20,7 @@ public final class MetricConstants {
     public static final String TICK_PROCESS_STATUS = "tick.process.status";
 
     // Consumer: 전파 지표
-    public static final String KLINE_BROADCAST_SKIPPED = "kline.broadcast.skipped";
-    public static final String BROADCAST_COUNT = "broadcast.count";
+    // 제거됨 (비즈니스 요구사항에 따라 대시보드에서 제외)
 
     // Tag Keys (다차원 분석용 태그 상수화)
     public static final String TAG_MODULE = "module";
@@ -31,7 +30,4 @@ public final class MetricConstants {
     // Tag Values
     public static final String VALUE_SUCCESS = "success";
     public static final String VALUE_FAILURE = "failure";
-
-    public static final String VALUE_TICKER = "ticker";
-    public static final String VALUE_KLINE = "kline";
 }
