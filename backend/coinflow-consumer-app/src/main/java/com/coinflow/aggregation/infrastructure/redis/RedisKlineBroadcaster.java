@@ -11,9 +11,6 @@ import org.springframework.stereotype.Component;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.coinflow.monitoring.MetricRecorder;
-import static com.coinflow.monitoring.constant.MetricConstants.*;
-
 /**
  * SRP: Responsibility is ONLY to propagate kline events via Redis Pub/Sub.
  */
@@ -27,7 +24,6 @@ public class RedisKlineBroadcaster implements KlineBroadcaster {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final MetricRecorder metricRecorder;
     private final ConcurrentHashMap<String, Long> lastBroadcastTimes = new ConcurrentHashMap<>();
 
     @Override
@@ -39,7 +35,6 @@ public class RedisKlineBroadcaster implements KlineBroadcaster {
         if (!event.closed()) {
             Long lastTime = lastBroadcastTimes.get(cacheKey);
             if (lastTime != null && (now - lastTime) < BROADCAST_INTERVAL_MS) {
-                metricRecorder.increment(KLINE_BROADCAST_SKIPPED, TAG_MODULE, "consumer", TAG_TYPE, VALUE_KLINE);
                 return;
             }
         }
@@ -48,7 +43,6 @@ public class RedisKlineBroadcaster implements KlineBroadcaster {
             String json = objectMapper.writeValueAsString(event);
             redisTemplate.convertAndSend(KLINE_BROADCAST_TOPIC, Objects.requireNonNull(json));
             lastBroadcastTimes.put(cacheKey, now);
-            metricRecorder.increment(BROADCAST_COUNT, TAG_MODULE, "consumer", TAG_TYPE, VALUE_KLINE);
         } catch (Exception e) {
             log.error("Failed to broadcast kline for {}:{}", event.symbol(), event.interval(), e);
         }
