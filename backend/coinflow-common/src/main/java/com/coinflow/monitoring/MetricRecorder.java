@@ -60,4 +60,15 @@ public class MetricRecorder {
                 .register(meterRegistry);
         timer.record(java.time.Duration.ofMillis(millis));
     }
+
+    /**
+     * 이미 계산된 나노초(ns) 단위의 기간을 기록합니다.
+     */
+    public void recordTimeNanos(String metricName, long nanos, String... tags) {
+        Timer timer = Timer.builder(metricName)
+                .tags(tags)
+                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
+                .register(meterRegistry);
+        timer.record(java.time.Duration.ofNanos(nanos));
+    }
 }

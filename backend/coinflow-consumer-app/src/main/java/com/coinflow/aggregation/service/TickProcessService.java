@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StopWatch;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,8 +52,7 @@ public class TickProcessService {
     public void process(TickRawEvent event, String streamKey, String group, RecordId recordId) {
         log.debug("Processing tick event: {}", event);
 
-        StopWatch sw = new StopWatch();
-        sw.start();
+        long startNanos = System.nanoTime();
 
         try {
             // 1단계: 실시간 시세(Ticker) 전파 - 최신성 검증 포함
@@ -71,11 +69,11 @@ public class TickProcessService {
             List<CompletableFuture<Void>> dbFutures = coordinateResults(event.symbol(), result);
 
             // 메인 스레드 점유 시간 기록 (비동기 작업 완료 대기 전)
-            metricRecorder.recordTime(TICK_MAIN_THREAD_LATENCY, sw.getTotalTimeMillis(), TAG_MODULE, "consumer",
+            metricRecorder.recordTimeNanos(TICK_MAIN_THREAD_LATENCY, System.nanoTime() - startNanos, TAG_MODULE, "consumer",
                     TAG_TYPE, "main");
 
             // 4단계: 비동기 작업(DB 저장 등) 완료 후 Redis ACK 및 지표 기록
-            completeAndAcknowledge(dbFutures, streamKey, group, recordId, event.symbol(), sw);
+            completeAndAcknowledge(dbFutures, streamKey, group, recordId, event.symbol(), startNanos);
 
         } catch (Exception e) {
             log.error("[Consumer] Critical failure processing tick - symbol={}", event.symbol(), e);
@@ -144,12 +142,12 @@ public class TickProcessService {
 
     private void completeAndAcknowledge(List<CompletableFuture<Void>> futures,
             String streamKey, String group, RecordId recordId,
-            String symbol, StopWatch sw) {
+            String symbol, long startNanos) {
         if (futures.isEmpty()) {
-            finalizeProcess(streamKey, group, recordId, symbol, sw);
+            finalizeProcess(streamKey, group, recordId, symbol, startNanos);
         } else {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenRun(() -> finalizeProcess(streamKey, group, recordId, symbol, sw))
+                    .thenRun(() -> finalizeProcess(streamKey, group, recordId, symbol, startNanos))
                     .exceptionally(ex -> {
                         log.error("Async pipeline failed for {}. Message will stick in PENDING.", symbol, ex);
                         recordFailure(symbol);
@@ -158,20 +156,18 @@ public class TickProcessService {
         }
     }
 
-    private void finalizeProcess(String streamKey, String group, RecordId recordId, String symbol, StopWatch sw) {
+    private void finalizeProcess(String streamKey, String group, RecordId recordId, String symbol, long startNanos) {
         // 1. Redis ACK 수행
         acknowledge(streamKey, group, recordId);
 
         // 2. 전체 소요 시간 측정 종료 및 기록
-        if (sw.isRunning()) {
-            sw.stop();
-        }
+        long e2eDurationNanos = System.nanoTime() - startNanos;
 
-        metricRecorder.recordTime(TICK_PROCESS_LATENCY, sw.getTotalTimeMillis(), TAG_MODULE, "consumer", TAG_TYPE,
+        metricRecorder.recordTimeNanos(TICK_PROCESS_LATENCY, e2eDurationNanos, TAG_MODULE, "consumer", TAG_TYPE,
                 "e2e");
         metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_SUCCESS);
 
-        log.debug("Acknowledge stream successfully (E2E Latency: {}ms) - symbol={}", sw.getTotalTimeMillis(), symbol);
+        log.debug("Acknowledge stream successfully (E2E Latency: {}ns) - symbol={}", e2eDurationNanos, symbol);
     }
 
     private void acknowledge(String streamKey, String group, RecordId recordId) {
