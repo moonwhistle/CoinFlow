@@ -26,8 +26,8 @@ services:
     container_name: redis-exporter-local
     environment:
       - REDIS_ADDR=redis:6379
-    command:
-      - "-check-streams=true" # Redis Streams Lag 수집 활성화
+      - REDIS_EXPORTER_CHECK_STREAMS=tick:*
+      - REDIS_EXPORTER_CHECK_KEYS=tick:*
     ports:
       - "9121:9121"
     depends_on:
