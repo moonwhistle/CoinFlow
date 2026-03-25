@@ -1,7 +1,8 @@
-package com.coinflow.aggregation.service.kline;
+package com.coinflow.domain.aggregation.domain;
 
-import java.math.BigDecimal;
+import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.ohlc.policy.VolumeScaler;
+import java.math.BigDecimal;
 
 /**
  * In-memory state of a single kline (candle) for one symbol × one interval.
@@ -113,17 +114,5 @@ public class KlineState {
         this.trades = 0;
         this.closed = false;
         this.dirty = false;
-    }
-
-    public record KlineSnapshot(
-            long startTime,
-            long closeTime,
-            BigDecimal open,
-            BigDecimal high,
-            BigDecimal low,
-            BigDecimal close,
-            BigDecimal volume,
-            int trades,
-            boolean closed) {
     }
 }

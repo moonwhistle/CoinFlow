@@ -1,24 +1,23 @@
-package com.coinflow.aggregation.service.kline;
+package com.coinflow.aggregation.domain.service;
 
-import com.coinflow.aggregation.service.kline.KlineAggregator.AggregationResult;
-import com.coinflow.aggregation.service.kline.KlineAggregator.ClosedKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
+import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
+import com.coinflow.domain.aggregation.service.KlineAggregatorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.*;
 
-class KlineAggregatorTest {
+class KlineAggregatorServiceTest {
 
-    private KlineAggregator aggregator;
+    private KlineAggregatorService aggregator;
     private final String symbol = "btcusdt";
 
     @BeforeEach
     void setUp() {
-        aggregator = new KlineAggregator();
+        aggregator = new KlineAggregatorService();
     }
 
     @Test

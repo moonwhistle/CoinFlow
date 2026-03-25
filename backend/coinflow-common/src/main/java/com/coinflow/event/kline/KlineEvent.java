@@ -1,8 +1,8 @@
 package com.coinflow.event.kline;
-
+ 
 import java.math.BigDecimal;
 import lombok.Builder;
-
+ 
 /**
  * Kline (candlestick) event DTO published by consumer-app to Redis,
  * and broadcasted by ws-gateway to WebSocket clients.

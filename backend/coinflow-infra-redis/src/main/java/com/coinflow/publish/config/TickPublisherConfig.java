@@ -2,6 +2,7 @@ package com.coinflow.publish.config;
 
 import com.coinflow.tick.publisher.TickPublisher;
 import com.coinflow.publish.stream.RedisStreamTickPublisher;
+import com.coinflow.monitoring.MetricRecorder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -11,8 +12,9 @@ public class TickPublisherConfig {
 
     @Bean
     public TickPublisher tickPublisher(
-            RedisTemplate<String, String> redisTemplate
+            RedisTemplate<String, String> redisTemplate,
+            MetricRecorder metricRecorder
     ) {
-        return new RedisStreamTickPublisher(redisTemplate);
+        return new RedisStreamTickPublisher(redisTemplate, metricRecorder);
     }
 }

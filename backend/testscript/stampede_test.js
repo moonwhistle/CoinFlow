@@ -8,10 +8,9 @@ export const options = {
         // 캐시가 비어있는 상태에서 동시에 요청이 몰릴 때, 
         // 중복된 DB 조회가 발생하는지(Stampede) 확인하기 위한 테스트입니다.
         stampede: {
-            executor: 'per-vu-iterations',
+            executor: 'constant-vus',
             vus: 50,
-            iterations: 1,
-            maxDuration: '10s',
+            duration: '10s',
         },
     },
 };

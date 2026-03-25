@@ -3,6 +3,7 @@ package com.coinflow.aggregation.repository;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +25,7 @@ public class LiveKlineRepositoryImpl implements LiveKlineRepository {
         String key = buildKey(klineEvent.symbol(), klineEvent.interval());
         try {
             String json = objectMapper.writeValueAsString(klineEvent);
-            redisTemplate.opsForValue().set(key, json);
+            redisTemplate.opsForValue().set(Objects.requireNonNull(key), Objects.requireNonNull(json));
         } catch (Exception e) {
             log.error("Failed to save live kline to Redis: {}", key, e);
         }
@@ -34,7 +35,7 @@ public class LiveKlineRepositoryImpl implements LiveKlineRepository {
     public Optional<KlineEvent> findBySymbolAndInterval(String symbol, String interval) {
         String key = buildKey(symbol, interval);
         try {
-            String json = redisTemplate.opsForValue().get(key);
+            String json = redisTemplate.opsForValue().get(Objects.requireNonNull(key));
             if (json == null) {
                 return Optional.empty();
             }

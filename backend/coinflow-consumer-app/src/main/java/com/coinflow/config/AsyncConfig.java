@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.beans.factory.ObjectProvider;
 
 @Configuration
 @EnableAsync
@@ -21,7 +22,7 @@ public class AsyncConfig {
     private final AsyncDbPersistProperties properties;
 
     @Bean(name = "dbPersistExecutor")
-    public Executor dbPersistExecutor() {
+    public ThreadPoolTaskExecutor dbPersistExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
 
         executor.setCorePoolSize(properties.corePoolSize()); // 기본으로 유지할 스레드 수

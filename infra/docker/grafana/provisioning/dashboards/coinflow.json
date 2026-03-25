@@ -1,0 +1,118 @@
+{
+  "title": "CoinFlow Real-Time Metrics",
+  "uid": "coinflow-custom-dashboard",
+  "tags": ["coinflow", "monitoring"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "1. WebSocket Tick Receive Rate (TPS)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(tick_receive_count_total[1m])",
+          "legendFormat": "TPS ({{application}})"
+        }
+      ]
+    },
+    {
+      "title": "2. Main Thread vs E2E Latency (Avg ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(tick_main_thread_latency_seconds_sum[1m]) / rate(tick_main_thread_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "Main Thread Latency (ms)"
+        },
+        {
+          "expr": "rate(tick_process_latency_seconds_sum[1m]) / rate(tick_process_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "E2E Latency (ms)"
+        }
+      ]
+    },
+    {
+      "title": "3. Redis XADD / ACK Latency (Avg ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(stream_publish_latency_seconds_sum[1m]) / rate(stream_publish_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "XADD Latency (ms)"
+        },
+        {
+          "expr": "rate(stream_ack_latency_seconds_sum[1m]) / rate(stream_ack_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "ACK Latency (ms)"
+        }
+      ]
+    },
+    {
+      "title": "4. API Caffeine Cache Hit Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(cache_gets_total{cache=\"ohlc_chart_cache\", result=\"hit\"}[1m])) / sum(rate(cache_gets_total{cache=\"ohlc_chart_cache\"}[1m])) * 100",
+          "legendFormat": "Hit Rate (%)"
+        }
+      ]
+    },
+    {
+      "title": "5. Redis XADD Latency (P95, P99 ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "stream_publish_latency_seconds{quantile=\"0.95\"} * 1000",
+          "legendFormat": "XADD P95"
+        },
+        {
+          "expr": "stream_publish_latency_seconds{quantile=\"0.99\"} * 1000",
+          "legendFormat": "XADD P99"
+        }
+      ]
+    },
+    {
+      "title": "6. Redis ACK Latency (P95, P99 ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "stream_ack_latency_seconds{quantile=\"0.95\"} * 1000",
+          "legendFormat": "ACK P95"
+        },
+        {
+          "expr": "stream_ack_latency_seconds{quantile=\"0.99\"} * 1000",
+          "legendFormat": "ACK P99"
+        }
+      ]
+    },
+    {
+      "title": "7. Redis Stream Processing Lag (Backlog Count)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "redis_stream_group_lag",
+          "legendFormat": "{{group}} (Lag: {{stream}})"
+        }
+      ]
+    },
+    {
+      "title": "8. Redis Server Metrics (Mem & Clients)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes / 1024 / 1024",
+          "legendFormat": "Memory Usage (MB)"
+        },
+        {
+          "expr": "redis_connected_clients",
+          "legendFormat": "Connected Clients (Count)"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}
