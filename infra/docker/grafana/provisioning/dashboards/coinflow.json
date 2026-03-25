@@ -85,6 +85,32 @@
           "legendFormat": "ACK P99"
         }
       ]
+    },
+    {
+      "title": "7. Redis Stream Processing Lag (Backlog Count)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "redis_stream_group_lag",
+          "legendFormat": "{{group}} (Lag: {{stream}})"
+        }
+      ]
+    },
+    {
+      "title": "8. Redis Server Metrics (Mem & Clients)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes / 1024 / 1024",
+          "legendFormat": "Memory Usage (MB)"
+        },
+        {
+          "expr": "redis_connected_clients",
+          "legendFormat": "Connected Clients (Count)"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,
