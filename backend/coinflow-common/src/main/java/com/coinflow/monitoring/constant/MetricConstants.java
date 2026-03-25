@@ -16,7 +16,12 @@ public final class MetricConstants {
 
     // Consumer: 틱 처리 전체 지표
     public static final String TICK_PROCESS_LATENCY = "tick.process.latency";
+    public static final String TICK_MAIN_THREAD_LATENCY = "tick.main.thread.latency";
     public static final String TICK_PROCESS_STATUS = "tick.process.status";
+
+    // Consumer: 전파 지표
+    public static final String KLINE_BROADCAST_SKIPPED = "kline.broadcast.skipped";
+    public static final String BROADCAST_COUNT = "broadcast.count";
 
     // Tag Keys (다차원 분석용 태그 상수화)
     public static final String TAG_MODULE = "module";
@@ -26,4 +31,7 @@ public final class MetricConstants {
     // Tag Values
     public static final String VALUE_SUCCESS = "success";
     public static final String VALUE_FAILURE = "failure";
+
+    public static final String VALUE_TICKER = "ticker";
+    public static final String VALUE_KLINE = "kline";
 }

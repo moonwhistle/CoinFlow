@@ -81,6 +81,51 @@
           "legendFormat": "ACK P99"
         }
       ]
+    },
+    {
+      "title": "7. Main Thread vs E2E Latency (Avg ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(tick_main_thread_latency_seconds_sum[1m]) / rate(tick_main_thread_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "Main Thread Latency (ms)"
+        },
+        {
+          "expr": "rate(tick_process_latency_seconds_sum[1m]) / rate(tick_process_latency_seconds_count[1m]) * 1000",
+          "legendFormat": "E2E Latency (ms)"
+        }
+      ]
+    },
+    {
+      "title": "8. Throttling Protection Rate (%)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": {
+        "values": true,
+        "defaults": { "min": 0, "max": 100, "unit": "percent" }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(kline_broadcast_skipped_total[5m])) / (sum(rate(kline_broadcast_skipped_total[5m])) + sum(rate(broadcast_count_total{type=\"kline\"}[5m]))) * 100",
+          "legendFormat": "Dropped by Throttling (%)"
+        }
+      ]
+    },
+    {
+      "title": "9. Broadcast Traffic Distribution (TPS)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "rate(broadcast_count_total{type=\"ticker\"}[1m])",
+          "legendFormat": "Ticker (Every Tick)"
+        },
+        {
+          "expr": "rate(broadcast_count_total{type=\"kline\"}[1m])",
+          "legendFormat": "Kline (Throttled)"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,

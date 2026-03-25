@@ -70,6 +70,10 @@ public class TickProcessService {
             // 3단계: 집계 결과에 따른 저장 및 전파 조율 (SRP)
             List<CompletableFuture<Void>> dbFutures = coordinateResults(event.symbol(), result);
 
+            // 메인 스레드 점유 시간 기록 (비동기 작업 완료 대기 전)
+            metricRecorder.recordTime(TICK_MAIN_THREAD_LATENCY, sw.getTotalTimeMillis(), TAG_MODULE, "consumer",
+                    TAG_TYPE, "main");
+
             // 4단계: 비동기 작업(DB 저장 등) 완료 후 Redis ACK 및 지표 기록
             completeAndAcknowledge(dbFutures, streamKey, group, recordId, event.symbol(), sw);
 
