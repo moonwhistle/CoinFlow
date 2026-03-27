@@ -21,13 +21,17 @@ public class TickRawEventConsumer implements StreamListener<String, MapRecord<St
 
     @Override
     public void onMessage(MapRecord<String, String, byte[]> record) {
-        // [Phase 3.1] 바이너리 수신 지원을 위해 제네릭 타입 변경
-        // [Phase 3.2]에서 핸들러가 byte[]를 직접 받도록 수정할 예정입니다.
-        // 현재는 호환성을 위해 우선 바이너리 수신 상태만 활성화합니다.
-        
         log.debug("Received raw binary tick from stream. recordId={}", record.getId());
 
-        // TODO: 3.2 단계에서 핸들러 호출 방식을 바이너리 기반으로 변경
-        // boolean submitted = handler.handle(record.getValue(), ...);
+        // [Phase 3.2] 바이너리 데이터와 메타데이터를 핸들러에 전달하여 처리 루틴 시작
+        boolean submitted = handler.handle(
+                record.getValue(), 
+                properties.streamKey(), 
+                properties.group(), 
+                record.getId());
+
+        if (!submitted) {
+            log.error("Failed to submit message for processing. recordId={}", record.getId());
+        }
     }
 }
