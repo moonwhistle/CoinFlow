@@ -5,4 +5,6 @@ import com.coinflow.tick.event.TickRawEvent;
 public interface TickPublisher {
 
     void publish(TickRawEvent tickRawEvent);
+
+    void publish(byte[] rawData);
 }
