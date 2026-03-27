@@ -8,7 +8,6 @@ import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.monitoring.MetricRecorder;
-import com.coinflow.tick.event.TickRawEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +21,6 @@ import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.Objects;
@@ -34,87 +32,84 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static com.coinflow.monitoring.constant.MetricConstants.*;
 
+/**
+ * TickProcessService의 집계 연동 및 전파 로직을 검증하는 테스트입니다.
+ */
 @Slf4j
 @ExtendWith(MockitoExtension.class)
 class TickProcessServiceTest {
 
-        @Mock
-        private KlineAggregatorService klineAggregatorService;
-        @Mock
-        private LiveKlineRepository liveKlineRepository;
-        @Mock
-        private KlineBroadcaster klineBroadcaster;
-        @Mock
-        private TickerBroadcaster tickerBroadcaster;
-        @Mock
-        private DbPersistService dbPersistService;
-        @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-        private RedisTemplate<String, String> redisTemplate;
-        @Mock
-        private MetricRecorder metricRecorder;
+    @Mock
+    private KlineAggregatorService klineAggregatorService;
+    @Mock
+    private LiveKlineRepository liveKlineRepository;
+    @Mock
+    private KlineBroadcaster klineBroadcaster;
+    @Mock
+    private TickerBroadcaster tickerBroadcaster;
+    @Mock
+    private DbPersistService dbPersistService;
+    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
+    private RedisTemplate<String, String> redisTemplate;
+    @Mock
+    private MetricRecorder metricRecorder;
 
-        @InjectMocks
-        private TickProcessService tickProcessService;
+    @InjectMocks
+    private TickProcessService tickProcessService;
 
-        private TickRawEvent testEvent;
-        private RecordId recordId = RecordId.of("123-0");
+    private final String symbol = "btcusdt";
+    private final BigDecimal price = new BigDecimal("100");
+    private final BigDecimal quantity = new BigDecimal("10");
+    private final long eventTime = 123456789L;
+    private final RecordId recordId = RecordId.of("123-0");
 
-        @BeforeEach
-        void setUp() {
-                testEvent = new TickRawEvent("btcusdt", new BigDecimal("100"), new BigDecimal("10"), Instant.now(),
-                                "123-0");
-
-                // MetricRecorder가 인자로 받은 Runnable을 즉시 실행하도록 설정
+    @BeforeEach
+    void setUp() {
+        // MetricRecorder가 인자로 받은 Runnable을 즉시 실행하도록 설정 (Metric 측정 모킹)
         lenient().doAnswer(invocation -> {
             ((Runnable) invocation.getArgument(1)).run();
             return null;
         }).when(metricRecorder).recordTime(anyString(), any(Runnable.class), any(String[].class));
-        }
+    }
 
-        @Test
-        @DisplayName("지연 틱 발생 시 캐시 저장 및 전파, 비동기 DB 저장이 모두 수행되는지 확인")
-        void processLateTickTest() {
-                log.info("지연 틱 시나리오 테스트 시작");
+    @Test
+    @DisplayName("지연 틱 발생 시 캐시 저장, 전파, 비동기 DB 저장이 올바른 순서로 수행되어야 한다 (Zero-POJO)")
+    void processLateTickTest() {
+        // given: 지연 틱 데이터 결과 시나리오 구성
+        KlineSnapshot lateSnapshot = new KlineSnapshot(100L, 159L, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0, true);
+        ClosedKlineSnapshot closedKlineSnapshot = new ClosedKlineSnapshot("M1", lateSnapshot);
 
-                // [Given]
-                KlineSnapshot lateSnapshot = new KlineSnapshot(100L, 159L, BigDecimal.ZERO, BigDecimal.ZERO,
-                                BigDecimal.ZERO,
-                                BigDecimal.ZERO, BigDecimal.ZERO, 0, true);
-                ClosedKlineSnapshot closedKlineSnapshot = new ClosedKlineSnapshot("M1", lateSnapshot);
+        AggregationResult result = new AggregationResult(
+                List.of(), // 신규 마감 없음
+                List.of(), // 라이브 스냅샷 없음
+                List.of(closedKlineSnapshot) // 지연 업데이트 스냅샷 존재
+        );
 
-                AggregationResult result = new AggregationResult(
-                                List.of(), // 신규 마감 없음
-                                List.of(), // 라이브 스냅샷 없음
-                                List.of(closedKlineSnapshot) // 지연 업데이트 스냅샷 존재
-                );
+        when(klineAggregatorService.processTickAndGetResult(
+                eq(symbol), eq(price), eq(quantity), eq(eventTime))).thenReturn(result);
 
-                when(klineAggregatorService.processTickAndGetResult(
-                                eq("btcusdt"), any(), any(), anyLong())).thenReturn(result);
+        when(dbPersistService.persistClosedCandleAsync(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(null));
 
-                // 비동기 저장이 완료된 것으로 시뮬레이션
-                when(dbPersistService.persistClosedCandleAsync(any(), any()))
-                                .thenReturn(CompletableFuture.completedFuture(null));
+        // when: 기본형 파라미터를 통한 프로세스 호출
+        tickProcessService.process(symbol, price, quantity, eventTime, "mystream", "mygroup", recordId);
 
-                // [When]
-                log.info("TickProcessService.process 호출");
-                tickProcessService.process(testEvent, "mystream", "mygroup", recordId);
-
-                // [Then]
-                log.info("검증 단계 수행");
-                assertAll(
-                                // 1. Ticker 실시간 전파 확인
-                                () -> verify(tickerBroadcaster, times(1)).broadcast(any()),
-                                // 2. SRP: 캐시 저장(Storage) 및 브로드캐스트(Notification) 개별 호출 확인
-                                () -> verify(liveKlineRepository, times(1)).save(any(KlineEvent.class)),
-                                () -> verify(klineBroadcaster, times(1)).broadcast(any(KlineEvent.class)),
-                                // 메인 스레드 점유 시간 기록 확인
-                                () -> verify(metricRecorder, atLeastOnce()).recordTime(eq(TICK_MAIN_THREAD_LATENCY),
-                                                anyLong(), any(String[].class)),
-                                // 3. DB 비동기 저장 서비스 호출 확인
-                () -> verify(dbPersistService, times(1)).persistClosedCandleAsync(eq("btcusdt"), any()),
-                                // 4. 비동기 작업 종료 후 Redis ACK 확인
-                                () -> verify(Objects.requireNonNull(redisTemplate.opsForStream()), timeout(1000))
-                                                .acknowledge("mystream", "mygroup",
-                                                                recordId));
-        }
+        // then: 집계 엔진 호출 및 서비스 간 조율 결과 검증
+        assertAll(
+                // 1. Ticker 최신성 기반 전파 확인
+                () -> verify(tickerBroadcaster, times(1)).broadcast(any()),
+                // 2. 캐시 저장 및 브로드캐스트 전파 확인
+                () -> verify(liveKlineRepository, times(1)).save(any(KlineEvent.class)),
+                () -> verify(klineBroadcaster, times(1)).broadcast(any(KlineEvent.class)),
+                // 3. 메인 스레드 점유 시간(나노초) 기록 확인
+                () -> verify(metricRecorder, atLeastOnce()).recordTimeNanos(eq(TICK_MAIN_THREAD_LATENCY),
+                        anyLong(), any(String[].class)),
+                // 4. DB 비동기 저장 서비스 호출 확인
+                () -> verify(dbPersistService, times(1)).persistClosedCandleAsync(eq(symbol), any()),
+                // 5. 비동기 파이프라인 종료 후 Redis ACK 확인
+                () -> verify(Objects.requireNonNull(redisTemplate.opsForStream()), timeout(1000))
+                        .acknowledge("mystream", "mygroup", recordId)
+        );
+    }
 }
