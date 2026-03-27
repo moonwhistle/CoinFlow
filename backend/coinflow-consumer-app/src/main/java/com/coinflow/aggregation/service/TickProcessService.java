@@ -63,7 +63,8 @@ public class TickProcessService {
                     event.symbol(),
                     event.price(),
                     event.quantity(),
-                    event.eventTime().toEpochMilli());
+                    event.eventTime().toEpochMilli()
+            );
 
             // 3단계: 집계 결과에 따른 저장 및 전파 조율 (SRP)
             List<CompletableFuture<Void>> dbFutures = coordinateResults(event.symbol(), result);
