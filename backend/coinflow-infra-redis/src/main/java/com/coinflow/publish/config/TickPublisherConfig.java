@@ -12,10 +12,9 @@ public class TickPublisherConfig {
 
     @Bean
     public TickPublisher tickPublisher(
-            RedisTemplate<String, String> redisTemplate,
             RedisTemplate<String, byte[]> rawRedisTemplate,
             MetricRecorder metricRecorder
     ) {
-        return new RedisStreamTickPublisher(redisTemplate, rawRedisTemplate, metricRecorder);
+        return new RedisStreamTickPublisher(rawRedisTemplate, metricRecorder);
     }
 }
