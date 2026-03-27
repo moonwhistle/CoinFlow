@@ -147,6 +147,28 @@
           "legendFormat": "tick:raw stream size (bytes)"
         }
       ]
+    },
+    {
+      "title": "11. Redis Stream ACK Success Rate (TPS)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 },
+      "targets": [
+        {
+          "expr": "rate(stream_ack_count_total[1m])",
+          "legendFormat": "ACK Success TPS"
+        }
+      ]
+    },
+    {
+      "title": "12. Tick Processing Failure Count (Total)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 64 },
+      "targets": [
+        {
+          "expr": "increase(tick_process_status_total{status=\"failure\"}[1m])",
+          "legendFormat": "Failure Count (per min)"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,
