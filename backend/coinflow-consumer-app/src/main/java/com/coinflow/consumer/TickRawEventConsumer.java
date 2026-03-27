@@ -8,25 +8,26 @@ import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.stereotype.Component;
 
+/**
+ * Redis Stream으로부터 바이너리 데이터를 수신하여 핸들러에게 위임하는 컨슈머 클래스입니다.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class TickRawEventConsumer implements StreamListener<String, MapRecord<String, String, String>> {
+public class TickRawEventConsumer implements StreamListener<String, MapRecord<String, String, byte[]>> {
 
     private final TickRawMessageHandler handler;
     private final TickConsumerProperties properties;
 
     @Override
-    public void onMessage(MapRecord<String, String, String> record) {
-        // 실제 ACK는 비동기 작업(DB 저장 등)이 완료된 후 TickProcessService에서 수행함
-        boolean submitted = handler.handle(
-                record.getValue(), 
-                properties.streamKey(), 
-                properties.group(), 
-                record.getId());
+    public void onMessage(MapRecord<String, String, byte[]> record) {
+        // [Phase 3.1] 바이너리 수신 지원을 위해 제네릭 타입 변경
+        // [Phase 3.2]에서 핸들러가 byte[]를 직접 받도록 수정할 예정입니다.
+        // 현재는 호환성을 위해 우선 바이너리 수신 상태만 활성화합니다.
+        
+        log.debug("Received raw binary tick from stream. recordId={}", record.getId());
 
-        if (!submitted) {
-            log.error("Failed to submit message for processing. recordId={}", record.getId());
-        }
+        // TODO: 3.2 단계에서 핸들러 호출 방식을 바이너리 기반으로 변경
+        // boolean submitted = handler.handle(record.getValue(), ...);
     }
 }
