@@ -8,6 +8,7 @@ import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.monitoring.MetricRecorder;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -53,6 +54,8 @@ class TickProcessServiceTest {
     private RedisTemplate<String, String> redisTemplate;
     @Mock
     private MetricRecorder metricRecorder;
+    @Mock
+    private ObjectMapper objectMapper;
 
     @InjectMocks
     private TickProcessService tickProcessService;
@@ -64,12 +67,15 @@ class TickProcessServiceTest {
     private final RecordId recordId = RecordId.of("123-0");
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         // MetricRecorder가 인자로 받은 Runnable을 즉시 실행하도록 설정 (Metric 측정 모킹)
         lenient().doAnswer(invocation -> {
             ((Runnable) invocation.getArgument(1)).run();
             return null;
         }).when(metricRecorder).recordTime(anyString(), any(Runnable.class), any(String[].class));
+
+        // ObjectMapper가 null을 반환하면 broadcast/save에 null이 전달되어 검증에 실패하므로 stubbing
+        lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
     }
 
     @Test
@@ -98,10 +104,10 @@ class TickProcessServiceTest {
         // then: 집계 엔진 호출 및 서비스 간 조율 결과 검증
         assertAll(
                 // 1. Ticker 최신성 기반 전파 확인
-                () -> verify(tickerBroadcaster, times(1)).broadcast(any()),
+                () -> verify(tickerBroadcaster, times(1)).broadcast(anyString()),
                 // 2. 캐시 저장 및 브로드캐스트 전파 확인
-                () -> verify(liveKlineRepository, times(1)).save(any(KlineEvent.class)),
-                () -> verify(klineBroadcaster, times(1)).broadcast(any(KlineEvent.class)),
+                () -> verify(liveKlineRepository, times(1)).save(any(KlineEvent.class), anyString()),
+                () -> verify(klineBroadcaster, times(1)).broadcast(any(KlineEvent.class), anyString()),
                 // 3. 메인 스레드 점유 시간(나노초) 기록 확인
                 () -> verify(metricRecorder, atLeastOnce()).recordTimeNanos(eq(TICK_MAIN_THREAD_LATENCY),
                         anyLong(), any(String[].class)),
