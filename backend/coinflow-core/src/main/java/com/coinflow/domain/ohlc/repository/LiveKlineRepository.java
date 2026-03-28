@@ -6,10 +6,11 @@ import java.util.Optional;
 public interface LiveKlineRepository {
 
     /**
-     * Set the current live kline state (JSON) in Redis.
+     * Set the current live kline state in Redis using a pre-serialized JSON string.
+     * Caller is responsible for serializing KlineEvent before invoking.
      * Overwrites any existing value.
      */
-    void save(KlineEvent klineEvent);
+    void save(KlineEvent klineEvent, String preSerializedJson);
 
     /**
      * Get the current live kline state from Redis.

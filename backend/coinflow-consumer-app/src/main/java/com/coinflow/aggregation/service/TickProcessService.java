@@ -9,6 +9,7 @@ import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.event.ticker.TickerEvent;
 import com.coinflow.monitoring.MetricRecorder;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +41,7 @@ public class TickProcessService {
     private final DbPersistService dbPersistService;
     private final RedisTemplate<String, String> redisTemplate;
     private final MetricRecorder metricRecorder;
+    private final ObjectMapper objectMapper;
 
     private final Map<String, Long> lastBroadcastingTimeMap = new ConcurrentHashMap<>();
 
@@ -83,9 +85,13 @@ public class TickProcessService {
         long lastTime = lastBroadcastingTimeMap.getOrDefault(symbol, 0L);
 
         if (eventTime >= lastTime) {
-            TickerEvent tickerEvent = new TickerEvent(symbol, price, quantity, eventTime);
-            tickerBroadcaster.broadcast(tickerEvent);
-            lastBroadcastingTimeMap.put(symbol, eventTime);
+            try {
+                TickerEvent tickerEvent = new TickerEvent(symbol, price, quantity, eventTime);
+                tickerBroadcaster.broadcast(objectMapper.writeValueAsString(tickerEvent));
+                lastBroadcastingTimeMap.put(symbol, eventTime);
+            } catch (Exception e) {
+                log.error("Failed to serialize ticker for symbol={}", symbol, e);
+            }
         }
     }
 
@@ -99,8 +105,13 @@ public class TickProcessService {
 
     private void processCandidate(String symbol, ClosedKlineSnapshot snapshot) {
         KlineEvent event = toEvent(symbol, snapshot.interval(), snapshot.snapshot());
-        liveKlineRepository.save(event);
-        klineBroadcaster.broadcast(event);
+        try {
+            String json = objectMapper.writeValueAsString(event);
+            liveKlineRepository.save(event, json);
+            klineBroadcaster.broadcast(event, json);
+        } catch (Exception e) {
+            log.error("Failed to serialize kline event for symbol={}, interval={}", symbol, snapshot.interval(), e);
+        }
     }
 
     private void processFinalizedCandidate(String symbol, ClosedKlineSnapshot snapshot,

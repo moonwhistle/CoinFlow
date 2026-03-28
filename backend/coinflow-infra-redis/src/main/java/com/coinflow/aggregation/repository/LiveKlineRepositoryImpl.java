@@ -21,11 +21,10 @@ public class LiveKlineRepositoryImpl implements LiveKlineRepository {
     private final ObjectMapper objectMapper;
 
     @Override
-    public void save(KlineEvent klineEvent) {
+    public void save(KlineEvent klineEvent, String preSerializedJson) {
         String key = buildKey(klineEvent.symbol(), klineEvent.interval());
         try {
-            String json = objectMapper.writeValueAsString(klineEvent);
-            redisTemplate.opsForValue().set(Objects.requireNonNull(key), Objects.requireNonNull(json));
+            redisTemplate.opsForValue().set(Objects.requireNonNull(key), Objects.requireNonNull(preSerializedJson));
         } catch (Exception e) {
             log.error("Failed to save live kline to Redis: {}", key, e);
         }
