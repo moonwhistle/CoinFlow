@@ -1,0 +1,28 @@
+load-test:
+  tps: 1000
+
+# Binance WebSocket 설정은 load-test 프로필에서 사용하지 않지만,
+# BinanceWebSocketProperties 빈 자체는 로드될 수 있어 기본값 제공
+binance:
+  websocket:
+    base-url: wss://stream.binance.com:9443/stream
+    trade-stream-suffix: "@trade"
+    symbols:
+      - btcusdt
+
+logging:
+  level:
+    com.coinflow: info
+    com.coinflow.loadtest: info
+
+server:
+  port: 8083
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, metrics, health
+  metrics:
+    tags:
+      application: coinflow-collector-loadtest
