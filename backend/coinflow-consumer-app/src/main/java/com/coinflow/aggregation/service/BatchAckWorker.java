@@ -18,6 +18,7 @@ import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
 import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
 import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_COUNT;
 import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_LATENCY;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
 
 /**
  * Redis Stream XACK를 배치로 처리하기 위한 워커입니다.
@@ -45,7 +46,7 @@ public class BatchAckWorker {
 
     @PostConstruct
     public void init() {
-        scheduler.scheduleWithFixedDelay(this::flush, FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        scheduler.scheduleWithFixedDelay(() -> flush("interval"), FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
         log.info("BatchAckWorker initialized (BatchSize={}, Interval={}ms)", BATCH_SIZE, FLUSH_INTERVAL_MS);
     }
 
@@ -60,7 +61,7 @@ public class BatchAckWorker {
         } catch (InterruptedException e) {
             scheduler.shutdownNow();
         }
-        flush();
+        flush("shutdown");
     }
 
     /**
@@ -74,14 +75,14 @@ public class BatchAckWorker {
         
         if (ackQueue.size() >= BATCH_SIZE) {
             // 개수 기반 즉시 트리거 (스케줄러와 경합할 수 있으나 flush() 내에서 동기화됨)
-            CompletableFuture.runAsync(this::flush, scheduler);
+            CompletableFuture.runAsync(() -> flush("size"), scheduler);
         }
     }
 
     /**
      * 큐에 쌓인 RecordId들을 한 번에 XACK 처리합니다.
      */
-    private synchronized void flush() {
+    private synchronized void flush(String reason) {
         if (ackQueue.isEmpty()) {
             return;
         }
@@ -98,12 +99,14 @@ public class BatchAckWorker {
                 metricRecorder.recordTime(STREAM_ACK_LATENCY, () -> {
                     redisTemplate.opsForStream().acknowledge(streamKey, group, ids);
                     metricRecorder.increment(STREAM_ACK_COUNT, batch.size()); // 처리된 메시지 총합
-                    metricRecorder.increment(REDIS_COMMAND_COUNT, TAG_COMMAND, "XACK"); // 실제 Redis 명령 1회
+                    metricRecorder.increment(REDIS_COMMAND_COUNT, 
+                            TAG_COMMAND, "XACK", 
+                            TAG_FLUSH_REASON, reason); // 실제 Redis 명령 1회 + 사유 기록
                 });
-                log.trace("Flushed {} ACKs in batch", batch.size());
+                log.trace("Flushed {} ACKs in batch (reason={})", batch.size(), reason);
             } catch (Exception e) {
-                log.error("Failed to perform Batch XACK for {} records. stream={}, group={}", 
-                        batch.size(), streamKey, group, e);
+                log.error("Failed to perform Batch XACK for {} records. stream={}, group={}, reason={}", 
+                        batch.size(), streamKey, group, reason, e);
             }
         }
     }

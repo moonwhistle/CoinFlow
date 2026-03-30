@@ -29,6 +29,7 @@ public final class MetricConstants {
     public static final String TAG_TYPE = "type";
     public static final String TAG_COMMAND = "command";
     public static final String TAG_STATUS = "status";
+    public static final String TAG_FLUSH_REASON = "flush_reason";
 
     // Tag Values
     public static final String VALUE_SUCCESS = "success";
