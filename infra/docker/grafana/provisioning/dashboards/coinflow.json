@@ -123,9 +123,24 @@
       ]
     },
     {
-      "title": "9. Redis Server Metrics (Mem & Clients)",
+      "title": "9. Redis Command Call Ratio (Benchmark TPS)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
+      "targets": [
+        {
+          "expr": "rate(redis_command_count_total[1m])",
+          "legendFormat": "{{command}} TPS"
+        },
+        {
+          "expr": "rate(tick_receive_count_total[1m])",
+          "legendFormat": "Actual Inbound TPS"
+        }
+      ]
+    },
+    {
+      "title": "10. Redis Server Metrics (Mem & Clients)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 },
       "targets": [
         {
           "expr": "redis_memory_used_bytes / 1024 / 1024",
@@ -138,9 +153,9 @@
       ]
     },
     {
-      "title": "10. Redis Stream Key Memory Usage (Bytes)",
+      "title": "11. Redis Stream Key Memory Usage (Bytes)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 },
       "targets": [
         {
           "expr": "redis_key_size{key=\"tick:raw\"}",
@@ -149,9 +164,9 @@
       ]
     },
     {
-      "title": "11. Redis Stream ACK Success Rate (TPS)",
+      "title": "12. Redis Stream ACK Success Rate (TPS)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 64 },
       "targets": [
         {
           "expr": "rate(stream_ack_count_total[1m])",
@@ -160,9 +175,9 @@
       ]
     },
     {
-      "title": "12. Tick Processing Failure Count (Total)",
+      "title": "13. Tick Processing Failure Count (Total)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 64 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 72 },
       "targets": [
         {
           "expr": "increase(tick_process_status_total{status=\"failure\"}[1m])",

@@ -10,6 +10,7 @@ public final class MetricConstants {
     public static final String STREAM_ACK_COUNT = "stream.ack.count";
     public static final String STREAM_ACK_LATENCY = "stream.ack.latency";
     public static final String STREAM_BACKLOG_COUNT = "stream.backlog.count";
+    public static final String REDIS_COMMAND_COUNT = "redis.command.count";
 
     // Collector: 유입량 및 발행 지표
     public static final String WEBSOCKET_RECEIVE_COUNT = "tick.receive.count";
@@ -26,6 +27,7 @@ public final class MetricConstants {
     // Tag Keys (다차원 분석용 태그 상수화)
     public static final String TAG_MODULE = "module";
     public static final String TAG_TYPE = "type";
+    public static final String TAG_COMMAND = "command";
     public static final String TAG_STATUS = "status";
 
     // Tag Values

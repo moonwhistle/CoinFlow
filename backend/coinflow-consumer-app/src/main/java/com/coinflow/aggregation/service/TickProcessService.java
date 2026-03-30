@@ -13,7 +13,6 @@ import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -38,8 +37,8 @@ public class TickProcessService {
     private final KlineBroadcaster klineBroadcaster;
     private final TickerBroadcaster tickerBroadcaster;
     private final DbPersistService dbPersistService;
-    private final RedisTemplate<String, String> redisTemplate;
     private final MetricRecorder metricRecorder;
+    private final BatchAckWorker batchAckWorker;
     private final ObjectMapper objectMapper;
 
     private final Map<String, Long> lastBroadcastingTimeMap = new ConcurrentHashMap<>();
@@ -154,18 +153,11 @@ public class TickProcessService {
     }
 
     private void finalizeProcess(String streamKey, String group, RecordId recordId, String symbol, long startNanos) {
-        acknowledge(streamKey, group, recordId);
+        batchAckWorker.addAck(recordId);
         long e2eDurationNanos = System.nanoTime() - startNanos;
         metricRecorder.recordTimeNanos(TICK_PROCESS_LATENCY, e2eDurationNanos, TAG_MODULE, "consumer", TAG_TYPE, "e2e");
         metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_SUCCESS);
         log.trace("Acknowledge stream successfully (E2E Latency: {}ns) - symbol={}", e2eDurationNanos, symbol);
-    }
-
-    private void acknowledge(String streamKey, String group, RecordId recordId) {
-        metricRecorder.recordTime(STREAM_ACK_LATENCY, () -> {
-            redisTemplate.opsForStream().acknowledge(streamKey, group, recordId);
-            metricRecorder.increment(STREAM_ACK_COUNT);
-        });
     }
 
     private void recordFailure(String symbol) {

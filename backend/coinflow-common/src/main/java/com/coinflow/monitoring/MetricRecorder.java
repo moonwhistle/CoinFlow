@@ -22,10 +22,14 @@ public class MetricRecorder {
     private final Map<String, AtomicReference<Double>> gaugeCache = new ConcurrentHashMap<>();
 
     public void increment(String metricName, String... tags) {
+        increment(metricName, 1.0, tags);
+    }
+
+    public void increment(String metricName, double amount, String... tags) {
         String cacheKey = buildCacheKey(metricName, tags);
         counterCache.computeIfAbsent(cacheKey, k -> 
             meterRegistry.counter(metricName, tags)
-        ).increment();
+        ).increment(amount);
     }
 
     public void recordTime(String metricName, Runnable runnable, String... tags) {
