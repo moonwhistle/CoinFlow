@@ -5,6 +5,7 @@ import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
+import io.lettuce.core.XAddArgs;
 import io.lettuce.core.codec.ByteArrayCodec;
 import io.lettuce.core.codec.RedisCodec;
 import io.lettuce.core.codec.StringCodec;
@@ -44,13 +45,18 @@ public class LoadTestMain {
     };
 
     public static void main(String[] args) {
-        // 인자 파싱 (기본값: localhost 6379 1000 btcusdt)
-        String redisHost = args.length > 0 ? args[0] : "localhost";
-        int redisPort = args.length > 1 ? Integer.parseInt(args[1]) : 6379;
-        int targetTps = args.length > 2 ? Integer.parseInt(args[2]) : 1000;
-        List<String> symbols = args.length > 3
-                ? List.of(java.util.Arrays.copyOfRange(args, 3, args.length))
-                : List.of("btcusdt");
+        // 1순위: CLI 인자, 2순위: 환경 변수, 3순위: 기본값
+        String redisHost = args.length > 0 ? args[0] : getEnv("REDIS_HOST", "localhost");
+        int redisPort = args.length > 1 ? Integer.parseInt(args[1]) : Integer.parseInt(getEnv("REDIS_PORT", "6379"));
+        int targetTps = args.length > 2 ? Integer.parseInt(args[2]) : Integer.parseInt(getEnv("TARGET_TPS", "1000"));
+        
+        List<String> symbols;
+        if (args.length > 3) {
+            symbols = List.of(java.util.Arrays.copyOfRange(args, 3, args.length));
+        } else {
+            String envSymbols = getEnv("SYMBOLS", "btcusdt");
+            symbols = List.of(envSymbols.split(","));
+        }
 
         System.out.printf("[LoadTest] Config: host=%s port=%d tps=%d symbols=%s%n",
                 redisHost, redisPort, targetTps, symbols);
@@ -98,7 +104,8 @@ public class LoadTestMain {
                 byte[] payload = TickRawBinaryCodec.encode(symbol, price, qty, eventTime);
                 Map<String, byte[]> fields = new HashMap<>();
                 fields.put(PAYLOAD_FIELD, payload);
-                commands.xadd(STREAM_KEY, fields);
+                // 최근 10,000개만 유지 (메모리 관리용)
+                commands.xadd(STREAM_KEY, new XAddArgs().maxlen(10000).approximateTrimming(true), fields);
                 totalPublished.incrementAndGet();
             } catch (Exception e) {
                 System.err.println("[LoadTest] Publish error: " + e.getMessage());
@@ -128,4 +135,10 @@ public class LoadTestMain {
         } catch (InterruptedException ignored) {
         }
     }
+
+    private static String getEnv(String key, String defaultValue) {
+        String val = System.getenv(key);
+        return (val != null && !val.isEmpty()) ? val : defaultValue;
+    }
 }
+
