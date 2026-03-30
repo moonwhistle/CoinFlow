@@ -2,19 +2,36 @@ package com.coinflow.aggregation.service;
 
 import com.coinflow.config.properties.TickConsumerProperties;
 import com.coinflow.monitoring.MetricRecorder;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.*;
-
-import static com.coinflow.monitoring.constant.MetricConstants.*;
+import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_LATENCY;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_FLUSH_INTERVAL;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_FLUSH_SIZE;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_MODULE_CONSUMER;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_NA;
 
 /**
  * Redis Stream XACK를 배치로 처리하기 위한 워커입니다.
@@ -29,7 +46,7 @@ public class BatchAckWorker {
     private final TickConsumerProperties properties;
     private final MetricRecorder metricRecorder;
 
-    // 배치 설정 (추후 프로퍼티화 가능)
+    // 배치 설정
     private static final int BATCH_SIZE = 50;
     private static final long FLUSH_INTERVAL_MS = 100;
 
@@ -40,10 +57,27 @@ public class BatchAckWorker {
         return t;
     });
 
+    // Zero-Allocation을 위한 Meter 캐싱
+    private Timer ackLatencyTimer;
+    private Counter ackSuccessCounter;
+    private final Map<String, Counter> commandCountersByReason = new ConcurrentHashMap<>();
+
     @PostConstruct
     public void init() {
+        // Meter 핸들 사전 획득 (Runtime 객체 생성 제거)
+        this.ackLatencyTimer = metricRecorder.getTimer(STREAM_ACK_LATENCY, TAG_MODULE, VALUE_MODULE_CONSUMER);
+        this.ackSuccessCounter = metricRecorder.getCounter(STREAM_ACK_COUNT, TAG_MODULE, VALUE_MODULE_CONSUMER);
+        
+        // 사유별 Counter 사전 등록
+        String[] reasons = {VALUE_FLUSH_SIZE, VALUE_FLUSH_INTERVAL, VALUE_NA};
+        for (String reason : reasons) {
+            commandCountersByReason.put(reason, metricRecorder.getCounter(REDIS_COMMAND_COUNT, 
+                    TAG_COMMAND, "XACK", 
+                    TAG_FLUSH_REASON, reason));
+        }
+
         scheduler.scheduleWithFixedDelay(() -> flush(VALUE_FLUSH_INTERVAL), FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
-        log.info("BatchAckWorker initialized (BatchSize={}, Interval={}ms)", BATCH_SIZE, FLUSH_INTERVAL_MS);
+        log.info("BatchAckWorker initialized with Zero-Allocation Monitoring (BatchSize={}, Interval={}ms)", BATCH_SIZE, FLUSH_INTERVAL_MS);
     }
 
     @PreDestroy
@@ -57,7 +91,7 @@ public class BatchAckWorker {
         } catch (InterruptedException e) {
             scheduler.shutdownNow();
         }
-        flush(VALUE_NA); // shutdown시에는 NA 등으로 기록
+        flush(VALUE_NA);
     }
 
     /**
@@ -65,12 +99,10 @@ public class BatchAckWorker {
      */
     public void addAck(RecordId recordId) {
         if (!ackQueue.offer(recordId)) {
-            log.warn("BatchAckWorker queue is full! Immediate fallback might be needed.");
-            // 큐가 가득 찼을 경우에 대한 폴백은 현재 구현하지 않고 로그만 남김 (부하 조절 필요)
+            log.warn("BatchAckWorker queue is full!");
         }
         
         if (ackQueue.size() >= BATCH_SIZE) {
-            // 개수 기반 즉시 트리거 (스케줄러와 경합할 수 있으나 flush() 내에서 동기화됨)
             CompletableFuture.runAsync(() -> flush(VALUE_FLUSH_SIZE), scheduler);
         }
     }
@@ -92,17 +124,19 @@ public class BatchAckWorker {
             RecordId[] ids = batch.toArray(new RecordId[0]);
 
             try {
-                metricRecorder.recordTime(STREAM_ACK_LATENCY, () -> {
+                // 핸들을 직접 사용하여 런타임 객체 생성 최소화
+                ackLatencyTimer.record(() -> {
                     redisTemplate.opsForStream().acknowledge(streamKey, group, ids);
-                    metricRecorder.increment(STREAM_ACK_COUNT, batch.size()); // 처리된 메시지 총합
-                    metricRecorder.increment(REDIS_COMMAND_COUNT, 
-                            TAG_COMMAND, "XACK", 
-                            TAG_FLUSH_REASON, reason); // 실제 Redis 명령 1회 + 사유 기록
+                    ackSuccessCounter.increment(batch.size());
+                    
+                    Counter commandCounter = commandCountersByReason.get(reason);
+                    if (commandCounter != null) {
+                        commandCounter.increment();
+                    }
                 });
                 log.trace("Flushed {} ACKs in batch (reason={})", batch.size(), reason);
             } catch (Exception e) {
-                log.error("Failed to perform Batch XACK for {} records. stream={}, group={}, reason={}", 
-                        batch.size(), streamKey, group, reason, e);
+                log.error("Failed to perform Batch XACK. stream={}, group={}, reason={}", streamKey, group, reason, e);
             }
         }
     }

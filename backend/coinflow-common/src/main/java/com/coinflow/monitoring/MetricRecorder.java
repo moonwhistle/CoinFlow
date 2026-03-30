@@ -21,15 +21,42 @@ public class MetricRecorder {
     private final Map<String, Counter> counterCache = new ConcurrentHashMap<>();
     private final Map<String, AtomicReference<Double>> gaugeCache = new ConcurrentHashMap<>();
 
+    public Counter getCounter(String metricName, String... tags) {
+        String cacheKey = buildCacheKey(metricName, tags);
+        return counterCache.computeIfAbsent(cacheKey, k -> 
+            meterRegistry.counter(metricName, tags)
+        );
+    }
+
+    public Timer getTimer(String metricName, String... tags) {
+        String cacheKey = buildCacheKey(metricName, tags);
+        return timerCache.computeIfAbsent(cacheKey, k -> 
+            Timer.builder(metricName)
+                .tags(tags)
+                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
+                .register(meterRegistry)
+        );
+    }
+    
+    /**
+     * Gauge를 등록하고 해당 수치를 조절할 수 있는 AtomicReference를 반환합니다.
+     */
+    public AtomicReference<Double> registerGauge(String metricName, double initialValue, String... tags) {
+        String cacheKey = buildCacheKey(metricName, tags);
+        return gaugeCache.computeIfAbsent(cacheKey, k -> {
+            AtomicReference<Double> atomicReference = new AtomicReference<>(initialValue);
+            meterRegistry.gauge(metricName, Arrays.asList(convertToTags(tags)), atomicReference, 
+                    ref -> ref.get());
+            return atomicReference;
+        });
+    }
+
     public void increment(String metricName, String... tags) {
         increment(metricName, 1.0, tags);
     }
 
     public void increment(String metricName, double amount, String... tags) {
-        String cacheKey = buildCacheKey(metricName, tags);
-        counterCache.computeIfAbsent(cacheKey, k -> 
-            meterRegistry.counter(metricName, tags)
-        ).increment(amount);
+        getCounter(metricName, tags).increment(amount);
     }
 
     public void recordTime(String metricName, Runnable runnable, String... tags) {
@@ -57,13 +84,7 @@ public class MetricRecorder {
      * 실시간 수치(Gauge)를 기록합니다.
      */
     public void recordValue(String metricName, double value, String... tags) {
-        String cacheKey = buildCacheKey(metricName, tags);
-        gaugeCache.computeIfAbsent(cacheKey, k -> {
-            AtomicReference<Double> atomicReference = new AtomicReference<>(value);
-            meterRegistry.gauge(metricName, Arrays.asList(convertToTags(tags)), atomicReference, 
-                    ref -> ref.get());
-            return atomicReference;
-        }).set(value);
+        registerGauge(metricName, value, tags).set(value);
     }
 
     private io.micrometer.core.instrument.Tag[] convertToTags(String[] tags) {
@@ -76,15 +97,6 @@ public class MetricRecorder {
         return micrometerTags;
     }
 
-    private Timer getTimer(String metricName, String[] tags) {
-        String cacheKey = buildCacheKey(metricName, tags);
-        return timerCache.computeIfAbsent(cacheKey, k -> 
-            Timer.builder(metricName)
-                .tags(tags)
-                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
-                .register(meterRegistry)
-        );
-    }
 
     private String buildCacheKey(String metricName, String[] tags) {
         if (tags.length == 0) return metricName;
