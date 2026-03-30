@@ -3,7 +3,9 @@ package com.coinflow.monitoring;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -17,6 +19,7 @@ public class MetricRecorder {
     private final MeterRegistry meterRegistry;
     private final Map<String, Timer> timerCache = new ConcurrentHashMap<>();
     private final Map<String, Counter> counterCache = new ConcurrentHashMap<>();
+    private final Map<String, AtomicReference<Double>> gaugeCache = new ConcurrentHashMap<>();
 
     public void increment(String metricName, String... tags) {
         String cacheKey = buildCacheKey(metricName, tags);
@@ -44,6 +47,29 @@ public class MetricRecorder {
 
     public void recordTimeNanos(String metricName, long nanos, String... tags) {
         getTimer(metricName, tags).record(nanos, TimeUnit.NANOSECONDS);
+    }
+
+    /**
+     * 실시간 수치(Gauge)를 기록합니다.
+     */
+    public void recordValue(String metricName, double value, String... tags) {
+        String cacheKey = buildCacheKey(metricName, tags);
+        gaugeCache.computeIfAbsent(cacheKey, k -> {
+            AtomicReference<Double> atomicReference = new AtomicReference<>(value);
+            meterRegistry.gauge(metricName, Arrays.asList(convertToTags(tags)), atomicReference, 
+                    ref -> ref.get());
+            return atomicReference;
+        }).set(value);
+    }
+
+    private io.micrometer.core.instrument.Tag[] convertToTags(String[] tags) {
+        if (tags == null || tags.length < 2) return new io.micrometer.core.instrument.Tag[0];
+        int tagCount = tags.length / 2;
+        io.micrometer.core.instrument.Tag[] micrometerTags = new io.micrometer.core.instrument.Tag[tagCount];
+        for (int i = 0; i < tagCount; i++) {
+            micrometerTags[i] = io.micrometer.core.instrument.Tag.of(tags[2 * i], tags[2 * i + 1]);
+        }
+        return micrometerTags;
     }
 
     private Timer getTimer(String metricName, String[] tags) {
