@@ -67,8 +67,10 @@ public final class TickRawBinaryCodec {
         int symbolLen = data[0] & 0xFF;
         int offset = SYMBOL_LEN_SIZE + symbolLen;
 
-        ByteBuffer buffer = ByteBuffer.wrap(data, offset, BIG_DECIMAL_TOTAL_SIZE);
-        return BigDecimal.valueOf(buffer.getLong(), buffer.getInt());
+        long unscaled = readLong(data, offset);
+        int scale = readInt(data, offset + BD_UNSCALED_SIZE);
+        
+        return BigDecimal.valueOf(unscaled, scale);
     }
 
     /**
@@ -78,8 +80,10 @@ public final class TickRawBinaryCodec {
         int symbolLen = data[0] & 0xFF;
         int offset = SYMBOL_LEN_SIZE + symbolLen + BIG_DECIMAL_TOTAL_SIZE;
 
-        ByteBuffer buffer = ByteBuffer.wrap(data, offset, BIG_DECIMAL_TOTAL_SIZE);
-        return BigDecimal.valueOf(buffer.getLong(), buffer.getInt());
+        long unscaled = readLong(data, offset);
+        int scale = readInt(data, offset + BD_UNSCALED_SIZE);
+        
+        return BigDecimal.valueOf(unscaled, scale);
     }
 
     /**
@@ -89,7 +93,24 @@ public final class TickRawBinaryCodec {
         int symbolLen = data[0] & 0xFF;
         int offset = SYMBOL_LEN_SIZE + symbolLen + (BIG_DECIMAL_TOTAL_SIZE * 2);
 
-        ByteBuffer buffer = ByteBuffer.wrap(data, offset, EVENT_TIME_SIZE);
-        return buffer.getLong();
+        return readLong(data, offset);
+    }
+
+    private static long readLong(byte[] data, int offset) {
+        return ((long) (data[offset] & 0xFF) << 56) |
+               ((long) (data[offset + 1] & 0xFF) << 48) |
+               ((long) (data[offset + 2] & 0xFF) << 40) |
+               ((long) (data[offset + 3] & 0xFF) << 32) |
+               ((long) (data[offset + 4] & 0xFF) << 24) |
+               ((long) (data[offset + 5] & 0xFF) << 16) |
+               ((long) (data[offset + 6] & 0xFF) << 8) |
+               ((long) (data[offset + 7] & 0xFF));
+    }
+
+    private static int readInt(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 24) |
+               ((data[offset + 1] & 0xFF) << 16) |
+               ((data[offset + 2] & 0xFF) << 8) |
+               ((data[offset + 3] & 0xFF));
     }
 }

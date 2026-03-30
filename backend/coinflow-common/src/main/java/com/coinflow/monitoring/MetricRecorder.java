@@ -1,8 +1,12 @@
 package com.coinflow.monitoring;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -11,64 +15,53 @@ import org.springframework.stereotype.Component;
 public class MetricRecorder {
 
     private final MeterRegistry meterRegistry;
+    private final Map<String, Timer> timerCache = new ConcurrentHashMap<>();
+    private final Map<String, Counter> counterCache = new ConcurrentHashMap<>();
 
-    /**
-     * 단일 카운터를 1 증가시킵니다.
-     * @param metricName MetricConstants의 메트릭명
-     * @param tags (선택) 키-값 형태의 태그 목록 (예: "type", "success")
-     */
     public void increment(String metricName, String... tags) {
-        meterRegistry.counter(metricName, tags).increment();
-    }
-    
-    /**
-     * 반환값이 없는 메서드의 수행 시간과 백분위수(P95, P99 등)를 함께 측정합니다.
-     */
-    public void recordTime(String metricName, Runnable runnable, String... tags) {
-        Timer timer = Timer.builder(metricName)
-                .tags(tags)
-                .publishPercentiles(0.5, 0.9, 0.95, 0.99) // P50, P90, P95, P99 지표 전송 자동화
-                .register(meterRegistry);
-        timer.record(runnable);
+        String cacheKey = buildCacheKey(metricName, tags);
+        counterCache.computeIfAbsent(cacheKey, k -> 
+            meterRegistry.counter(metricName, tags)
+        ).increment();
     }
 
-    /**
-     * 반환값이 있는 메서드의 수행 시간과 백분위수(P95, P99 등)를 함께 측정하고 결과를 반환합니다.
-     */
+    public void recordTime(String metricName, Runnable runnable, String... tags) {
+        getTimer(metricName, tags).record(runnable);
+    }
+
     public <T> T recordTime(String metricName, Callable<T> callable, String... tags) {
-        Timer timer = Timer.builder(metricName)
-                .tags(tags)
-                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
-                .register(meterRegistry);
+        Timer timer = getTimer(metricName, tags);
         try {
             return timer.recordCallable(callable);
         } catch (Exception e) {
-            if (e instanceof RuntimeException) {
-                throw (RuntimeException) e;
-            }
-            throw new RuntimeException("Metric evaluation failed", e);
+            throw (e instanceof RuntimeException) ? (RuntimeException) e : new RuntimeException(e);
         }
     }
 
-    /**
-     * 이미 계산된 밀리초(ms) 단위의 기간을 기록합니다.
-     */
     public void recordTime(String metricName, long millis, String... tags) {
-        Timer timer = Timer.builder(metricName)
-                .tags(tags)
-                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
-                .register(meterRegistry);
-        timer.record(java.time.Duration.ofMillis(millis));
+        getTimer(metricName, tags).record(millis, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * 이미 계산된 나노초(ns) 단위의 기간을 기록합니다.
-     */
     public void recordTimeNanos(String metricName, long nanos, String... tags) {
-        Timer timer = Timer.builder(metricName)
+        getTimer(metricName, tags).record(nanos, TimeUnit.NANOSECONDS);
+    }
+
+    private Timer getTimer(String metricName, String[] tags) {
+        String cacheKey = buildCacheKey(metricName, tags);
+        return timerCache.computeIfAbsent(cacheKey, k -> 
+            Timer.builder(metricName)
                 .tags(tags)
                 .publishPercentiles(0.5, 0.9, 0.95, 0.99)
-                .register(meterRegistry);
-        timer.record(java.time.Duration.ofNanos(nanos));
+                .register(meterRegistry)
+        );
+    }
+
+    private String buildCacheKey(String metricName, String[] tags) {
+        if (tags.length == 0) return metricName;
+        StringBuilder sb = new StringBuilder(metricName);
+        for (String tag : tags) {
+            sb.append(":").append(tag);
+        }
+        return sb.toString();
     }
 }

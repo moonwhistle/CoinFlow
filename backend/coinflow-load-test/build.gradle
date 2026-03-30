@@ -23,6 +23,7 @@ application {
 }
 
 jar {
+    dependsOn(':coinflow-common:jar')
     manifest {
         attributes 'Main-Class': 'com.coinflow.loadtest.LoadTestMain'
     }
