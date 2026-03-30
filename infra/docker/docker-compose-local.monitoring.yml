@@ -29,3 +29,16 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: coinflow-redis-exporter
+    environment:
+      - REDIS_ADDR=redis-local:6379
+    command: ["-check-streams"]
+    ports:
+      - "9121:9121"
+    # Redis가 별도로 떠 있으므로 호스트를 찾아갈 수 있게 함
+    extra_hosts:
+      - "redis-local:host-gateway"
+    restart: unless-stopped
