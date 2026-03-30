@@ -7,7 +7,6 @@ import com.coinflow.domain.aggregation.service.KlineAggregatorService;
 import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
-import com.coinflow.event.ticker.TickerEvent;
 import com.coinflow.monitoring.MetricRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -52,7 +51,7 @@ public class TickProcessService {
     public void process(String symbol, BigDecimal price, BigDecimal quantity, long eventTime, 
                         String streamKey, String group, RecordId recordId) {
         
-        log.debug("Processing raw tick data: symbol={}, price={}, time={}", symbol, price, eventTime);
+        log.trace("Processing raw tick data: symbol={}, price={}, time={}", symbol, price, eventTime);
 
         long startNanos = System.nanoTime();
 
@@ -86,11 +85,13 @@ public class TickProcessService {
 
         if (eventTime >= lastTime) {
             try {
-                TickerEvent tickerEvent = new TickerEvent(symbol, price, quantity, eventTime);
-                tickerBroadcaster.broadcast(objectMapper.writeValueAsString(tickerEvent));
+                // Zero-POJO: TickerEvent 객체 생성 및 Jackson 호출 없이 직접 JSON 조립
+                String json = "{\"symbol\":\"" + symbol + "\",\"price\":" + price + 
+                              ",\"volume\":" + quantity + ",\"eventTime\":" + eventTime + "}";
+                tickerBroadcaster.broadcast(json);
                 lastBroadcastingTimeMap.put(symbol, eventTime);
             } catch (Exception e) {
-                log.error("Failed to serialize ticker for symbol={}", symbol, e);
+                log.error("Failed to propagate ticker for symbol={}", symbol, e);
             }
         }
     }
@@ -157,7 +158,7 @@ public class TickProcessService {
         long e2eDurationNanos = System.nanoTime() - startNanos;
         metricRecorder.recordTimeNanos(TICK_PROCESS_LATENCY, e2eDurationNanos, TAG_MODULE, "consumer", TAG_TYPE, "e2e");
         metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_SUCCESS);
-        log.debug("Acknowledge stream successfully (E2E Latency: {}ns) - symbol={}", e2eDurationNanos, symbol);
+        log.trace("Acknowledge stream successfully (E2E Latency: {}ns) - symbol={}", e2eDurationNanos, symbol);
     }
 
     private void acknowledge(String streamKey, String group, RecordId recordId) {
