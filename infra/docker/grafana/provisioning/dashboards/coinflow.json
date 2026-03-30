@@ -199,6 +199,17 @@
           "legendFormat": "Redis Server CPU (%)"
         }
       ]
+    },
+    {
+      "title": "15. Batch ACK Flush Reason Analysis",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 88 },
+      "targets": [
+        {
+          "expr": "rate(redis_command_count_total{command=\"XACK\"}[1m])",
+          "legendFormat": "Flush Reason: {{flush_reason}}"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,

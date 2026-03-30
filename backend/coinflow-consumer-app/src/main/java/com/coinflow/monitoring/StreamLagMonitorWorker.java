@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
 import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
 import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
 
@@ -37,7 +38,9 @@ public class StreamLagMonitorWorker {
 
         try {
             // Redis 명령 횟수 기록 (XINFO)
-            metricRecorder.increment(REDIS_COMMAND_COUNT, TAG_COMMAND, "XINFO");
+            metricRecorder.increment(REDIS_COMMAND_COUNT, 
+                    TAG_COMMAND, "XINFO",
+                    TAG_FLUSH_REASON, "none");
 
             StreamInfo.XInfoGroups groups = redisTemplate.opsForStream().groups(streamKey);
             if (groups != null) {
