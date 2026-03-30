@@ -1,13 +1,21 @@
 {
   "title": "CoinFlow Real-Time Metrics",
   "uid": "coinflow-custom-dashboard",
-  "tags": ["coinflow", "monitoring"],
+  "tags": [
+    "coinflow",
+    "monitoring"
+  ],
   "timezone": "browser",
   "panels": [
     {
       "title": "1. WebSocket Tick Receive Rate (TPS)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "targets": [
         {
           "expr": "rate(tick_receive_count_total[1m])",
@@ -16,24 +24,64 @@
       ]
     },
     {
-      "title": "2. Main Thread vs E2E Latency (Avg ms)",
+      "title": "2. Main Thread Latency (Pure Logic/Serialization µs)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "description": "틱 수신부터 비동기 작업(DB 저장 등) 위임 전까지의 순수 CPU 연산 시간",
       "targets": [
         {
-          "expr": "rate(tick_main_thread_latency_seconds_sum[1m]) / rate(tick_main_thread_latency_seconds_count[1m]) * 1000",
-          "legendFormat": "Main Thread Latency (ms)"
+          "expr": "tick_main_thread_latency_seconds{quantile=\"0.95\"} * 1000000",
+          "legendFormat": "P95 (Pure Logic µs)"
         },
         {
-          "expr": "rate(tick_process_latency_seconds_sum[1m]) / rate(tick_process_latency_seconds_count[1m]) * 1000",
-          "legendFormat": "E2E Latency (ms)"
+          "expr": "tick_main_thread_latency_seconds{quantile=\"0.99\"} * 1000000",
+          "legendFormat": "P99 (Pure Logic µs)"
+        },
+        {
+          "expr": "rate(tick_main_thread_latency_seconds_sum[1m]) / rate(tick_main_thread_latency_seconds_count[1m]) * 1000000",
+          "legendFormat": "Avg (Pure Logic µs)"
         }
       ]
     },
     {
-      "title": "3. Redis XADD / ACK Latency (Avg ms)",
+      "title": "3. E2E Process Latency (Total/DB/ACK µs)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "description": "틱 수신부터 DB 영속화 및 ACK 완료까지의 전체 종단 간 시간",
+      "targets": [
+        {
+          "expr": "tick_process_latency_seconds{quantile=\"0.95\"} * 1000000",
+          "legendFormat": "P95 (Total µs)"
+        },
+        {
+          "expr": "tick_process_latency_seconds{quantile=\"0.99\"} * 1000000",
+          "legendFormat": "P99 (Total µs)"
+        },
+        {
+          "expr": "rate(tick_process_latency_seconds_sum[1m]) / rate(tick_process_latency_seconds_count[1m]) * 1000000",
+          "legendFormat": "Avg (Total µs)"
+        }
+      ]
+    },
+    {
+      "title": "4. Redis XADD / ACK Latency (Avg ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "targets": [
         {
           "expr": "rate(stream_publish_latency_seconds_sum[1m]) / rate(stream_publish_latency_seconds_count[1m]) * 1000",
@@ -46,9 +94,14 @@
       ]
     },
     {
-      "title": "4. API Caffeine Cache Hit Rate (%)",
+      "title": "5. API Caffeine Cache Hit Rate (%)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "targets": [
         {
           "expr": "sum(rate(cache_gets_total{cache=\"ohlc_chart_cache\", result=\"hit\"}[1m])) / sum(rate(cache_gets_total{cache=\"ohlc_chart_cache\"}[1m])) * 100",
@@ -57,9 +110,14 @@
       ]
     },
     {
-      "title": "5. Redis XADD Latency (P95, P99 ms)",
+      "title": "6. Redis XADD Latency (P95, P99 ms)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
       "targets": [
         {
           "expr": "stream_publish_latency_seconds{quantile=\"0.95\"} * 1000",
@@ -72,9 +130,14 @@
       ]
     },
     {
-      "title": "6. Redis ACK Latency (P95, P99 ms)",
+      "title": "7. Redis ACK Latency (P95, P99 ms)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
       "targets": [
         {
           "expr": "stream_ack_latency_seconds{quantile=\"0.95\"} * 1000",
@@ -87,9 +150,14 @@
       ]
     },
     {
-      "title": "7. Redis Stream Processing Lag (Backlog Count)",
+      "title": "8. Redis Stream Processing Lag (Backlog Count)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
       "targets": [
         {
           "expr": "redis_stream_group_lag",
@@ -98,9 +166,14 @@
       ]
     },
     {
-      "title": "8. Redis Server Metrics (Mem & Clients)",
+      "title": "9. Redis Server Metrics (Mem & Clients)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
       "targets": [
         {
           "expr": "redis_memory_used_bytes / 1024 / 1024",
@@ -109,6 +182,54 @@
         {
           "expr": "redis_connected_clients",
           "legendFormat": "Connected Clients (Count)"
+        }
+      ]
+    },
+    {
+      "title": "10. Redis Stream Key Memory Usage (Bytes)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "targets": [
+        {
+          "expr": "redis_key_size{key=\"tick:raw\"}",
+          "legendFormat": "tick:raw stream size (bytes)"
+        }
+      ]
+    },
+    {
+      "title": "11. Redis Stream ACK Success Rate (TPS)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "targets": [
+        {
+          "expr": "rate(stream_ack_count_total[1m])",
+          "legendFormat": "ACK Success TPS"
+        }
+      ]
+    },
+    {
+      "title": "12. Tick Processing Failure Count (Total)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "targets": [
+        {
+          "expr": "increase(tick_process_status_total{status=\"failure\"}[1m])",
+          "legendFormat": "Failure Count (per min)"
         }
       ]
     }
