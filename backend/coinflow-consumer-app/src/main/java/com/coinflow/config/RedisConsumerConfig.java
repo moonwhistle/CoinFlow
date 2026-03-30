@@ -11,14 +11,18 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer.StreamMessageListenerContainerOptions;
+
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_MAX_LEN;
 
 /**
  * Redis Stream 소비자(Consumer) 설정을 담당하며, 바이너리 수신(Phase 3.1)을 지원합니다.
@@ -81,7 +85,14 @@ public class RedisConsumerConfig {
                 log.info("Redis consumer group already exists: {}", group);
             } else if (msg.contains(ERROR_NO_SUCH_KEY) || msg.contains(ERROR_NO_GROUP)) {
                 log.warn("Redis stream does not exist. Initializing stream and group: {}", group);
-                redisTemplate.opsForStream().add(streamKey, Map.of(DUMMY_EVENT_KEY, DUMMY_EVENT_VALUE));
+                
+                // 더미 메시지 발행 시에도 MAXLEN 적용 (안정성 강화)
+                XAddOptions options = XAddOptions.maxlen(STREAM_MAX_LEN).approximateTrimming(true);
+                MapRecord<String, String, String> record = StreamRecords.newRecord()
+                        .in(streamKey)
+                        .ofMap(Map.of(DUMMY_EVENT_KEY, DUMMY_EVENT_VALUE));
+                
+                redisTemplate.opsForStream().add(record, options);
                 redisTemplate.opsForStream().createGroup(streamKey, ReadOffset.latest(), group);
             } else {
                 log.error("Critical error during Redis Consumer Group initialization: {}", msg);

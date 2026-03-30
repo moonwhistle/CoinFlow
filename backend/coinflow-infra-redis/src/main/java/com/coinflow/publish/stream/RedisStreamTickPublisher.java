@@ -10,8 +10,13 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
+import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.RedisTemplate;
+
+import static com.coinflow.monitoring.constant.MetricConstants.*;
 
 /**
  * Redis Stream을 통해 바이너리 틱 데이터를 전송하는 구현체입니다.
@@ -31,12 +36,18 @@ public class RedisStreamTickPublisher implements TickPublisher {
      */
     @Override
     public void publish(byte[] rawData) {
-        Map<String, byte[]> fields = Map.of(RAW_PAYLOAD_FIELD, rawData);
+        // MapRecord 생성 (String, String, byte[])
+        MapRecord<String, String, byte[]> record = StreamRecords.newRecord()
+                .in(RAW_TICK_STREAM)
+                .ofMap(Map.of(RAW_PAYLOAD_FIELD, rawData));
 
-        RecordId recordId = executePublish(() -> rawRedisTemplate.opsForStream().add(RAW_TICK_STREAM, fields));
+        // MAXLEN ~ 1,000,000 설정을 통한 자동 트리밍 (XAddOptions)
+        XAddOptions options = XAddOptions.maxlen(STREAM_MAX_LEN).approximateTrimming(true);
 
-        log.debug("Published raw tick data. stream={}, recordId={}", 
-                RAW_TICK_STREAM, recordId.getValue());
+        RecordId recordId = executePublish(() -> rawRedisTemplate.opsForStream().add(record, options));
+
+        log.debug("Published raw tick data. stream={}, recordId={}, maxlen={}", 
+                RAW_TICK_STREAM, recordId.getValue(), STREAM_MAX_LEN);
     }
 
     /**
