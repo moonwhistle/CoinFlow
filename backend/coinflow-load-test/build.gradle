@@ -1,0 +1,33 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.coinflow'
+version = '0.0.1-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Redis Client
+    implementation 'io.lettuce:lettuce-core:6.4.1.RELEASE'
+    
+    // Internal Common module (for binary encoding)
+    implementation project(':coinflow-common')
+    
+    // Logger
+    implementation 'org.slf4j:slf4j-api:2.0.16'
+    implementation 'ch.qos.logback:logback-classic:1.5.12'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.coinflow.loadtest.LoadTestMain'
+    }
+    // 의존성 포함 fat jar 생성
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
