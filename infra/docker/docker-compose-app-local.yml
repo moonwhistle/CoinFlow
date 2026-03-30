@@ -17,12 +17,12 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=1234
-      - JAVA_TOOL_OPTIONS=-Xmx512m -Xms512m
+      - JAVA_TOOL_OPTIONS=-Xmx128m -Xms128m
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1024M
+          cpus: '0.5'
+          memory: 192M
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -38,6 +38,12 @@ services:
       - SPRING_CONFIG_NAME=application-ws
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATA_REDIS_HOST=redis-local
+      - JAVA_TOOL_OPTIONS=-Xmx64m -Xms64m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -56,6 +62,12 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=1234
+      - JAVA_TOOL_OPTIONS=-Xmx256m -Xms256m
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 384M
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -74,6 +86,12 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=1234
+      - JAVA_TOOL_OPTIONS=-Xmx128m -Xms128m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 192M
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -91,5 +109,11 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=1234
+      - JAVA_TOOL_OPTIONS=-Xmx128m -Xms128m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 192M
     extra_hosts:
       - "host.docker.internal:host-gateway"
