@@ -7,7 +7,7 @@ COPY build/libs/coinflow-load-test-*.jar app.jar
 # 환경 변수 기본값
 ENV REDIS_HOST=localhost \
     REDIS_PORT=6379 \
-    TARGET_TPS=1000 \
+    TARGET_TPS=10000 \
     SYMBOLS=btcusdt
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
