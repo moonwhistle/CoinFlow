@@ -1,19 +1,14 @@
 package com.coinflow.monitoring;
 
 import com.coinflow.config.properties.TickConsumerProperties;
-import com.coinflow.monitoring.constant.MetricConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.StreamInfo;
-import org.springframework.data.redis.connection.stream.StreamInfo.XInfoGroup;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
-import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
-import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
-import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.*;
 
 /**
  * Redis Stream의 컨슈머 그룹 Lag(Backlog) 수치를 주기적으로 수집하여 메트릭으로 기록합니다.
@@ -40,7 +35,7 @@ public class StreamLagMonitorWorker {
             // Redis 명령 횟수 기록 (XINFO)
             metricRecorder.increment(REDIS_COMMAND_COUNT, 
                     TAG_COMMAND, "XINFO",
-                    TAG_FLUSH_REASON, "none");
+                    TAG_FLUSH_REASON, VALUE_NA);
 
             StreamInfo.XInfoGroups groups = redisTemplate.opsForStream().groups(streamKey);
             if (groups != null) {
@@ -57,8 +52,8 @@ public class StreamLagMonitorWorker {
                             }
 
                             if (lag != null) {
-                                metricRecorder.recordValue(MetricConstants.STREAM_BACKLOG_COUNT, lag.doubleValue(), 
-                                        TAG_MODULE, "consumer");
+                                metricRecorder.recordValue(STREAM_BACKLOG_COUNT, lag.doubleValue(), 
+                                        TAG_MODULE, VALUE_MODULE_CONSUMER);
                                 log.debug("Redis Stream Lag monitored: stream={}, group={}, lag={}", 
                                         streamKey, group, lag);
                             } else {

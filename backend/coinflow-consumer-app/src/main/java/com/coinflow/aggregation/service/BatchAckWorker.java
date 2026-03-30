@@ -14,11 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 
-import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
-import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
-import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_COUNT;
-import static com.coinflow.monitoring.constant.MetricConstants.STREAM_ACK_LATENCY;
-import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
+import static com.coinflow.monitoring.constant.MetricConstants.*;
 
 /**
  * Redis Stream XACK를 배치로 처리하기 위한 워커입니다.
@@ -46,7 +42,7 @@ public class BatchAckWorker {
 
     @PostConstruct
     public void init() {
-        scheduler.scheduleWithFixedDelay(() -> flush("interval"), FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        scheduler.scheduleWithFixedDelay(() -> flush(VALUE_FLUSH_INTERVAL), FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
         log.info("BatchAckWorker initialized (BatchSize={}, Interval={}ms)", BATCH_SIZE, FLUSH_INTERVAL_MS);
     }
 
@@ -61,7 +57,7 @@ public class BatchAckWorker {
         } catch (InterruptedException e) {
             scheduler.shutdownNow();
         }
-        flush("shutdown");
+        flush(VALUE_NA); // shutdown시에는 NA 등으로 기록
     }
 
     /**
@@ -75,7 +71,7 @@ public class BatchAckWorker {
         
         if (ackQueue.size() >= BATCH_SIZE) {
             // 개수 기반 즉시 트리거 (스케줄러와 경합할 수 있으나 flush() 내에서 동기화됨)
-            CompletableFuture.runAsync(() -> flush("size"), scheduler);
+            CompletableFuture.runAsync(() -> flush(VALUE_FLUSH_SIZE), scheduler);
         }
     }
 

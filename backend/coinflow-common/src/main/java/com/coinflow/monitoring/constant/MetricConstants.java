@@ -10,6 +10,7 @@ public final class MetricConstants {
     public static final String STREAM_ACK_COUNT = "stream.ack.count";
     public static final String STREAM_ACK_LATENCY = "stream.ack.latency";
     public static final String STREAM_BACKLOG_COUNT = "stream.backlog.count";
+    public static final String STREAM_PEL_COUNT = "stream.pel.count";
     public static final String REDIS_COMMAND_COUNT = "redis.command.count";
 
     // Collector: 유입량 및 발행 지표
@@ -34,4 +35,8 @@ public final class MetricConstants {
     // Tag Values
     public static final String VALUE_SUCCESS = "success";
     public static final String VALUE_FAILURE = "failure";
+    public static final String VALUE_MODULE_CONSUMER = "consumer";
+    public static final String VALUE_NA = "NA";
+    public static final String VALUE_FLUSH_SIZE = "size";
+    public static final String VALUE_FLUSH_INTERVAL = "interval";
 }
