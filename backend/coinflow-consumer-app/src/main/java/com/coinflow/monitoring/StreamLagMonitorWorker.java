@@ -1,6 +1,9 @@
 package com.coinflow.monitoring;
 
 import com.coinflow.config.properties.TickConsumerProperties;
+import io.micrometer.core.instrument.Counter;
+import jakarta.annotation.PostConstruct;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.StreamInfo;
@@ -8,7 +11,13 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import static com.coinflow.monitoring.constant.MetricConstants.*;
+import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_BACKLOG_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_MODULE_CONSUMER;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_NA;
 
 /**
  * Redis Stream의 컨슈머 그룹 Lag(Backlog) 수치를 주기적으로 수집하여 메트릭으로 기록합니다.
@@ -23,6 +32,17 @@ public class StreamLagMonitorWorker {
     private final TickConsumerProperties properties;
     private final MetricRecorder metricRecorder;
 
+    private AtomicReference<Double> backlogGauge;
+    private Counter xinfoCounter;
+
+    @PostConstruct
+    public void init() {
+        this.backlogGauge = metricRecorder.registerGauge(STREAM_BACKLOG_COUNT, 0.0, TAG_MODULE, VALUE_MODULE_CONSUMER);
+        this.xinfoCounter = metricRecorder.getCounter(REDIS_COMMAND_COUNT, 
+                TAG_COMMAND, "XINFO",
+                TAG_FLUSH_REASON, VALUE_NA);
+    }
+
     /**
      * 주기적으로 Lag 수치를 확인합니다. (기본 5초)
      */
@@ -32,10 +52,8 @@ public class StreamLagMonitorWorker {
         String group = properties.group();
 
         try {
-            // Redis 명령 횟수 기록 (XINFO)
-            metricRecorder.increment(REDIS_COMMAND_COUNT, 
-                    TAG_COMMAND, "XINFO",
-                    TAG_FLUSH_REASON, VALUE_NA);
+            // Redis 명령 횟수 기록 (XINFO) - Pre-fetched
+            xinfoCounter.increment();
 
             StreamInfo.XInfoGroups groups = redisTemplate.opsForStream().groups(streamKey);
             if (groups != null) {
@@ -44,18 +62,11 @@ public class StreamLagMonitorWorker {
                         .findFirst()
                         .ifPresent(g -> {
                             Object lagObj = g.getRaw().get("lag");
-                            Long lag = null;
-                            if (lagObj instanceof Long) {
-                                lag = (Long) lagObj;
-                            } else if (lagObj instanceof Number) {
-                                lag = ((Number) lagObj).longValue();
-                            }
-
-                            if (lag != null) {
-                                metricRecorder.recordValue(STREAM_BACKLOG_COUNT, lag.doubleValue(), 
-                                        TAG_MODULE, VALUE_MODULE_CONSUMER);
+                            if (lagObj instanceof Number) {
+                                double lagValue = ((Number) lagObj).doubleValue();
+                                backlogGauge.set(lagValue);
                                 log.debug("Redis Stream Lag monitored: stream={}, group={}, lag={}", 
-                                        streamKey, group, lag);
+                                        streamKey, group, lagValue);
                             } else {
                                 log.warn("Stream lag information is not available for group: {}. Please check Redis version (7.0+ required).", group);
                             }

@@ -1,6 +1,10 @@
 package com.coinflow.monitoring;
 
 import com.coinflow.config.properties.TickConsumerProperties;
+import io.micrometer.core.instrument.Counter;
+import jakarta.annotation.PostConstruct;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Range;
@@ -10,9 +14,13 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
-
-import static com.coinflow.monitoring.constant.MetricConstants.*;
+import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PEL_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_MODULE_CONSUMER;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_NA;
 
 /**
  * Redis Stream의 PEL(Pending Entries List)을 감시하여 장기간 ACK되지 않은 메시지를 로깅합니다.
@@ -33,6 +41,17 @@ public class PelRecoveryWorker {
     // 한 번에 조회할 최대 Pending 메시지 수
     private static final int PEL_BATCH_SIZE = 100;
 
+    private AtomicReference<Double> pelCountGauge;
+    private Counter xpendingCounter;
+
+    @PostConstruct
+    public void init() {
+        this.pelCountGauge = metricRecorder.registerGauge(STREAM_PEL_COUNT, 0.0, TAG_MODULE, VALUE_MODULE_CONSUMER);
+        this.xpendingCounter = metricRecorder.getCounter(REDIS_COMMAND_COUNT, 
+                TAG_COMMAND, "XPENDING",
+                TAG_FLUSH_REASON, VALUE_NA);
+    }
+
     /**
      * 1분 주기로 PEL을 스캔합니다.
      */
@@ -42,10 +61,14 @@ public class PelRecoveryWorker {
         String group = properties.group();
 
         try {
+            // Redis 명령 횟수 기록 (XPENDING)
+            xpendingCounter.increment();
+
             // 최대 Pending 메시지를 조회
             PendingMessages pendingMessages = redisTemplate.opsForStream().pending(streamKey, group, Range.unbounded(), (long) PEL_BATCH_SIZE);
 
             if (pendingMessages == null || pendingMessages.isEmpty()) {
+                pelCountGauge.set(0.0);
                 return;
             }
 
@@ -55,7 +78,7 @@ public class PelRecoveryWorker {
             for (PendingMessage pm : pendingMessages) {
                 Duration elapsedTime = pm.getElapsedTimeSinceLastDelivery();
                 
-                if (elapsedTime.compareTo(PEL_THRESHOLD) >= 0) {
+                if (elapsedTime != null && elapsedTime.compareTo(PEL_THRESHOLD) >= 0) {
                     overThresholdCount++;
                     log.warn("[PEL-ALERT] Found long-pending message. stream={}, group={}, recordId={}, consumer={}, idleSeconds={}", 
                             streamKey, group, pm.getId(), pm.getConsumerName(), elapsedTime.toSeconds());
@@ -69,8 +92,8 @@ public class PelRecoveryWorker {
                 log.debug("[PEL-CHECK] All {} pending messages are within the threshold.", totalPending);
             }
 
-            // 지연된 메시지 수 메트릭 기록
-            metricRecorder.recordValue(STREAM_PEL_COUNT, (double) overThresholdCount, TAG_MODULE, VALUE_MODULE_CONSUMER);
+            // 지연된 메시지 수 메트릭 기록 - Pre-fetched Gauge 사용
+            pelCountGauge.set((double) overThresholdCount);
 
         } catch (Exception e) {
             log.error("Failed to monitor Redis stream PEL. stream={}, group={}, error={}", 
