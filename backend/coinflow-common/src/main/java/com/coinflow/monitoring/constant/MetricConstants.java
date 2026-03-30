@@ -9,6 +9,7 @@ public final class MetricConstants {
     // Consumer: Stream ACK 관련 지표
     public static final String STREAM_ACK_COUNT = "stream.ack.count";
     public static final String STREAM_ACK_LATENCY = "stream.ack.latency";
+    public static final String STREAM_BACKLOG_COUNT = "stream.backlog.count";
 
     // Collector: 유입량 및 발행 지표
     public static final String WEBSOCKET_RECEIVE_COUNT = "tick.receive.count";

@@ -117,8 +117,8 @@
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
       "targets": [
         {
-          "expr": "redis_stream_group_lag",
-          "legendFormat": "{{group}} (Lag: {{stream}})"
+          "expr": "stream_backlog_count",
+          "legendFormat": "Backlog ({{module}})"
         }
       ]
     },
