@@ -184,6 +184,21 @@
           "legendFormat": "Failure Count (per min)"
         }
       ]
+    },
+    {
+      "title": "14. Resource Usage (Consumer & Redis CPU %)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 80 },
+      "targets": [
+        {
+          "expr": "process_cpu_usage{application=\"coinflow-consumer\"} * 100",
+          "legendFormat": "Consumer CPU Usage (%)"
+        },
+        {
+          "expr": "(rate(redis_cpu_user_seconds_total[1m]) + rate(redis_cpu_sys_seconds_total[1m])) * 100",
+          "legendFormat": "Redis Server CPU (%)"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,
