@@ -2,7 +2,6 @@ package com.coinflow.aggregation.service;
 
 import com.coinflow.config.properties.TickConsumerProperties;
 import com.coinflow.monitoring.MetricRecorder;
-import com.coinflow.monitoring.constant.MetricConstants;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;

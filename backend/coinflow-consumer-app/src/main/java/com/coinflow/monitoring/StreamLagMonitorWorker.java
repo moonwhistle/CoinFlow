@@ -10,10 +10,13 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
 import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
+import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
 
 /**
  * Redis Stream의 컨슈머 그룹 Lag(Backlog) 수치를 주기적으로 수집하여 메트릭으로 기록합니다.
+ * 또한 모니터링을 위한 Redis 명령(XINFO) 호출 횟수도 기록합니다.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,6 +36,9 @@ public class StreamLagMonitorWorker {
         String group = properties.group();
 
         try {
+            // Redis 명령 횟수 기록 (XINFO)
+            metricRecorder.increment(REDIS_COMMAND_COUNT, TAG_COMMAND, "XINFO");
+
             StreamInfo.XInfoGroups groups = redisTemplate.opsForStream().groups(streamKey);
             if (groups != null) {
                 groups.stream()
