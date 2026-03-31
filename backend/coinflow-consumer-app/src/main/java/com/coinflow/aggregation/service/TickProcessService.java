@@ -1,25 +1,27 @@
 package com.coinflow.aggregation.service;
 
-import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
 import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.aggregation.service.KlineAggregatorService;
-import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.monitoring.MetricRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.connection.stream.RecordId;
-import org.springframework.stereotype.Service;
-
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.stereotype.Service;
 
 import static com.coinflow.monitoring.constant.MetricConstants.*;
 
@@ -41,16 +43,28 @@ public class TickProcessService {
     private final BatchAckWorker batchAckWorker;
     private final ObjectMapper objectMapper;
 
+    // 인메모리 중복 방지를 위한 처리 완료 ID 캐시 (LRU 기반 정확한 존재 여부 검증)
+    private final Cache<String, Boolean> processedIdCache = Caffeine.newBuilder()
+            .maximumSize(100_000)
+            .expireAfterWrite(Duration.ofMinutes(1))
+            .build();
+
     private final Map<String, Long> lastBroadcastingTimeMap = new ConcurrentHashMap<>();
 
     /**
      * Optimized entry point for tick processing (Zero-POJO variant).
-     * Avoids creation of intermediate TickRawEvent objects.
      */
     public void process(String symbol, BigDecimal price, BigDecimal quantity, long eventTime, 
                         String streamKey, String group, RecordId recordId) {
         
-        log.trace("Processing raw tick data: symbol={}, price={}, time={}", symbol, price, eventTime);
+        // 1. 중복 체크: 이미 처리된 ID라면 비즈니스 로직 스킵 후 ACK만 수행
+        if (isDuplicate(symbol, recordId)) {
+            batchAckWorker.addAck(recordId);
+            return;
+        }
+
+        log.trace("Processing raw tick data: symbol={}, price={}, time={}, id={}", 
+                symbol, price, eventTime, recordId);
 
         long startNanos = System.nanoTime();
 
@@ -162,5 +176,21 @@ public class TickProcessService {
 
     private void recordFailure(String symbol) {
         metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_FAILURE);
+    }
+
+    /**
+     * Checks if the incoming record is a duplicate based on the exact RecordId value.
+     * Uses a high-performance Caffeine cache to handle out-of-order re-deliveries.
+     */
+    private boolean isDuplicate(String symbol, RecordId incomingId) {
+        String idValue = incomingId.getValue();
+        if (processedIdCache.getIfPresent(idValue) != null) {
+            log.trace("Duplicate tick detected for {}: id={}. Skipping aggregation.", 
+                    symbol, idValue);
+            return true;
+        }
+
+        processedIdCache.put(idValue, Boolean.TRUE);
+        return false;
     }
 }

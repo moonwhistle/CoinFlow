@@ -46,11 +46,12 @@ public class BatchAckWorker {
     private final TickConsumerProperties properties;
     private final MetricRecorder metricRecorder;
 
-    // 배치 설정
-    private static final int BATCH_SIZE = 50;
-    private static final long FLUSH_INTERVAL_MS = 100;
+    // 배치 설정: 10,000 ~ 100,000 TPS 대응을 위한 최적화 값
+    private static final int BATCH_SIZE = 500; 
+    private static final long FLUSH_INTERVAL_MS = 50; 
 
-    private final BlockingQueue<RecordId> ackQueue = new LinkedBlockingQueue<>(10000);
+    // 부하 분산을 위한 버퍼 큐 확장 (기존 10,000)
+    private final BlockingQueue<RecordId> ackQueue = new LinkedBlockingQueue<>(50000);
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "batch-ack-worker");
         t.setDaemon(true);
