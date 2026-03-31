@@ -11,7 +11,6 @@ import com.coinflow.handler.TickMessageHandler;
 import com.coinflow.monitoring.MetricRecorder;
 import com.coinflow.tick.publisher.TickPublisher;
 import com.coinflow.tick.serialization.TickRawBinaryCodec;
-import com.coinflow.tick.validation.TickValidator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -60,9 +59,9 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
                 }
             }
 
-            // 2. 유효성 검증 및 바이너리 전송
+            // 2. 바이너리 인코딩 및 전송
+            // Note: TickRawBinaryCodec.encode() 내부에서 TickValidator.validate()가 강제 호출됨 (DRY)
             if (symbol != null && price != null && quantity != null && eventTime != 0) {
-                TickValidator.validate(symbol, price, quantity, eventTime);
                 byte[] rawData = TickRawBinaryCodec.encode(symbol, price, quantity, eventTime);
                 publisher.publish(rawData);
                 log.debug("Successfully published streaming binary tick: {}", symbol);

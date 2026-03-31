@@ -52,6 +52,7 @@ public class BatchAckWorker {
 
     // 부하 분산을 위한 버퍼 큐 확장 (기존 10,000)
     private final BlockingQueue<RecordId> ackQueue = new LinkedBlockingQueue<>(50000);
+    private volatile boolean running = true; // (Point 4) 종료 상태 관리용 플래그
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "batch-ack-worker");
         t.setDaemon(true);
@@ -84,6 +85,18 @@ public class BatchAckWorker {
     @PreDestroy
     public void destroy() {
         log.info("Shutting down BatchAckWorker, flushing remaining ACKs...");
+        
+        // 1. 새로운 요청 차단 (Point 4)
+        this.running = false;
+
+        // 2. 종료 전 마지막 강제 Flush
+        try {
+            flush(VALUE_NA);
+        } catch (Exception e) {
+            log.error("Failed to perform final flush during shutdown", e);
+        }
+
+        // 3. 스케줄러 종료
         scheduler.shutdown();
         try {
             if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -91,14 +104,19 @@ public class BatchAckWorker {
             }
         } catch (InterruptedException e) {
             scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
         }
-        flush(VALUE_NA);
     }
 
     /**
      * ACK 처리가 필요한 RecordId를 큐에 추가합니다.
      */
     public void addAck(RecordId recordId) {
+        if (!running) {
+            log.warn("BatchAckWorker is shutting down. Rejecting recordId={}", recordId);
+            return;
+        }
+
         if (!ackQueue.offer(recordId)) {
             log.warn("BatchAckWorker queue is full!");
         }

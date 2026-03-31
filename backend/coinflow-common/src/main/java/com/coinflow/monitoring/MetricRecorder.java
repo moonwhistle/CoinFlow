@@ -7,7 +7,8 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -17,20 +18,30 @@ import org.springframework.stereotype.Component;
 public class MetricRecorder {
 
     private final MeterRegistry meterRegistry;
-    private final Map<String, Timer> timerCache = new ConcurrentHashMap<>();
-    private final Map<String, Counter> counterCache = new ConcurrentHashMap<>();
-    private final Map<String, AtomicReference<Double>> gaugeCache = new ConcurrentHashMap<>();
+    
+    // (Point 3) OOM 방지를 위한 최대 크기 제한(1000) 및 LRU 정책 적용
+    private final Cache<String, Timer> timerCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .build();
+            
+    private final Cache<String, Counter> counterCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .build();
+            
+    private final Cache<String, AtomicReference<Double>> gaugeCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .build();
 
     public Counter getCounter(String metricName, String... tags) {
         String cacheKey = buildCacheKey(metricName, tags);
-        return counterCache.computeIfAbsent(cacheKey, k -> 
+        return counterCache.get(cacheKey, k -> 
             meterRegistry.counter(metricName, tags)
         );
     }
 
     public Timer getTimer(String metricName, String... tags) {
         String cacheKey = buildCacheKey(metricName, tags);
-        return timerCache.computeIfAbsent(cacheKey, k -> 
+        return timerCache.get(cacheKey, k -> 
             Timer.builder(metricName)
                 .tags(tags)
                 .publishPercentiles(0.5, 0.9, 0.95, 0.99)
@@ -43,7 +54,7 @@ public class MetricRecorder {
      */
     public AtomicReference<Double> registerGauge(String metricName, double initialValue, String... tags) {
         String cacheKey = buildCacheKey(metricName, tags);
-        return gaugeCache.computeIfAbsent(cacheKey, k -> {
+        return gaugeCache.get(cacheKey, k -> {
             AtomicReference<Double> atomicReference = new AtomicReference<>(initialValue);
             meterRegistry.gauge(metricName, Arrays.asList(convertToTags(tags)), atomicReference, 
                     ref -> ref.get());
