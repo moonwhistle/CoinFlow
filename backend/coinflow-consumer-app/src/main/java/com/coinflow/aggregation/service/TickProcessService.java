@@ -1,34 +1,33 @@
 package com.coinflow.aggregation.service;
 
-import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
+import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
 import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.aggregation.service.KlineAggregatorService;
-import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
 import com.coinflow.event.kline.KlineEvent;
-import com.coinflow.event.ticker.TickerEvent;
-import com.coinflow.tick.event.TickRawEvent;
 import com.coinflow.monitoring.MetricRecorder;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.connection.stream.RecordId;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StopWatch;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.stereotype.Service;
 
 import static com.coinflow.monitoring.constant.MetricConstants.*;
 
 /**
  * Orchestrates the tick processing pipeline (SRP).
- * Ensures low-latency propagation and reliable persistence via an async
- * pipeline.
+ * Ensures low-latency propagation and reliable persistence via an async pipeline.
  */
 @Service
 @RequiredArgsConstructor
@@ -40,89 +39,98 @@ public class TickProcessService {
     private final KlineBroadcaster klineBroadcaster;
     private final TickerBroadcaster tickerBroadcaster;
     private final DbPersistService dbPersistService;
-    private final RedisTemplate<String, String> redisTemplate;
     private final MetricRecorder metricRecorder;
+    private final BatchAckWorker batchAckWorker;
+    private final ObjectMapper objectMapper;
 
-    // symbol -> last processed eventTime (ms) to prevent out-of-order broadcasting
+    // 인메모리 중복 방지를 위한 처리 완료 ID 캐시 (LRU 기반 정확한 존재 여부 검증)
+    private final Cache<String, Boolean> processedIdCache = Caffeine.newBuilder()
+            .maximumSize(100_000)
+            .expireAfterWrite(Duration.ofMinutes(1))
+            .build();
+
     private final Map<String, Long> lastBroadcastingTimeMap = new ConcurrentHashMap<>();
 
     /**
-     * Primary entry point for tick processing.
-     * Observability: Measures E2E latency from ingestion to acknowledgement.
+     * Optimized entry point for tick processing (Zero-POJO variant).
      */
-    public void process(TickRawEvent event, String streamKey, String group, RecordId recordId) {
-        log.debug("Processing tick event: {}", event);
+    public void process(String symbol, BigDecimal price, BigDecimal quantity, long eventTime, 
+                        String streamKey, String group, RecordId recordId) {
+        
+        // 1. 중복 체크: 이미 처리된 ID라면 비즈니스 로직 스킵 후 ACK만 수행
+        if (isDuplicate(symbol, recordId)) {
+            batchAckWorker.addAck(recordId);
+            return;
+        }
 
-        StopWatch sw = new StopWatch();
-        sw.start();
+        log.trace("Processing raw tick data: symbol={}, price={}, time={}, id={}", 
+                symbol, price, eventTime, recordId);
+
+        long startNanos = System.nanoTime();
 
         try {
-            // 1단계: 실시간 시세(Ticker) 전파 - 최신성 검증 포함
-            propagateTicker(event);
+            // 1단계: Ticker 전파
+            propagateTicker(symbol, price, quantity, eventTime);
 
-            // 2단계: 도메인 집계 엔진 호출 (Buffer 기반 OHLCV 산출)
+            // 2단계: 집계 엔진 호출
             AggregationResult result = klineAggregatorService.processTickAndGetResult(
-                    event.symbol(),
-                    event.price(),
-                    event.quantity(),
-                    event.eventTime().toEpochMilli());
+                    symbol, price, quantity, eventTime
+            );
 
-            // 3단계: 집계 결과에 따른 저장 및 전파 조율 (SRP)
-            List<CompletableFuture<Void>> dbFutures = coordinateResults(event.symbol(), result);
+            // 3단계: 결과 조율
+            List<CompletableFuture<Void>> dbFutures = coordinateResults(symbol, result);
 
-            // 메인 스레드 점유 시간 기록 (비동기 작업 완료 대기 전)
-            metricRecorder.recordTime(TICK_MAIN_THREAD_LATENCY, sw.getTotalTimeMillis(), TAG_MODULE, "consumer",
-                    TAG_TYPE, "main");
+            metricRecorder.recordTimeNanos(TICK_MAIN_THREAD_LATENCY, System.nanoTime() - startNanos, 
+                    TAG_MODULE, "consumer", TAG_TYPE, "main");
 
-            // 4단계: 비동기 작업(DB 저장 등) 완료 후 Redis ACK 및 지표 기록
-            completeAndAcknowledge(dbFutures, streamKey, group, recordId, event.symbol(), sw);
+            // 4단계: 비동기 완료 후 ACK
+            completeAndAcknowledge(dbFutures, streamKey, group, recordId, symbol, startNanos);
 
         } catch (Exception e) {
-            log.error("[Consumer] Critical failure processing tick - symbol={}", event.symbol(), e);
-            recordFailure(event.symbol());
+            log.error("[Consumer] Critical failure processing tick - symbol={}", symbol, e);
+            recordFailure(symbol);
             throw e;
         }
     }
 
-    private void propagateTicker(TickRawEvent event) {
-        long currentEventTime = event.eventTime().toEpochMilli();
-        long lastTime = lastBroadcastingTimeMap.getOrDefault(event.symbol(), 0L);
+    private void propagateTicker(String symbol, BigDecimal price, BigDecimal quantity, long eventTime) {
+        long lastTime = lastBroadcastingTimeMap.getOrDefault(symbol, 0L);
 
-        if (currentEventTime >= lastTime) {
-            TickerEvent tickerEvent = new TickerEvent(event.symbol(), event.price(), event.quantity(),
-                    currentEventTime);
-            tickerBroadcaster.broadcast(tickerEvent);
-            lastBroadcastingTimeMap.put(event.symbol(), currentEventTime);
+        if (eventTime >= lastTime) {
+            try {
+                // Zero-POJO: TickerEvent 객체 생성 및 Jackson 호출 없이 직접 JSON 조립
+                String json = "{\"symbol\":\"" + symbol + "\",\"price\":" + price + 
+                              ",\"volume\":" + quantity + ",\"eventTime\":" + eventTime + "}";
+                tickerBroadcaster.broadcast(json);
+                lastBroadcastingTimeMap.put(symbol, eventTime);
+            } catch (Exception e) {
+                log.error("Failed to propagate ticker for symbol={}", symbol, e);
+            }
         }
     }
 
     private List<CompletableFuture<Void>> coordinateResults(String symbol, AggregationResult result) {
         List<CompletableFuture<Void>> futures = new ArrayList<>();
-
-        // 마감 및 지연 업데이트된 스냅샷 처리 (저장 + 전파 + DB 예약)
         result.lateUpdatedSnapshots().forEach(c -> processFinalizedCandidate(symbol, c, futures));
         result.closedSnapshots().forEach(c -> processFinalizedCandidate(symbol, c, futures));
-
-        // 진행 중인 실시간 스냅샷 처리 (저장 + 전파 전용)
         result.liveSnapshots().forEach(c -> processCandidate(symbol, c));
-
         return futures;
     }
 
     private void processCandidate(String symbol, ClosedKlineSnapshot snapshot) {
-        // DRY: 매핑 로직 서비스 내부로 집중
         KlineEvent event = toEvent(symbol, snapshot.interval(), snapshot.snapshot());
-
-        // SRP: 저장과 전파 책임을 분리하여 제어
-        liveKlineRepository.save(event);
-        klineBroadcaster.broadcast(event);
+        try {
+            String json = objectMapper.writeValueAsString(event);
+            liveKlineRepository.save(event, json);
+            klineBroadcaster.broadcast(event, json);
+        } catch (Exception e) {
+            log.error("Failed to serialize kline event for symbol={}, interval={}", symbol, snapshot.interval(), e);
+        }
     }
 
     private void processFinalizedCandidate(String symbol, ClosedKlineSnapshot snapshot,
             List<CompletableFuture<Void>> futures) {
         processCandidate(symbol, snapshot);
-
-        // 지연/마감 데이터는 DB 영속화를 비동기로 병행
         futures.add(dbPersistService.persistClosedCandleAsync(symbol, snapshot));
     }
 
@@ -144,12 +152,12 @@ public class TickProcessService {
 
     private void completeAndAcknowledge(List<CompletableFuture<Void>> futures,
             String streamKey, String group, RecordId recordId,
-            String symbol, StopWatch sw) {
+            String symbol, long startNanos) {
         if (futures.isEmpty()) {
-            finalizeProcess(streamKey, group, recordId, symbol, sw);
+            finalizeProcess(streamKey, group, recordId, symbol, startNanos);
         } else {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenRun(() -> finalizeProcess(streamKey, group, recordId, symbol, sw))
+                    .thenRun(() -> finalizeProcess(streamKey, group, recordId, symbol, startNanos))
                     .exceptionally(ex -> {
                         log.error("Async pipeline failed for {}. Message will stick in PENDING.", symbol, ex);
                         recordFailure(symbol);
@@ -158,32 +166,31 @@ public class TickProcessService {
         }
     }
 
-    private void finalizeProcess(String streamKey, String group, RecordId recordId, String symbol, StopWatch sw) {
-        // 1. Redis ACK 수행
-        acknowledge(streamKey, group, recordId);
-
-        // 2. 전체 소요 시간 측정 종료 및 기록
-        if (sw.isRunning()) {
-            sw.stop();
-        }
-
-        metricRecorder.recordTime(TICK_PROCESS_LATENCY, sw.getTotalTimeMillis(), TAG_MODULE, "consumer", TAG_TYPE,
-                "e2e");
+    private void finalizeProcess(String streamKey, String group, RecordId recordId, String symbol, long startNanos) {
+        batchAckWorker.addAck(recordId);
+        long e2eDurationNanos = System.nanoTime() - startNanos;
+        metricRecorder.recordTimeNanos(TICK_PROCESS_LATENCY, e2eDurationNanos, TAG_MODULE, "consumer", TAG_TYPE, "e2e");
         metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_SUCCESS);
-
-        log.debug("Acknowledge stream successfully (E2E Latency: {}ms) - symbol={}", sw.getTotalTimeMillis(), symbol);
-    }
-
-    private void acknowledge(String streamKey, String group, RecordId recordId) {
-        metricRecorder.recordTime(
-                STREAM_ACK_LATENCY,
-                () -> {
-                    redisTemplate.opsForStream().acknowledge(streamKey, group, recordId);
-                    metricRecorder.increment(STREAM_ACK_COUNT);
-                });
+        log.trace("Acknowledge stream successfully (E2E Latency: {}ns) - symbol={}", e2eDurationNanos, symbol);
     }
 
     private void recordFailure(String symbol) {
         metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_FAILURE);
+    }
+
+    /**
+     * Checks if the incoming record is a duplicate based on the exact RecordId value.
+     * Uses a high-performance Caffeine cache to handle out-of-order re-deliveries.
+     */
+    private boolean isDuplicate(String symbol, RecordId incomingId) {
+        String idValue = incomingId.getValue();
+        if (processedIdCache.getIfPresent(idValue) != null) {
+            log.trace("Duplicate tick detected for {}: id={}. Skipping aggregation.", 
+                    symbol, idValue);
+            return true;
+        }
+
+        processedIdCache.put(idValue, Boolean.TRUE);
+        return false;
     }
 }

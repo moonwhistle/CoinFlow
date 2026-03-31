@@ -54,3 +54,6 @@ management:
   metrics:
     tags:
       application: coinflow-consumer
+
+monitoring:
+  lag-check-interval-ms: 5000

@@ -5,20 +5,23 @@ import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.EV
 import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.PRICE;
 import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.QUANTITY;
 import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.SYMBOL;
+import static com.coinflow.monitoring.constant.MetricConstants.WEBSOCKET_RECEIVE_COUNT;
 
-import com.coinflow.tick.event.TickRawEvent;
 import com.coinflow.handler.TickMessageHandler;
+import com.coinflow.monitoring.MetricRecorder;
 import com.coinflow.tick.publisher.TickPublisher;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.coinflow.tick.serialization.TickRawBinaryCodec;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import com.coinflow.monitoring.MetricRecorder;
-import static com.coinflow.monitoring.constant.MetricConstants.WEBSOCKET_RECEIVE_COUNT;
-
+/**
+ * 바이낸스 Websocket Trade 메시지를 처리하여 Redis Stream으로 전송하는 핸들러입니다.
+ * Jackson Stream API를 사용하여 JsonNode 트리 생성 없이 필드 값을 즉시 추출하여 Zero-POJO 및 최소 메모리 할당을 구현합니다.
+ */
 @RequiredArgsConstructor
 @Slf4j
 public class BinanceTradeMessageHandler implements TickMessageHandler {
@@ -29,26 +32,43 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
 
     @Override
     public void handle(String message) {
-        log.info("Received raw message: {}", message);
         metricRecorder.increment(WEBSOCKET_RECEIVE_COUNT);
-        try {
-            JsonNode root = objectMapper.readTree(message);
-            JsonNode data = root.get(DATA);
+        
+        try (JsonParser parser = objectMapper.createParser(message)) {
+            String symbol = null;
+            BigDecimal price = null;
+            BigDecimal quantity = null;
+            long eventTime = 0;
 
-            TickRawEvent event = new TickRawEvent(
-                    data.get(SYMBOL).asText().toLowerCase(),
-                    new BigDecimal(data.get(PRICE).asText()),
-                    new BigDecimal(data.get(QUANTITY).asText()),
-                    Instant.ofEpochMilli(data.get(EVENT_TIME).asLong()),
-                    null // streamId는 Collector 단계에서 아직 존재하지 않음 (publish 이전)
-            );
+            // 1. JSON 스트리밍 파싱 (JsonNode 생성 방지)
+            while (parser.nextToken() != JsonToken.END_OBJECT) {
+                String fieldName = parser.currentName();
+                if (fieldName == null) continue;
 
-            publisher.publish(event);
+                if (DATA.equals(fieldName)) {
+                    parser.nextToken(); // START_OBJECT {
+                    while (parser.nextToken() != JsonToken.END_OBJECT) {
+                        String dataFieldName = parser.currentName();
+                        parser.nextToken(); // 필드 값으로 이동
+                        
+                        if (SYMBOL.equals(dataFieldName)) symbol = parser.getText().toLowerCase();
+                        else if (PRICE.equals(dataFieldName)) price = new BigDecimal(parser.getText());
+                        else if (QUANTITY.equals(dataFieldName)) quantity = new BigDecimal(parser.getText());
+                        else if (EVENT_TIME.equals(dataFieldName)) eventTime = parser.getLongValue();
+                    }
+                }
+            }
+
+            // 2. 바이너리 인코딩 및 전송
+            // Note: TickRawBinaryCodec.encode() 내부에서 TickValidator.validate()가 강제 호출됨 (DRY)
+            if (symbol != null && price != null && quantity != null && eventTime != 0) {
+                byte[] rawData = TickRawBinaryCodec.encode(symbol, price, quantity, eventTime);
+                publisher.publish(rawData);
+                log.debug("Successfully published streaming binary tick: {}", symbol);
+            }
+
         } catch (Exception e) {
-            log.warn(
-                    "Failed to parse binance trade message. message={}",
-                    message,
-                    e);
+            log.warn("Failed to stream binance trade message. error={}", e.getMessage());
         }
     }
 }
