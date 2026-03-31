@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'io.spring.dependency-management'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.boot:spring-boot-dependencies:3.4.1"
+    }
+}
+
+dependencies {
+    // TickRawBinaryCodec, TickPublisher 등 공통 유틸
+    implementation project(':coinflow-common')
+
+    // Spring Boot 없이 직접 Redis 연결
+    implementation 'io.lettuce:lettuce-core:6.3.2.RELEASE'
+}
+
+application {
+    mainClass = 'com.coinflow.loadtest.LoadTestMain'
+}
+
+jar {
+    dependsOn(':coinflow-common:jar')
+    manifest {
+        attributes 'Main-Class': 'com.coinflow.loadtest.LoadTestMain'
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

@@ -1,52 +1,29 @@
-# Local development for Spring Boot Apps ONLY
-# Must be run after DB and Redis containers are up.
+# CoinFlow Sustained Load Test Environment (EC2 T2.micro Simulation)
+# ONLY APPLICATION MODULES (Assuming DB & Redis are already running on host)
 
 services:
-  api-app:
+  # 부하 발생기 (수집기 대체)
+  load-test-producer:
     build:
-      context: ../../backend/coinflow-api-app
+      context: ../../backend/coinflow-load-test
       dockerfile: Dockerfile
-    container_name: coinflow-api-local
-    ports:
-      - "8080:8080"
+    container_name: coinflow-loadtest-producer
     environment:
-      - SERVER_PORT=8080
-      - SPRING_CONFIG_NAME=application-api
-      - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATA_REDIS_HOST=redis-local
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
-      - SPRING_DATASOURCE_USERNAME=ohlc_user
-      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
-      - JAVA_TOOL_OPTIONS=-Xmx128m -Xms128m
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 192M
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  ws-gateway:
-    build:
-      context: ../../backend/coinflow-ws-gateway
-      dockerfile: Dockerfile
-    container_name: coinflow-ws-local
-    ports:
-      - "8081:8081"
-    environment:
-      - SERVER_PORT=8081
-      - SPRING_CONFIG_NAME=application-ws
-      - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATA_REDIS_HOST=redis-local
-      - JAVA_TOOL_OPTIONS=-Xmx64m -Xms64m
+      - REDIS_HOST=redis-local
+      - REDIS_PORT=6379
+      - TARGET_TPS=1000
+      - SYMBOLS=btcusdt
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 128M
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "redis-local:host-gateway"
+    depends_on:
+      - consumer-app
 
+  # 타겟: 컨슈머 (메모리 제한 모드)
   consumer-app:
     build:
       context: ../../backend/coinflow-consumer-app
@@ -69,18 +46,20 @@ services:
           cpus: '1.0'
           memory: 384M
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "redis-local:host-gateway"
+      - "ohlc-postgres-local:host-gateway"
 
-  collector-app:
+  # 기타 부가 서비스
+  api-app:
     build:
-      context: ../../backend/coinflow-collector-app
+      context: ../../backend/coinflow-api-app
       dockerfile: Dockerfile
-    container_name: coinflow-collector-local
+    container_name: coinflow-api-local
     ports:
-      - "8083:8083"
+      - "8080:8080"
     environment:
-      - SERVER_PORT=8083
-      - SPRING_CONFIG_NAME=application-collector
+      - SERVER_PORT=8080
+      - SPRING_CONFIG_NAME=application-api
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATA_REDIS_HOST=redis-local
       - SPRING_DATASOURCE_URL=jdbc:postgresql://ohlc-postgres-local:5432/ohlc
@@ -93,9 +72,29 @@ services:
           cpus: '0.5'
           memory: 192M
     extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      - consumer-app
+      - "redis-local:host-gateway"
+      - "ohlc-postgres-local:host-gateway"
+
+  ws-gateway:
+    build:
+      context: ../../backend/coinflow-ws-gateway
+      dockerfile: Dockerfile
+    container_name: coinflow-ws-local
+    ports:
+      - "8081:8081"
+    environment:
+      - SERVER_PORT=8081
+      - SPRING_CONFIG_NAME=application-ws
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATA_REDIS_HOST=redis-local
+      - JAVA_TOOL_OPTIONS=-Xmx64m -Xms64m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    extra_hosts:
+      - "redis-local:host-gateway"
 
   replay-app:
     build:
@@ -116,4 +115,5 @@ services:
           cpus: '0.5'
           memory: 192M
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "redis-local:host-gateway"
+      - "ohlc-postgres-local:host-gateway"

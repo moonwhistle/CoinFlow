@@ -104,5 +104,29 @@ Applied **Caffeine Cache** to eliminate many DB queries for historical chart dat
 
 For more details.. [click here](https://sanghu-i.tistory.com/128)
 
+### High-Performance Binary Serialization (Zero-POJO)
+To achieve 10,000 TPS on a low-spec T2.micro(512MB), eliminate the **JSON Overhead**.
+
+- **Problem**: Processing 10,000+ ticks/sec using JSON/Jackson causes massive object allocation (25MB/s), leading to GC pauses and latency spikes in a memory-constrained environment.
+
+- **Solution**: eplaced JSON with a custom binary protocol and eliminated object creation by processing raw bytes directly. This reduced GC overhead and stabilized P99 latency under high load.
+
+- **Result**: Reduced memory allocation by 95%+, ensuring stable 10,000 TPS within a 512MB RAM limit.
+
+For more details.. [click here](https://sanghu-i.tistory.com/129)
+
+### Redis I/O Optimization & Multi-Layer Idempotency
+To eliminate Redis I/O bottlenecks, I introduced Batch ACK with a multi-layer idempotency strategy.
+
+ - **Problem**: Per-message XACK at 10,000 TPS caused severe I/O bottlenecks.
+
+- **Solution**:
+    - Batch ACK: Processed 500 records or flushed every 50ms to reduce Redis calls.
+    - L1 (Caffeine Cache): Applied an in-memory LRU filter for RecordId-based deduplication.
+
+- **Result**: Reduced Redis I/O by over 95% while preserving full data integrity.
+
+For more details.. [click here](https://sanghu-i.tistory.com/130)
+
 ## Disclaimer
 This project is a personal, educational project built for learning purposes only.
