@@ -1,5 +1,6 @@
 package com.coinflow.chart.service.sync;
 
+import com.coinflow.chart.constant.ChartCacheConstants;
 import com.coinflow.chart.repository.RedisOhlcWindowRepository;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
 import com.coinflow.event.kline.KlineEvent;
@@ -28,8 +29,6 @@ public class OhlcWindowSyncService implements MessageListener {
     private final RedisOhlcWindowRepository ohlcWindowRepository;
     private final ObjectMapper objectMapper;
 
-    private static final int DEFAULT_WINDOW_SIZE = 1000;
-
     @Override
     public void onMessage(@NonNull Message message, @Nullable byte[] pattern) {
         try {
@@ -42,8 +41,8 @@ public class OhlcWindowSyncService implements MessageListener {
                 OhlcCandleSnapshot snapshot = toSnapshot(event);
                 ohlcWindowRepository.save(event.symbol(), event.interval(), snapshot);
                 
-                // Maintain the sliding window size
-                ohlcWindowRepository.trim(event.symbol(), event.interval(), DEFAULT_WINDOW_SIZE);
+                // Maintain the sliding window size using shared configuration
+                ohlcWindowRepository.trim(event.symbol(), event.interval(), ChartCacheConstants.MAX_HOT_WINDOW_SIZE);
                 
                 log.debug("[CHART-SYNC] Synchronized closed candle for {} {}: {}", 
                         event.symbol(), event.interval(), snapshot.bucketTime());
