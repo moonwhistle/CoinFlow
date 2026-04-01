@@ -9,13 +9,18 @@ import type { OhlcChartResponse, OhlcInterval } from '../types/chart';
 export const getOhlcData = async (
     symbolId: number,
     interval: OhlcInterval = 'M1',
-    candles: number = 120
+    candles: number = 120,
+    to?: string
 ): Promise<OhlcChartResponse> => {
     // Construct the URL with query parameters
-    const queryParams = new URLSearchParams({
+    const params: Record<string, string> = {
         interval,
         candles: candles.toString(),
-    });
+    };
+    if (to) {
+        params['to'] = to;
+    }
+    const queryParams = new URLSearchParams(params);
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
     const url = `${baseUrl}/api/v1/ohlc/${symbolId}?${queryParams.toString()}`;
     console.log(`[ohlcApi] Requesting: ${url}`);

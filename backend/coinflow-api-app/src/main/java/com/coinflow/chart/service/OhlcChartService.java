@@ -36,12 +36,13 @@ public class OhlcChartService {
     private final Optional<LiveKlineRepository> liveKlineRepository;
     private final SymbolService symbolService;
 
-    public List<OhlcCandleSnapshot> show(Long symbolId, OhlcInterval interval, int candles) {
-        // 0. 존재하지 않는 Symbol은 캐시/DB 조회 전에 즉시 차단 (Cache Penetration 방어)
+    public List<OhlcCandleSnapshot> show(Long symbolId, OhlcInterval interval, int candles, LocalDateTime to) {
         Symbol symbol = symbolService.findSymbol(symbolId);
 
-        Instant nowInstant = Instant.now(clock);
-        LocalDateTime base1mBucket = TimeBucket.to1m(nowInstant);
+        // 현재 시점(Live)인지 과거 시점(Cursor-based)인지 확인하여 기준 시점(Instant) 결정
+        Instant baseInstant = (to != null) ? to.toInstant(ZoneOffset.UTC) : clock.instant();
+        
+        LocalDateTime base1mBucket = TimeBucket.to1m(baseInstant);
         LocalDateTime endExclusive = interval.resolveBucketStart(base1mBucket);
 
         // 1. 마감된(Closed) 캔들: 캐시에 있으면 반환, 없으면 loader(DB 조회)를 1회만 실행
@@ -50,8 +51,12 @@ public class OhlcChartService {
                 () -> loadClosedCandles(symbolId, interval, candles, endExclusive)
         );
 
-        // 2. 현재 진행 중인(Live) 캔들은 항상 Redis에서 실시간으로 조회하여 병합 (캐싱 제외)
-        return mergeRealTimeCandleIntoSnapshot(closedCandles, symbol, base1mBucket, interval);
+        // 2. 현재 진행 중인(Live) 캔들 병합: 'to'가 없는 현재 조회인 경우에만 수행
+        if (to == null) {
+            return mergeRealTimeCandleIntoSnapshot(closedCandles, symbol, base1mBucket, interval);
+        }
+
+        return closedCandles;
     }
 
     private List<OhlcCandleSnapshot> loadClosedCandles(Long symbolId, OhlcInterval interval, int candles,

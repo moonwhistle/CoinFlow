@@ -143,3 +143,13 @@ export const forwardFillCandles = (
     return { filledCandles, filledVolumes };
 };
 
+/**
+ * 차트 데이터를 시간순으로 정렬하고 중복된 시간을 제거합니다. (DRY)
+ */
+export const uniqueSortData = <T extends { time: Time }>(data: T[]): T[] => {
+    const uniqueMap = new Map<number, T>();
+    data.forEach(item => uniqueMap.set(item.time as number, item));
+    
+    return Array.from(uniqueMap.values()).sort((a, b) => (a.time as number) - (b.time as number));
+};
+
