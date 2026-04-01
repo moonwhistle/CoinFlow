@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -29,7 +31,7 @@ public class OhlcWindowSyncService implements MessageListener {
     private static final int DEFAULT_WINDOW_SIZE = 1000;
 
     @Override
-    public void onMessage(Message message, byte[] pattern) {
+    public void onMessage(@NonNull Message message, @Nullable byte[] pattern) {
         try {
             String json = new String(message.getBody());
             KlineEvent event = objectMapper.readValue(json, KlineEvent.class);

@@ -29,18 +29,15 @@ public class RedisOhlcWindowRepositoryImpl implements RedisOhlcWindowRepository 
 
     private static final String KEY_PREFIX = "klines:window:";
 
+    @SuppressWarnings("ConstantConditions")
     @Override
     public void save(String symbol, String interval, OhlcCandleSnapshot snapshot) {
         String key = buildKey(symbol, interval);
         String json = serialize(snapshot);
         if (json != null) {
-            // ZADD: If score exists, replaces the member. (Note: Since JSON content changes, we must be careful. 
-            // In ZSET, members are unique. If we use the same JSON, it's fine. 
-            // If the JSON changes (Late Tick), we need to remove the old one at that score first to be safe, 
-            // OR use the timestamp as part of the weight.)
-            // Correct approach: ZREMRANGEBYSCORE followed by ZADD ensures we don't have multiple members for the same time.
-            redisTemplate.opsForZSet().removeRangeByScore(key, snapshot.epochSeconds(), snapshot.epochSeconds());
-            redisTemplate.opsForZSet().add(key, json, snapshot.epochSeconds());
+            ZSetOperations<String, String> zSetOps = redisTemplate.opsForZSet();
+            zSetOps.removeRangeByScore(key, (double) snapshot.epochSeconds(), (double) snapshot.epochSeconds());
+            zSetOps.add(key, json, (double) snapshot.epochSeconds());
             log.trace("[REDIS-WINDOW] Saved candle for {} {}: {}", symbol, interval, snapshot.bucketTime());
         }
     }
@@ -60,19 +57,20 @@ public class RedisOhlcWindowRepositoryImpl implements RedisOhlcWindowRepository 
         snapshots.forEach(s -> {
             String json = serialize(s);
             if (json != null) {
-                zSetOps.add(key, json, s.epochSeconds());
+                zSetOps.add(key, json, (double) s.epochSeconds());
             }
         });
         log.debug("[REDIS-WINDOW] Batch saved {} candles for {} {}", snapshots.size(), symbol, interval);
     }
 
+    @SuppressWarnings("ConstantConditions")
     @Override
     public List<OhlcCandleSnapshot> findRange(String symbol, String interval, long to, int limit) {
         String key = buildKey(symbol, interval);
         
         // ZREVRANGEBYSCORE: Get 'limit' items from the 'to' timestamp (exclusive) downwards.
         Set<String> jsonSet = redisTemplate.opsForZSet()
-                .reverseRangeByScore(key, -1, to - 1, 0, limit);
+                .reverseRangeByScore(key, -1, (double) to - 1, 0, limit);
 
         if (jsonSet == null || jsonSet.isEmpty()) {
             return Collections.emptyList();
@@ -92,7 +90,7 @@ public class RedisOhlcWindowRepositoryImpl implements RedisOhlcWindowRepository 
     public void trim(String symbol, String interval, int limit) {
         String key = buildKey(symbol, interval);
         // Maintain only the last N items (e.g., 1000)
-        long size = redisTemplate.opsForZSet().size(key);
+        Long size = redisTemplate.opsForZSet().size(key);
         if (size != null && size > limit) {
             redisTemplate.opsForZSet().removeRange(key, 0, size - limit - 1);
             log.trace("[REDIS-WINDOW] Trimmed window for {} {}: kept last {}", symbol, interval, limit);
