@@ -2,11 +2,15 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
 import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
 import type { WsMessage, KlineEvent } from '../types/websocket';
-import { isKlineEvent } from '../types/websocket';
+import { isKlineEvent, isTickerEvent } from '../types/websocket';
 import './LiveTicker.css';
 
-// WS_URL removed
-const SYMBOL = 'btcusdt';
+// --- Constants (SRP/DRY/Magic Values) ---
+const TICKER_CONSTANTS = {
+    SYMBOL: 'btcusdt',
+    LOGO_PATH: '/images/btc-logo.png',
+    LOGO_ALT: 'BTC',
+};
 
 // --- Formatters ---
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -21,7 +25,7 @@ const volumeFormatter = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
 });
 
-// Mock Data for 24h Stats (Since backend doesn't support them yet)
+// Mock Data for 24h Stats (Fallback when backend API is unavailable)
 const MOCK_STATS = {
     high: 89800.00,
     low: 88900.00,
@@ -32,12 +36,18 @@ const MOCK_STATS = {
 export const LiveTicker = () => {
     const [lastMessage, setLastMessage] = useState<KlineEvent | null>(null);
     const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
+    const [imgError, setImgError] = useState(false);
     const prevPriceRef = useRef<number | null>(null);
 
     const handleMessage = useCallback((msg: WsMessage) => {
-        // Only use M1 kline for ticker (highest frequency)
+        // 1. Kline (Candle) Handling - M1 is used for highest freq ticker updates
         if (isKlineEvent(msg) && msg.interval === 'M1') {
             setLastMessage(msg);
+        }
+        // 2. Ticker Event (Price/Volume only) - Reserved for direct ticker streams
+        else if (isTickerEvent(msg)) {
+            // Logic to update UI from pure ticker events
+            console.debug(`[LiveTicker] Received Ticker: ${msg.price}`);
         }
     }, []);
 
@@ -45,7 +55,7 @@ export const LiveTicker = () => {
 
     useEffect(() => {
         if (isConnected) {
-            subscribe(SYMBOL);
+            subscribe(TICKER_CONSTANTS.SYMBOL);
         }
     }, [isConnected, subscribe]);
 
@@ -63,34 +73,30 @@ export const LiveTicker = () => {
         }
     }, [lastMessage]);
 
-    // KlineEvent fields — direct access (no union type)
+    // Derived Display Values
     const currentPrice = lastMessage?.close ?? null;
     const currentVolume = lastMessage?.volume ?? null;
     const currentTime = lastMessage ? lastMessage.startTime * 1000 : null;
 
-    // Formatters using current or mock data
-    const displayPrice = currentPrice
-        ? currencyFormatter.format(currentPrice)
-        : '---';
-
-    const displayQuantity = currentVolume
-        ? currentVolume.toFixed(6)
-        : '---';
-
-    const displayTime = currentTime
-        ? new Date(currentTime).toLocaleTimeString()
-        : '--:--:--';
+    const displayPrice = currentPrice ? currencyFormatter.format(currentPrice) : '---';
+    const displayQuantity = currentVolume ? currentVolume.toFixed(6) : '---';
+    const displayTime = currentTime ? new Date(currentTime).toLocaleTimeString() : '--:--:--';
 
     return (
         <div className="ticker-container">
-            {/* 1. Header Section */}
+            {/* 1. Header Section with Robust Image Loading */}
             <div className="ticker-header">
                 <div className="symbol-info">
-                    <img
-                        src="https://cryptologos.cc/logos/bitcoin-btc-logo.svg?v=040"
-                        alt="BTC"
-                        className="coin-icon"
-                    />
+                    {!imgError ? (
+                        <img
+                            src={TICKER_CONSTANTS.LOGO_PATH}
+                            alt={TICKER_CONSTANTS.LOGO_ALT}
+                            className="coin-icon"
+                            onError={() => setImgError(true)}
+                        />
+                    ) : (
+                        <div className="coin-icon-fallback">B</div>
+                    )}
                     <div className="symbol-text">
                         <span className="symbol-name">BTC / USDT</span>
                         <span className="symbol-sub-name">Bitcoin Tether US</span>
@@ -112,7 +118,7 @@ export const LiveTicker = () => {
                 </div>
             </div>
 
-            {/* 3. Stats Grid */}
+            {/* 3. Stats Grid (24h Statistics) */}
             <div className="stats-grid">
                 <StatRow
                     icon={<Activity size={14} />}

@@ -5,8 +5,10 @@ import com.coinflow.chart.service.OhlcChartService;
 import com.coinflow.common.path.chart.ChartPath;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,9 +28,10 @@ public class ChartController {
     public ResponseEntity<OhlcChartResponse> showOhlcChart(
             @PathVariable Long symbolId,
             @RequestParam(defaultValue = DEFAULT_INTERVAL) OhlcInterval interval,
-            @RequestParam(defaultValue = DEFAULT_CANDLES_STR) int candles
+            @RequestParam(defaultValue = DEFAULT_CANDLES_STR) int candles,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to
     ) {
-        List<OhlcCandleSnapshot> snapshots = ohlc1mChartService.show(symbolId, interval, candles);
+        List<OhlcCandleSnapshot> snapshots = ohlc1mChartService.show(symbolId, interval, candles, to);
 
         return ResponseEntity.ok(new OhlcChartResponse(
                 symbolId,
