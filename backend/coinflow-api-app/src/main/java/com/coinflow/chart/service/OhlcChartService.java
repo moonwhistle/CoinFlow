@@ -1,5 +1,6 @@
 package com.coinflow.chart.service;
 
+import com.coinflow.chart.repository.RedisOhlcWindowRepository;
 import com.coinflow.domain.ohlc.cache.OhlcChartStore;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.ohlc.domain.AbstractOhlc;
@@ -23,12 +24,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+/**
+ * High-performance chart service using a tiered caching strategy.
+ * L1 (Caffeine - History) -> L1.5 (Redis ZSET - Hot Window) -> DB (Cold Storage).
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OhlcChartService {
 
-    private final OhlcChartStore chartStore;
+    private final OhlcChartStore chartStore; // Caffeine L2 for history
+    private final RedisOhlcWindowRepository ohlcWindowRepository; // Global L1.5 Window
     private final Clock clock;
     private final Ohlc1mService ohlc1mService;
     private final Ohlc5mService ohlc5mService;
@@ -36,31 +42,71 @@ public class OhlcChartService {
     private final Optional<LiveKlineRepository> liveKlineRepository;
     private final SymbolService symbolService;
 
+    private static final int MAX_HOT_WINDOW_SIZE = 1000;
+
+    /**
+     * Retrieves OHLC candles with high performance.
+     * Uses Redis-first strategy for the last 1000 candles with DB backfill.
+     */
     public List<OhlcCandleSnapshot> show(Long symbolId, OhlcInterval interval, int candles, LocalDateTime to) {
         Symbol symbol = symbolService.findSymbol(symbolId);
 
-        // 현재 시점(Live)인지 과거 시점(Cursor-based)인지 확인하여 기준 시점(Instant) 결정
+        // Calculate the target boundary (exclusive) for finalized candles
         Instant baseInstant = (to != null) ? to.toInstant(ZoneOffset.UTC) : clock.instant();
-        
         LocalDateTime base1mBucket = TimeBucket.to1m(baseInstant);
         LocalDateTime endExclusive = interval.resolveBucketStart(base1mBucket);
 
-        // 1. 마감된(Closed) 캔들: 캐시에 있으면 반환, 없으면 loader(DB 조회)를 1회만 실행
-        List<OhlcCandleSnapshot> closedCandles = chartStore.getOrLoad(
-                symbolId, interval, candles, endExclusive,
-                () -> loadClosedCandles(symbolId, interval, candles, endExclusive)
-        );
+        long endEpoch = endExclusive.toEpochSecond(ZoneOffset.UTC);
 
-        // 2. 현재 진행 중인(Live) 캔들 병합: 'to'가 없는 현재 조회인 경우에만 수행
-        if (to == null) {
-            return mergeRealTimeCandleIntoSnapshot(closedCandles, symbol, base1mBucket, interval);
+        // Check if the request is within the 'Hot Window' range (last 1000)
+        long currentEpoch = TimeBucket.to1m(clock.instant()).toEpochSecond(ZoneOffset.UTC);
+        boolean isHotPath = (currentEpoch - endEpoch) <= interval.duration().getSeconds() * MAX_HOT_WINDOW_SIZE;
+
+        List<OhlcCandleSnapshot> finalizedCandles;
+
+        if (isHotPath) {
+            // Hot Path: Try Redis ZSET
+            finalizedCandles = ohlcWindowRepository.findRange(symbol.getSymbol(), interval.name(), endEpoch, candles);
+            
+            // Gap-fill: If Redis is empty or insufficient, backfill from DB
+            if (finalizedCandles.size() < candles) {
+                log.debug("[CHART-SERVICE] Redis miss/gap for {} {}. Backfilling...", symbol.getSymbol(), interval);
+                finalizedCandles = backfillAndLoad(symbol, interval, candles, endExclusive);
+            }
+        } else {
+            // Cold Path: Traditional DB + Caffeine L2 Cache (History)
+            finalizedCandles = chartStore.getOrLoad(
+                    symbolId, interval, candles, endExclusive,
+                    () -> loadFromDb(symbolId, interval, candles, endExclusive)
+            );
         }
 
-        return closedCandles;
+        // Live Merge: Add the currently updating candle if it's a 'live' request
+        if (to == null) {
+            return mergeRealTimeCandleIntoSnapshot(finalizedCandles, symbol, base1mBucket, interval);
+        }
+
+        return finalizedCandles;
     }
 
-    private List<OhlcCandleSnapshot> loadClosedCandles(Long symbolId, OhlcInterval interval, int candles,
-            LocalDateTime endExclusive) {
+    /**
+     * Loads candles from DB and hydrates the Redis Global Window for future requests.
+     */
+    private List<OhlcCandleSnapshot> backfillAndLoad(Symbol symbol, OhlcInterval interval, int count, LocalDateTime endExclusive) {
+        // Backfill a larger portion (MAX_HOT_WINDOW_SIZE) to prevent frequent misses
+        List<OhlcCandleSnapshot> hotWindowData = loadFromDb(symbol.getId(), interval, MAX_HOT_WINDOW_SIZE, endExclusive);
+        
+        if (!hotWindowData.isEmpty()) {
+            ohlcWindowRepository.saveAll(symbol.getSymbol(), interval.name(), hotWindowData);
+            ohlcWindowRepository.trim(symbol.getSymbol(), interval.name(), MAX_HOT_WINDOW_SIZE);
+        }
+
+        // Return only the requested amount
+        int size = hotWindowData.size();
+        return hotWindowData.subList(Math.max(0, size - count), size);
+    }
+
+    private List<OhlcCandleSnapshot> loadFromDb(Long symbolId, OhlcInterval interval, int candles, LocalDateTime endExclusive) {
         LocalDateTime startInclusive = endExclusive.minus(interval.duration().multipliedBy(candles));
 
         return switch (interval) {
@@ -76,9 +122,6 @@ public class OhlcChartService {
                 .toList();
     }
 
-    /**
-     * 지정된 Snapshot 리스트에 현재 처리 중인 (Redis) 실시간 캔들을 덮어쓰기 병합한다.
-     */
     private List<OhlcCandleSnapshot> mergeRealTimeCandleIntoSnapshot(
             List<OhlcCandleSnapshot> snapshots, Symbol symbol,
             LocalDateTime baseBucket, OhlcInterval interval) {
