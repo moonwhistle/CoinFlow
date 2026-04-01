@@ -29,4 +29,9 @@ public final class ChartCacheConstants {
      * Timeout for acquiring the local mutex lock in seconds.
      */
     public static final long LOCK_TIMEOUT_SECONDS = 3;
+
+    /**
+     * Property name to enable/disable chart cache warm-up at startup.
+     */
+    public static final String WARMUP_ENABLED_PROPERTY = "chart.cache.warmup.enabled";
 }

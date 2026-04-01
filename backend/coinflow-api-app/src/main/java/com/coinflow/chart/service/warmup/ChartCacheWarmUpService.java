@@ -1,5 +1,6 @@
 package com.coinflow.chart.service.warmup;
 
+import com.coinflow.chart.constant.ChartCacheConstants;
 import com.coinflow.chart.service.OhlcChartService;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
 import com.coinflow.domain.symbol.domain.Symbol;
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "chart.cache.warmup.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = ChartCacheConstants.WARMUP_ENABLED_PROPERTY, havingValue = "true", matchIfMissing = true)
 public class ChartCacheWarmUpService {
 
     private final SymbolService symbolService;

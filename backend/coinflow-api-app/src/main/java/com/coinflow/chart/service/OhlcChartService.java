@@ -102,9 +102,12 @@ public class OhlcChartService {
             }
         } else {
             // Cold Path: Traditional DB + Caffeine L2 Cache (History)
+            // Optimization: Snap the 'endExclusive' to the nearest bucket start to unify cache keys in history.
+            // This prevents duplicate entries in Caffeine for slightly different cursors within the same minute.
+            LocalDateTime snappedEndExclusive = interval.resolveBucketStart(endExclusive);
             finalizedCandles = chartStore.getOrLoad(
-                    symbolId, interval, candles, endExclusive,
-                    () -> loadFromDb(symbolId, interval, candles, endExclusive)
+                    symbolId, interval, candles, snappedEndExclusive,
+                    () -> loadFromDb(symbolId, interval, candles, snappedEndExclusive)
             );
         }
 
@@ -114,6 +117,18 @@ public class OhlcChartService {
         }
 
         return finalizedCandles;
+    }
+
+    /**
+     * Warms up the Redis cache for a specific symbol and interval.
+     * Used at startup to prevent Cold Start latency.
+     */
+    public void warmUp(Symbol symbol, OhlcInterval interval) {
+        LocalDateTime nowBucket = TimeBucket.to1m(clock.instant());
+        LocalDateTime endExclusive = interval.resolveBucketStart(nowBucket);
+        
+        log.info("[CHART-SERVICE] Warming up cache for {} {}", symbol.getSymbol(), interval);
+        backfillAndLoad(symbol, interval, ChartCacheConstants.MAX_HOT_WINDOW_SIZE, endExclusive);
     }
 
     /**
