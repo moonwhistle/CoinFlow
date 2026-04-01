@@ -10,6 +10,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -81,7 +82,7 @@ public class RedisOhlcWindowRepositoryImpl implements RedisOhlcWindowRepository 
                 .toList();
         
         // Reverse manually since toList() returns an unmodifiable list in newer Java
-        List<OhlcCandleSnapshot> modifiableResults = new java.util.ArrayList<>(results);
+        List<OhlcCandleSnapshot> modifiableResults = new ArrayList<>(results);
         Collections.reverse(modifiableResults);
         return modifiableResults;
     }

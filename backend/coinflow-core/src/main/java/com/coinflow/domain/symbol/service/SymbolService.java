@@ -4,6 +4,7 @@ import com.coinflow.common.exception.CoreErrorCode;
 import com.coinflow.common.exception.CoreException;
 import com.coinflow.domain.symbol.domain.Symbol;
 import com.coinflow.domain.symbol.repository.SymbolRepository;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -33,5 +34,14 @@ public class SymbolService {
     public Symbol findBySymbol(String symbol) {
         return symbolRepository.findBySymbol(symbol)
                 .orElseThrow(() -> new CoreException(CoreErrorCode.NOT_FOUND_SYMBOL));
+    }
+
+    @Cacheable(
+            cacheNames = "symbols",
+            key = "'all'"
+    )
+    @Transactional(readOnly = true)
+    public List<Symbol> findAll() {
+        return symbolRepository.findAll();
     }
 }
