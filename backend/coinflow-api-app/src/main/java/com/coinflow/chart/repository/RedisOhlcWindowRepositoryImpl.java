@@ -1,5 +1,6 @@
 package com.coinflow.chart.repository;
 
+import com.coinflow.chart.constant.ChartCacheConstants;
 import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,7 +14,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Redis Sorted Set (ZSET) implementation of OhlcWindowRepository.
@@ -26,8 +26,6 @@ public class RedisOhlcWindowRepositoryImpl implements RedisOhlcWindowRepository 
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
-
-    private static final String KEY_PREFIX = "klines:window:";
 
     @SuppressWarnings("ConstantConditions")
     @Override
@@ -80,10 +78,12 @@ public class RedisOhlcWindowRepositoryImpl implements RedisOhlcWindowRepository 
         List<OhlcCandleSnapshot> results = jsonSet.stream()
                 .map(this::deserialize)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+                .toList();
         
-        Collections.reverse(results);
-        return results;
+        // Reverse manually since toList() returns an unmodifiable list in newer Java
+        List<OhlcCandleSnapshot> modifiableResults = new java.util.ArrayList<>(results);
+        Collections.reverse(modifiableResults);
+        return modifiableResults;
     }
 
     @Override
@@ -98,7 +98,7 @@ public class RedisOhlcWindowRepositoryImpl implements RedisOhlcWindowRepository 
     }
 
     private String buildKey(String symbol, String interval) {
-        return KEY_PREFIX + symbol + ":" + interval;
+        return ChartCacheConstants.REDIS_WINDOW_KEY_PREFIX + symbol + ":" + interval;
     }
 
     private String serialize(OhlcCandleSnapshot snapshot) {
