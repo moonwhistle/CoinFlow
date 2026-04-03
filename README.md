@@ -95,7 +95,7 @@ This ensures maximum speed without sacrificing data integrity on a single CPU re
 
 For more details.. [click here](https://sanghu-i.tistory.com/127)
 
-### Multi-Layered Cache Strategy (Redis ZSET)
+### Candle Cache Strategy (Redis ZSET)
 To achieve both **Fast Response Time** and **100% Data Integrity** for late-arriving financial data (Late Tick).
 
 - **Problem**: 
