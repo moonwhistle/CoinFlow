@@ -49,7 +49,7 @@ During this project, I wanted to build everything starting from raw tick data.
 ## 📊 Data Flow
 Designed **Unidirectional Data Flow** with a **Single Aggregator** to guarantee 100% data consistency and zero latency UX.
 
-![Data Flow](</image/dataFlowVersion4.png>)
+![Data Flow](</image/dataFlowVersion5.png>)
 
 ### Core Logic
 To achieve both Extreme Real-time Responsiveness and Strong Consistency without Client-Side Complexity.
@@ -95,12 +95,21 @@ This ensures maximum speed without sacrificing data integrity on a single CPU re
 
 For more details.. [click here](https://sanghu-i.tistory.com/127)
 
-### Improve Chart API Latency with Caffeine Local Cache
-Applied **Caffeine Cache** to eliminate many DB queries for historical chart data, reducing API latency.
+### Multi-Layered Cache Strategy (Redis ZSET)
+To achieve both **Fast Response Time** and **100% Data Integrity** for late-arriving financial data (Late Tick).
 
-- **Thundering Herd Prevention**: Used **Atomic Loading** (`cache.get(key, loader)`) to ensure that even with thousands of concurrent requests on a cache miss, only **exactly one** thread queries the DB while others wait for the result.
+- **Problem**: 
+    - **Disk I/O Bottleneck**: Every chart request triggered a direct Disk I/O query (PostgreSQL), causing an average latency of **281ms**.
+    - **Late Tick Mismatch**: Local caches cannot reflect updates for historical candles when late-arriving data (Late Ticks) occurs.
 
-- **Cache Penetration Defense**: Implemented **Early Validation** to reject requests for invalid symbols at the API entry point.
+- **Solution**:
+    - **Redis Sorted Set**: Maintains time order and allows fast (**O(log N)**) updates for late-arriving ticks.
+    - **Sliding Window**: Minimizes memory usage by keeping only the latest **1,000 candles** via `ZREMRANGEBYRANK`.
+    - **ReentrantLock**: Prevents DB overload (**Thundering Herd**) by ensuring only one thread queries the DB on a cache miss.
+
+- **Result**: 
+    - **Performance**: Reduced average API latency by **94% (281ms → 15ms)**.
+    - **Integrity**: Guaranteed 100% identical data for both server-side history and real-time updates, regardless of network delay.
 
 For more details.. [click here](https://sanghu-i.tistory.com/128)
 
