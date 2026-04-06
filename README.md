@@ -113,7 +113,7 @@ To achieve both **Fast Response Time** and **100% Data Integrity** for late-arri
 
 For more details.. [click here](https://sanghu-i.tistory.com/128)
 
-### High-Performance Binary Serialization (Zero-POJO)
+### Binary Serialization (Zero-POJO)
 To achieve 10,000 TPS on a low-spec T2.micro(512MB), eliminate the **JSON Overhead**.
 
 - **Problem**: Processing 10,000+ ticks/sec using JSON/Jackson causes massive object allocation (25MB/s), leading to GC pauses and latency spikes in a memory-constrained environment.
@@ -124,8 +124,8 @@ To achieve 10,000 TPS on a low-spec T2.micro(512MB), eliminate the **JSON Overhe
 
 For more details.. [click here](https://sanghu-i.tistory.com/129)
 
-### Redis I/O Optimization & Multi-Layer Idempotency
-To eliminate Redis I/O bottlenecks, I introduced Batch ACK with a multi-layer idempotency strategy.
+### Redis I/O Optimization
+To eliminate Redis I/O bottlenecks, I introduced Batch ACK with idempotency strategy.
 
  - **Problem**: Per-message XACK at 10,000 TPS caused severe I/O bottlenecks.
 
