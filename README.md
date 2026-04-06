@@ -2,6 +2,9 @@
 
 Real-time Cryptocurrency Trading Chart Service (Only Bitcoin)
 
+[click here](https://cocoin.store/)
+![screen](/image/web.png)
+
 ## 💡 Why do i start this project?
 
 My first project was a stock chart service built entirely using APIs for market data, including OHLC and tick data.
