@@ -6,3 +6,13 @@ out/
 *.log
 .DS_Store
 .env
+
+# Security and Credentials
+application-prod.yml
+**/src/main/resources/application-prod.yml
+*.pem
+*.jks
+*.p12
+*.key
+.env.*
+!.env.example
