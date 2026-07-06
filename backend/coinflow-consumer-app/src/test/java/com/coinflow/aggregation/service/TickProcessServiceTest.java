@@ -14,17 +14,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Answers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.connection.stream.RecordId;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,8 +47,8 @@ class TickProcessServiceTest {
     private TickerBroadcaster tickerBroadcaster;
     @Mock
     private DbPersistService dbPersistService;
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private RedisTemplate<String, String> redisTemplate;
+    @Mock
+    private BatchAckWorker batchAckWorker;
     @Mock
     private MetricRecorder metricRecorder;
     @Mock
@@ -113,9 +110,8 @@ class TickProcessServiceTest {
                         anyLong(), any(String[].class)),
                 // 4. DB 비동기 저장 서비스 호출 확인
                 () -> verify(dbPersistService, times(1)).persistClosedCandleAsync(eq(symbol), any()),
-                // 5. 비동기 파이프라인 종료 후 Redis ACK 확인
-                () -> verify(Objects.requireNonNull(redisTemplate.opsForStream()), timeout(1000))
-                        .acknowledge("mystream", "mygroup", recordId)
+                // 5. 비동기 파이프라인 종료 후 Batch ACK Worker 위임 확인
+                () -> verify(batchAckWorker, timeout(1000)).addAck(recordId)
         );
     }
 }
