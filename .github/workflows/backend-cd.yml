@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -49,14 +50,16 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: DOCKERHUB_USERNAME
+          envs: DOCKERHUB_USERNAME,DEPLOY_SHA
           script: |
             cd ~/CoinFlow
-            git pull origin master
+            git fetch origin master
+            git checkout "$DEPLOY_SHA"
 
             export DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME
 
