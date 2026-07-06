@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useWebSocketContext } from '../context/WebSocketContext';
+import { useWebSocketContext } from '../context/useWebSocketContext';
 import { WsCommandType, type WsMessage } from '../types/websocket';
 
 export const useCoinflowWebSocket = (
@@ -10,7 +10,10 @@ export const useCoinflowWebSocket = (
     // useRef ensures the listener always calls the LATEST onMessage callback
     // without needing to re-register the listener when onMessage changes
     const onMessageRef = useRef(onMessage);
-    onMessageRef.current = onMessage;
+
+    useEffect(() => {
+        onMessageRef.current = onMessage;
+    }, [onMessage]);
 
     useEffect(() => {
         const listener = (event: MessageEvent) => {
@@ -54,4 +57,3 @@ export const useCoinflowWebSocket = (
         unsubscribe
     };
 };
-

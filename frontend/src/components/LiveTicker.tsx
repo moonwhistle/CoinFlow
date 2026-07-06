@@ -42,6 +42,18 @@ export const LiveTicker = () => {
     const handleMessage = useCallback((msg: WsMessage) => {
         // 1. Kline (Candle) Handling - M1 is used for highest freq ticker updates
         if (isKlineEvent(msg) && msg.interval === 'M1') {
+            const currentPrice = msg.close;
+            const previousPrice = prevPriceRef.current;
+
+            if (previousPrice !== null) {
+                if (currentPrice > previousPrice) {
+                    setPriceColor('up');
+                } else if (currentPrice < previousPrice) {
+                    setPriceColor('down');
+                }
+            }
+
+            prevPriceRef.current = currentPrice;
             setLastMessage(msg);
         }
         // 2. Ticker Event (Price/Volume only) - Reserved for direct ticker streams
@@ -58,20 +70,6 @@ export const LiveTicker = () => {
             subscribe(TICKER_CONSTANTS.SYMBOL);
         }
     }, [isConnected, subscribe]);
-
-    useEffect(() => {
-        if (lastMessage) {
-            const currentPrice = lastMessage.close;
-            if (prevPriceRef.current !== null) {
-                if (currentPrice > prevPriceRef.current) {
-                    setPriceColor('up');
-                } else if (currentPrice < prevPriceRef.current) {
-                    setPriceColor('down');
-                }
-            }
-            prevPriceRef.current = currentPrice;
-        }
-    }, [lastMessage]);
 
     // Derived Display Values
     const currentPrice = lastMessage?.close ?? null;

@@ -35,6 +35,7 @@ export const TradingChart = () => {
     const isFetchingRef = useRef<boolean>(false);
     const hasMoreRef = useRef<boolean>(true);
     const rawDataRef = useRef<{ candles: ChartCandle[], volumes: VolumeBar[] }>({ candles: [], volumes: [] });
+    const ensureFullViewRef = useRef<() => void>(() => {});
 
     // State
     const [activeTimeframe, setActiveTimeframe] = useState<OhlcInterval>('M1');
@@ -93,7 +94,7 @@ export const TradingChart = () => {
 
             // If initial load doesn't fill viewport, load more
             if (!to) {
-                setTimeout(() => ensureFullView(), CHART_CONSTANTS.INITIAL_FILL_DELAY_MS);
+                setTimeout(() => ensureFullViewRef.current(), CHART_CONSTANTS.INITIAL_FILL_DELAY_MS);
             }
 
         } catch (err) {
@@ -119,6 +120,10 @@ export const TradingChart = () => {
             }
         }
     }, [loadChartData]);
+
+    useEffect(() => {
+        ensureFullViewRef.current = ensureFullView;
+    }, [ensureFullView]);
 
     // --- Real-time Data Handling ---
     const handleWebSocketMessage = useCallback((msg: WsMessage) => {
