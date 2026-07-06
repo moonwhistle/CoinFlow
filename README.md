@@ -20,7 +20,7 @@ During this project, I wanted to build everything starting from raw tick data.
 ## 🛠️ Tech Stack
 
 ### Backend
-*   **Core**: Java 17, Spring Boot 3.2
+*   **Core**: Java 17, Spring Boot 3.4.1
 *   **Messaging**: Redis (Stream, Pub/Sub)
 *   **Database**: PostgreSQL (JPA/Hibernate)
 *   **Build**: Gradle (Multi-module Architecture)
@@ -45,7 +45,7 @@ During this project, I wanted to build everything starting from raw tick data.
 
 ![Architecture](/image/architect2.png)
 
-(In the current deployment, ElastiCache and RDS run as Docker containers on the same EC2 to minimize cost...)
+(In the current deployment, Redis and PostgreSQL run as Docker containers on the same EC2 to minimize cost...)
 
 > **Why Single Server?** Multi-instance deployments with ALB are unnecessary at this scale(including cost problems). A single EC2 with Nginx achieves the same routing and SSL at zero cost — while remaining ready to scale out when needed.
 
@@ -59,7 +59,7 @@ To achieve both Extreme Real-time Responsiveness and Strong Consistency without 
 
 - **Collector**: Pushes raw tick data to the Message Queue (Redis Stream) as fast as possible.
 - **Consumer (Single Aggregator)**: Consumes raw ticks and builds perfect OHLC  candle in-memory.
-- **View**: The WebSocket Gateway simply broadcasts the current tick and current ohlc candle(250ms delay) directly to the Dashboard.
+- **View**: The WebSocket Gateway broadcasts ticker updates immediately and throttled OHLC candle snapshots directly to the Dashboard.
 - **Replay (Spring Batch)**: Periodically(5min) syncs with Binance API to fix data gaps and guarantee 100% accuracy.
 
 > This unified approach ensures strict data consistency between the server and the client without complex synchronization logic.
@@ -74,11 +74,11 @@ To achieve both Extreme Real-time Responsiveness and Strong Consistency without 
 ## 🧑‍💻 Getting Started
 
 ### Backend
-1. Build JARs: `./gradlew build -x test`
+1. Build JARs: `cd backend && ./gradlew build -x test`
 2. Run with Docker Compose: `docker compose -f infra/docker/docker-compose-prod.yml up -d`
 
 ### Frontend
-1. Install dependencies: `npm install`
+1. Install dependencies: `cd frontend && npm install`
 2. Run development server: `npm run dev`
 
 ## 🛠️ Technical Decisions & Troubleshooting
@@ -121,7 +121,7 @@ To achieve 10,000 TPS on a low-spec T2.micro(512MB), eliminate the **JSON Overhe
 
 - **Problem**: Processing 10,000+ ticks/sec using JSON/Jackson causes massive object allocation (25MB/s), leading to GC pauses and latency spikes in a memory-constrained environment.
 
-- **Solution**: eplaced JSON with a custom binary protocol and eliminated object creation by processing raw bytes directly. This reduced GC overhead and stabilized P99 latency under high load.
+- **Solution**: Replaced JSON with a custom binary protocol and eliminated object creation by processing raw bytes directly. This reduced GC overhead and stabilized P99 latency under high load.
 
 - **Result**: Reduced memory allocation by 95%+, ensuring stable 10,000 TPS within a 512MB RAM limit.
 
@@ -133,8 +133,8 @@ To eliminate Redis I/O bottlenecks, I introduced Batch ACK with idempotency stra
  - **Problem**: Per-message XACK at 10,000 TPS caused severe I/O bottlenecks.
 
 - **Solution**:
-    - Batch ACK: Processed 500 records or flushed every 50ms to reduce Redis calls.
-    - L1 (Caffeine Cache): Applied an in-memory LRU filter for RecordId-based deduplication.
+    - Batch ACK: `BatchAckWorker` processes 500 records or flushes every 50ms to reduce Redis calls.
+    - Idempotency: Applied a Caffeine-based RecordId filter to prevent duplicate aggregation during Redis Stream re-delivery.
 
 - **Result**: Reduced Redis I/O by over 95% while preserving full data integrity.
 

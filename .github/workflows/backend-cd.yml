@@ -1,0 +1,70 @@
+name: Backend CD
+
+on:
+  workflow_run:
+    workflows: [ "CI" ]
+    branches: [ "master" ]
+    types: [ "completed" ]
+
+jobs:
+  build-and-deploy:
+    name: Build Images And Deploy
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+          cache: gradle
+
+      - name: Build backend JARs
+        run: |
+          cd backend
+          chmod +x ./gradlew
+          ./gradlew build
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker images
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          cd infra/docker
+          docker compose -f docker-compose-prod.yml build
+          docker compose -f docker-compose-prod.yml push
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DOCKERHUB_USERNAME,DEPLOY_SHA
+          script: |
+            cd ~/CoinFlow
+            git fetch origin master
+            git checkout "$DEPLOY_SHA"
+
+            export DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME
+
+            cd infra/docker
+            docker compose -f docker-compose-prod.yml pull
+            docker compose -f docker-compose-prod.yml up -d
+            docker compose -f docker-compose-prod.yml restart nginx
+            docker image prune -f

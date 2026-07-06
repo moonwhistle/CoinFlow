@@ -1,16 +1,6 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { WsRequest } from '../types/websocket';
-
-type MessageListener = (event: MessageEvent) => void;
-
-interface WebSocketContextType {
-    isConnected: boolean;
-    sendMessage: (message: WsRequest) => void;
-    addMessageListener: (listener: MessageListener) => void;
-    removeMessageListener: (listener: MessageListener) => void;
-}
-
-const WebSocketContext = createContext<WebSocketContextType | null>(null);
+import { WebSocketContext, type MessageListener } from './WebSocketContextCore';
 
 interface WebSocketProviderProps {
     url: string;
@@ -23,6 +13,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const messageQueue = useRef<string[]>([]);
     const listenersRef = useRef<Set<MessageListener>>(new Set());
+    const shouldReconnectRef = useRef(false);
+    const connectRef = useRef<() => void>(() => {});
 
     const addMessageListener = useCallback((listener: MessageListener) => {
         listenersRef.current.add(listener);
@@ -33,7 +25,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     }, []);
 
     const connect = useCallback(() => {
-        if (ws.current?.readyState === WebSocket.OPEN) return;
+        if (
+            ws.current?.readyState === WebSocket.OPEN ||
+            ws.current?.readyState === WebSocket.CONNECTING
+        ) {
+            return;
+        }
 
         console.log('[WS Provider] Connecting to', url);
         const socket = new WebSocket(url);
@@ -51,12 +48,16 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
         };
 
         socket.onclose = () => {
+            if (ws.current !== socket) return;
+
             console.log('[WS Provider] Disconnected');
             setIsConnected(false);
             ws.current = null;
+            if (!shouldReconnectRef.current) return;
+
             reconnectTimeout.current = setTimeout(() => {
                 console.log('[WS Provider] Attempting reconnect...');
-                connect();
+                connectRef.current();
             }, 3000);
         };
 
@@ -73,8 +74,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     }, [url]);
 
     useEffect(() => {
+        connectRef.current = connect;
+    }, [connect]);
+
+    useEffect(() => {
+        shouldReconnectRef.current = true;
         connect();
         return () => {
+            shouldReconnectRef.current = false;
             if (ws.current) {
                 ws.current.close();
             }
@@ -100,12 +107,3 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
         </WebSocketContext.Provider>
     );
 };
-
-export const useWebSocketContext = () => {
-    const context = useContext(WebSocketContext);
-    if (!context) {
-        throw new Error('useWebSocketContext must be used within a WebSocketProvider');
-    }
-    return context;
-};
-

@@ -4,6 +4,7 @@ import static com.coinflow.publish.stream.RedisStreamTickPublisher.RAW_PAYLOAD_F
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.coinflow.aggregation.service.TickProcessService;
 import com.coinflow.tick.serialization.TickRawBinaryCodec;
@@ -61,8 +62,12 @@ class TickRawMessageHandlerTest {
     @Test
     @DisplayName("유효하지 않은 데이터가 포함된 바이너리는 처리에 실패해야 한다")
     void shouldFailWhenDataIsInvalid() {
-        // given: 가격이 0 이하인 유효하지 않은 데이터 바이너리 준비
-        byte[] rawData = TickRawBinaryCodec.encode("test", BigDecimal.ZERO, BigDecimal.ONE, 123L);
+        // given: 프로토콜 버전과 심볼만 존재하고 가격/수량/시간 필드가 누락된 바이너리 준비
+        byte[] rawData = new byte[] {
+                TickRawBinaryCodec.PROTOCOL_VERSION,
+                4,
+                't', 'e', 's', 't'
+        };
         Map<String, byte[]> payload = Map.of(RAW_PAYLOAD_FIELD, rawData);
 
         // when: 핸들러 실행
@@ -70,6 +75,7 @@ class TickRawMessageHandlerTest {
 
         // then: 실패 결과 반환 확인
         assertThat(result).isFalse();
+        verifyNoInteractions(tickProcessService);
     }
 
     @Test

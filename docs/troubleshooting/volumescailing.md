@@ -74,9 +74,9 @@ CoinFlow에서 가장 많이 수신되고, 가장 빈번하게 계산되는 데�
   * 알고리즘 문제를 풀 때 부동소수점 오차를 피하기 위해 특정 배수를 곱해 정수로 치환하여 계산하는 것과 동일한 원리입니다.
 
 * **구현 방법 (VolumeScaler 도입):**
-  * `coinflow-core` 모듈 내의 [`VolumeScaler`](../../../coinflow-core/src/main/java/com/coinflow/domain/ohlc/policy/VolumeScaler.java) 정책 클래스를 구현하여 이 과정을 캡슐화했습니다.
+  * `coinflow-core` 모듈 내의 [`VolumeScaler`](../../backend/coinflow-core/src/main/java/com/coinflow/domain/ohlc/policy/VolumeScaler.java) 정책 클래스를 구현하여 이 과정을 캡슐화했습니다.
   * **Delimiter:** 암호화폐 거래의 대다수는 소수점 8자리까지의 정밀도를 가집니다. 그래서 delimiter를 `10^8 (100,000,000)`로 정해줬습니다.
-  * **값이 들어올 때:** 외부 (업비트 등)에서 들어온 거래량 `0.12345678`에 `10^8`을 곱해 순수 정수인 `12345678L(long)`로 변환(`VolumeScaler.toLong`)하여 메모리(`OhlcAccumulator`)에 누적합니다.
+  * **값이 들어올 때:** 외부 거래소에서 들어온 거래량 `0.12345678`에 `10^8`을 곱해 순수 정수인 `12345678L(long)`로 변환(`VolumeScaler.toLong`)하여 메모리(`KlineState`, `MutableKlineSnapshot`)에 누적합니다.
   * **연산:** CPU가 가장 잘하고 빠른 기본 자료형인 `long`의 단순 `+` 연산만 수행하므로 GC 부하가 거의 없습니다.(`volume = Math.addExact(volume, vol);`)
   * **값을 내보낼 때:** 1분 봉이 마감되어 DB에 저장하거나 클라이언트(프론트엔드)로 응답을 내려줄 때만 다시 `10^8`로 나누어 `BigDecimal`로 복원합니다.
 
@@ -108,7 +108,7 @@ CoinFlow에서 가장 많이 수신되고, 가장 빈번하게 계산되는 데�
   * **단순 `+` 연산의 위험성:** Java에서 두 `long` 값의 합이 범위를 넘어가면 시스템은 예외를 던지지 않고 오버플로우로 인해 음수로 바뀌어버립니다. 이는 금융/트레이딩 시스템에서 치명적인 문제라고 생각했습니다.
   * **`Math.addExact()` 적용:**
     ```java
-    // OhlcAccumulator.java 일부
+    // KlineState.java / MutableKlineSnapshot.java 일부
     public synchronized void apply(BigDecimal price, long vol, Instant eventTime) {
         // ... 가격, 시간 갱신 로직 생략 ...
 
