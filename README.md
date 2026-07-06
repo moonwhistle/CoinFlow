@@ -45,7 +45,7 @@ During this project, I wanted to build everything starting from raw tick data.
 
 ![Architecture](/image/architect2.png)
 
-(In the current deployment, ElastiCache and RDS run as Docker containers on the same EC2 to minimize cost...)
+(In the current deployment, Redis and PostgreSQL run as Docker containers on the same EC2 to minimize cost...)
 
 > **Why Single Server?** Multi-instance deployments with ALB are unnecessary at this scale(including cost problems). A single EC2 with Nginx achieves the same routing and SSL at zero cost — while remaining ready to scale out when needed.
 
