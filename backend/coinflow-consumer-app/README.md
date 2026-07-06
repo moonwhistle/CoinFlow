@@ -1,45 +1,44 @@
-# # CoinFlow Consumer 로직 분석
+# CoinFlow Consumer 로직 분석
 
 ## 1. 로직 흐름 (Tick 데이터 수신부터 집계까지)
 
-이 시스템은 스케줄링된 Flush 메커니즘을 가진 **스트림 기반 인메모리 집계(Stream-based In-Memory Aggregation)** 패턴을 따릅니다.
+이 시스템은 Redis Stream 기반으로 바이너리 Tick 데이터를 소비하고, 서버 메모리에서 1m/5m/30m Kline을 집계한 뒤 Redis Pub/Sub, Redis Live Cache, 비동기 DB 저장, Batch ACK를 조율하는 구조입니다.
 
 ### A. 수신 단계 (Ingestion)
 1. **Source**: Redis Stream (`tick:raw`)
 2. **Consumer**: `TickRawEventConsumer` (`StreamListener` 구현체)
-3. **Handler**: `TickRawMessageHandler`가 raw Map 데이터를 `TickRawEvent` 객체(심볼, 가격, 수량, 시간)로 변환
-4. **Service**: `TickProcessService`가 구체적인 집계 서비스(`Ohlc1mAggregationService`)로 처리를 위임
+3. **Handler**: `TickRawMessageHandler`가 `Map<String, byte[]>`에서 바이너리 payload를 꺼내 `TickRawBinaryCodec`으로 필드를 직접 추출
+4. **Service**: `TickProcessService`가 `KlineAggregatorService`에 집계를 위임하고 후속 전파/저장/ACK 흐름을 조율
 
 ### B. 집계 단계 (Aggregation - In-Memory)
-- **Store**: `Ohlc1mAggregationStore`가 `ConcurrentHashMap<AggregateKey, OhlcAccumulator>`를 관리
-- **Accumulator**: `OhlcAccumulator`가 메모리 상에서 OHLC 데이터를 갱신
+- **Store**: `KlineAggregatorService`가 `symbol:interval` 키 기준으로 `KlineState`를 관리
+- **Accumulator**: `KlineState`와 `MutableKlineSnapshot`이 메모리 상에서 OHLC 데이터를 갱신
     - **로직**:
         - `Open`: 최초 수신 가격
         - `High/Low`: 최대/최소 가격 비교 갱신
         - `Close`: 가장 늦은 `eventTime`을 가진 가격으로 결정
         - `Volume`: 누적 합계
-    - **동시성**: `ConcurrentHashMap.compute()`를 사용하여 키(심볼+버킷) 단위로 락을 걸고 안전하게 처리
+    - **동시성**: `ConcurrentHashMap` 기반 상태 저장소를 사용하고, 최근 마감 버킷은 `recentlyClosed` 버퍼에서 Late Tick 보정을 처리
 
-### C. 지속성 단계 (Persistence - Flush)
-- **Scheduler**: `Ohlc1mFlushScheduler`가 **1000ms(1초)** 마다 실행
-- **Close Check**: `BucketCloseChecker`를 통해 메모리 상의 모든 키를 순회하며 버킷 시간 윈도우가 지났는지 확인
-- **Flush Action**:
-    1. `Ohlc1mFlushService.flush()` 호출
-    2. `Ohlc1mService.applyAndSave()`를 통해 DB 저장
-    3. `Ohlc1mFlushedEvent` 발행 (후속 5m/30m 롤업 처리를 위함)
-    4. 메모리에서 해당 키 제거
+### C. 지속성 및 ACK 단계 (Persistence & ACK)
+- **Live Snapshot**: 진행 중인 Kline은 Redis Live Cache에 저장되고 Redis Pub/Sub으로 브로드캐스트됩니다.
+- **Closed / Late Snapshot**: 마감 또는 Late Tick 보정 스냅샷은 `DbPersistService.persistClosedCandleAsync()`를 통해 비동기로 DB에 저장됩니다.
+- **Batch ACK**:
+    1. 저장 파이프라인이 완료되면 `BatchAckWorker.addAck(recordId)` 호출
+    2. `BatchAckWorker`가 500건 또는 50ms 기준으로 Redis Stream XACK를 묶어서 처리
+    3. RecordId 기반 Caffeine 캐시로 재전달 메시지의 중복 집계를 방지
 
 ## 2. 패키지 및 의존성 분석
 
 모듈 구조는 관심사를 잘 분리하고 있으나, Core 모듈과 다소 강한 결합이 있습니다.
 
 - **`com.coinflow.consumer`**: Redis 연결 관련 코드를 깔끔하게 분리
-- **`com.coinflow.aggregation`**: 핵심 비즈니스 로직 포함 (Accumulator, Store, Scheduler)
+- **`com.coinflow.aggregation`**: Consumer 파이프라인 조율, Redis Pub/Sub 전파, 비동기 저장, Batch ACK 로직 포함
 - **Dependencies**:
     - **`:coinflow-core`**: 
-        - 도메인 엔티티(`Symbol`, `Ohlc`)와 서비스(`SymbolService`, `Ohlc1mService`)를 사용
+        - 도메인 엔티티(`Symbol`, `Ohlc`)와 서비스(`SymbolService`, `KlineAggregatorService`, `Ohlc1mService`, `Ohlc5mService`, `Ohlc30mService`)를 사용
         - **관찰**: Consumer 애플리케이션이 Core 도메인 서비스를 직접 의존합니다. 모듈러 모놀리스(Modular Monolith) 구조에서는 일반적이나, 트랜잭션/엔티티 구조에 직접 묶여 있습니다.
-    - **`:coinflow-common`**: DTO 및 Event 정의 사용
+    - **`:coinflow-common`**: Event, Metric, Tick binary codec, validation 공통 코드 사용
 
 ## 3. Core 모듈 통합 분석 (Persistence & Upsert)
 
@@ -49,24 +48,24 @@
 - **지연 이벤트 처리 (Late Event Handling)**:
     - Flush 이후에 도착한(지각한) 틱 데이터가 와도, DB에 있는 기존 봉(Candle)을 조회하여 값을 갱신(High/Low/Close/Volume)하므로 데이터 정합성이 깨지지 않습니다.
 - **동시성 고려사항**:
-    - JPA의 낙관적 락(`@Version`)이나 별도의 비관적 락이 보이지 않습니다.
-    - 만약 동일 심볼+버킷에 대해 여러 Consumer가 동시에 Flush를 시도할 경우, **Lost Update**나 **Unique Constraint Violation**이 발생할 수 있는 구조입니다. (현재는 Redis Stream Group으로 인해 단일 파이프라인 처리가 보장된다면 안전함)
+    - `AbstractOhlc`에 JPA 낙관적 락(`@Version`)이 적용되어 있습니다.
+    - 동일 심볼+버킷은 유니크 인덱스와 낙관적 락 기반으로 중복 저장 및 Lost Update 위험을 방어합니다.
 
 ## 4. 개선 제안 (Suggestions for Improvement)
 
-### A. 스케줄러 루프의 확장성
-- **현재**: 스케줄러가 매초 **모든 활성 키**를 순회함
-- **위험**: 관리하는 심볼 수가 증가(예: 10,000개 이상)하면, 이 전체 순회 방식("Stop-the-world" 스타일)은 성능 저하를 일으킬 수 있음
-- **개선**: **DelayQueue**나 시간 윈도우 기반 파티셔닝 맵을 사용하여, 실제로 마감 시간이 된 버킷만 체크하도록 변경 추천
+### A. 인메모리 상태 확장성
+- **현재**: `KlineAggregatorService`가 지원 interval별 `KlineState`와 최근 마감 버퍼를 메모리에 유지함
+- **위험**: 심볼 수가 크게 증가하면 상태 맵과 최근 마감 버퍼의 메모리 사용량이 증가할 수 있음
+- **개선**: 심볼 확장 시 상태 보관 정책, 버퍼 TTL, interval별 eviction 정책을 별도로 검토 필요
 
 ### B. Hot Symbol에 대한 경합 (Contention)
-- **현재**: `store.compute()` 메서드는 해당 키에 대해 락을 걺
+- **현재**: 단일 hot symbol에 Tick이 집중되면 해당 symbol/interval의 `KlineState` 갱신이 집중됨
 - **위험**: 틱 빈도가 매우 높은(예: 1000+ TPS) 심볼의 경우, 락 경합이 병목지점이 될 수 있음
 - **개선**: 
     - Volume 집계 등에 **Double Buffering** 또는 **LongAdder** 도입
-    - 또는 내부적으로 Accumulator를 샤딩(Sharding)하여 경합 분산
+    - 또는 내부적으로 Kline 상태를 샤딩(Sharding)하여 경합 분산
 
 ### C. 메모리 안전성
-- **현재**: Flush 성공에 의존하여 메모리를 비움
-- **위험**: DB 장애 등의 이유로 Flush가 계속 실패하면, 메모리 맵이 무한정 커져 OOM(Out Of Memory) 발생 가능
-- **개선**: **Backpressure** 메커니즘 도입 또는 `max-size` 제한(오래된 데이터 디스크 스필 또는 소비 일시 정지) 구현 필요
+- **현재**: DB 저장 실패 시 재시도 후 Batch Reconciliation으로 복구하는 방향을 가짐
+- **위험**: 장시간 DB 장애가 발생하면 비동기 저장 큐와 Redis Stream PEL이 증가할 수 있음
+- **개선**: **Backpressure** 메커니즘 도입 또는 저장 큐/PEL 모니터링 기반 소비 일시 정지 정책 검토 필요

@@ -1,5 +1,18 @@
 # React + TypeScript + Vite
 
+CoinFlow frontend is a React + TypeScript + Vite client for the real-time Bitcoin chart.
+
+## CoinFlow Scripts
+
+```bash
+npm install
+npm run dev
+npm run lint
+npm run build
+```
+
+Local Vite proxy routes `/api` to `http://localhost:8080` and `/ws` to `ws://localhost:8081`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
