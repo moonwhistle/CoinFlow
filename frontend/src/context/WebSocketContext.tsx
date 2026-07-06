@@ -25,7 +25,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
     }, []);
 
     const connect = useCallback(() => {
-        if (ws.current?.readyState === WebSocket.OPEN) return;
+        if (
+            ws.current?.readyState === WebSocket.OPEN ||
+            ws.current?.readyState === WebSocket.CONNECTING
+        ) {
+            return;
+        }
 
         console.log('[WS Provider] Connecting to', url);
         const socket = new WebSocket(url);
@@ -43,6 +48,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ url, child
         };
 
         socket.onclose = () => {
+            if (ws.current !== socket) return;
+
             console.log('[WS Provider] Disconnected');
             setIsConnected(false);
             ws.current = null;
