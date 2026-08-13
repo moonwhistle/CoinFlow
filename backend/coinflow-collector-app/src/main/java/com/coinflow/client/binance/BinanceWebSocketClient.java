@@ -36,6 +36,7 @@ public class BinanceWebSocketClient implements DataClient {
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
 
     private volatile WebSocketClient client;
+    private volatile ScheduledFuture<?> reconnectFuture;
     private volatile ScheduledFuture<?> proactiveReconnectFuture;
 
     public BinanceWebSocketClient(
@@ -49,12 +50,14 @@ public class BinanceWebSocketClient implements DataClient {
     @Override
     public void connect() {
         stopped.set(false);
+        cancelReconnect();
         connectNewClient("initial connection");
     }
 
     @Override
     public void disconnect() {
         stopped.set(true);
+        cancelReconnect();
         cancelProactiveReconnect();
 
         synchronized (lifecycleLock) {
@@ -71,17 +74,16 @@ public class BinanceWebSocketClient implements DataClient {
         return new WebSocketClient(uri) {
             @Override
             public void onOpen(ServerHandshake handshake) {
-                reconnectAttempts.set(0);
-                reconnectScheduled.set(false);
-                scheduleProactiveReconnect();
-                log.info("Binance WebSocket connected. uri={}", uri);
+                markConnected(this);
             }
 
             @Override
             public void onMessage(String message) {
                 if (message.contains(SERVER_SHUTDOWN_EVENT)) {
                     log.warn("Binance serverShutdown event received. Scheduling reconnect.");
-                    scheduleReconnect("serverShutdown event");
+                    if (isCurrentClient(this)) {
+                        scheduleReconnect("serverShutdown event");
+                    }
                     return;
                 }
                 handler.handle(message);
@@ -93,18 +95,13 @@ public class BinanceWebSocketClient implements DataClient {
                         "Binance WebSocket closed. code={}, reason={}, remote={}",
                         code, reason, remote
                 );
-                if (isCurrentClient(this)) {
-                    cancelProactiveReconnect();
-                    scheduleReconnect("connection closed");
-                }
+                handleDisconnected(this, "connection closed");
             }
 
             @Override
             public void onError(Exception ex) {
                 log.error("Binance WebSocket error", ex);
-                if (isCurrentClient(this)) {
-                    scheduleReconnect("connection error");
-                }
+                handleDisconnected(this, "connection error");
             }
         };
     }
@@ -118,6 +115,7 @@ public class BinanceWebSocketClient implements DataClient {
             if (stopped.get()) {
                 return;
             }
+            cancelReconnect();
 
             WebSocketClient previous = client;
             WebSocketClient next = createClient();
@@ -133,20 +131,51 @@ public class BinanceWebSocketClient implements DataClient {
     }
 
     private void scheduleReconnect(String reason) {
-        if (stopped.get() || !reconnectScheduled.compareAndSet(false, true)) {
-            return;
+        synchronized (lifecycleLock) {
+            if (stopped.get() || !reconnectScheduled.compareAndSet(false, true)) {
+                return;
+            }
+
+            int attempt = reconnectAttempts.incrementAndGet();
+            long delayMillis = calculateBackoffMillis(attempt);
+
+            log.warn("Scheduling Binance WebSocket reconnect. reason={}, attempt={}, delayMillis={}",
+                    reason, attempt, delayMillis);
+
+            reconnectFuture = reconnectScheduler.schedule(() -> {
+                synchronized (lifecycleLock) {
+                    reconnectFuture = null;
+                    reconnectScheduled.set(false);
+                }
+                connectNewClient(reason);
+            }, delayMillis, TimeUnit.MILLISECONDS);
         }
+    }
 
-        int attempt = reconnectAttempts.incrementAndGet();
-        long delayMillis = calculateBackoffMillis(attempt);
+    private void markConnected(WebSocketClient connectedClient) {
+        synchronized (lifecycleLock) {
+            if (stopped.get() || client != connectedClient) {
+                log.debug("Ignoring stale Binance WebSocket onOpen callback.");
+                return;
+            }
 
-        log.warn("Scheduling Binance WebSocket reconnect. reason={}, attempt={}, delayMillis={}",
-                reason, attempt, delayMillis);
+            cancelReconnect();
+            reconnectAttempts.set(0);
+            scheduleProactiveReconnect();
+            log.info("Binance WebSocket connected. uri={}", uri);
+        }
+    }
 
-        reconnectScheduler.schedule(() -> {
-            reconnectScheduled.set(false);
-            connectNewClient(reason);
-        }, delayMillis, TimeUnit.MILLISECONDS);
+    private void handleDisconnected(WebSocketClient disconnectedClient, String reason) {
+        synchronized (lifecycleLock) {
+            if (stopped.get() || client != disconnectedClient) {
+                log.debug("Ignoring stale Binance WebSocket disconnect callback. reason={}", reason);
+                return;
+            }
+
+            cancelProactiveReconnect();
+        }
+        scheduleReconnect(reason);
     }
 
     private void scheduleProactiveReconnect() {
@@ -166,6 +195,15 @@ public class BinanceWebSocketClient implements DataClient {
             future.cancel(false);
             proactiveReconnectFuture = null;
         }
+    }
+
+    private void cancelReconnect() {
+        ScheduledFuture<?> future = reconnectFuture;
+        if (future != null) {
+            future.cancel(false);
+            reconnectFuture = null;
+        }
+        reconnectScheduled.set(false);
     }
 
     private long calculateBackoffMillis(int attempt) {
