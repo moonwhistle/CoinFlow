@@ -114,27 +114,6 @@ services:
         condition: service_healthy
     restart: always
 
-  replay-app:
-    image: ${DOCKERHUB_USERNAME}/coinflow-replay:latest
-    build:
-      context: ../../backend/coinflow-replay-app
-      dockerfile: Dockerfile
-    container_name: coinflow-replay
-    environment:
-      - SPRING_CONFIG_NAME=application-replay
-      - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
-      - SPRING_DATASOURCE_USERNAME=ohlc_user
-      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
-    entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-replay -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: always
-
   # ──────────────────────────────────────────────
   # Data Layer
   # ──────────────────────────────────────────────
