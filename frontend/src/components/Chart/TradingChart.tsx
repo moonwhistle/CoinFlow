@@ -17,7 +17,6 @@ const CHART_CONSTANTS = {
     DEFAULT_SYMBOL_NAME: 'btcusdt',
     PAGE_SIZE: 120,
     SCROLL_THRESHOLD: 10,
-    INITIAL_FILL_DELAY_MS: 500,
 };
 
 export const TradingChart = () => {
@@ -32,26 +31,36 @@ export const TradingChart = () => {
     const lastCandleTimeRef = useRef<number>(0);
 
     // Pagination & Infinite Scroll Control
-    const isFetchingRef = useRef<boolean>(false);
+    const activeRequestRef = useRef<{ id: number, generation: number } | null>(null);
+    const requestIdRef = useRef(0);
+    const requestGenerationRef = useRef(0);
+    const isInitializingRef = useRef(true);
     const hasMoreRef = useRef<boolean>(true);
     const rawDataRef = useRef<{ candles: ChartCandle[], volumes: VolumeBar[] }>({ candles: [], volumes: [] });
-    const ensureFullViewRef = useRef<() => void>(() => {});
 
     // State
     const [activeTimeframe, setActiveTimeframe] = useState<OhlcInterval>('M1');
     const [isLoading, setIsLoading] = useState(true);
 
     // --- Data Loading & Merging ---
-    const loadChartData = useCallback(async (to?: string) => {
-        if (isFetchingRef.current || (!hasMoreRef.current && to)) return;
+    const loadChartData = useCallback(async (generation: number, to?: string): Promise<boolean> => {
+        const activeRequest = activeRequestRef.current;
+        if (activeRequest?.generation === generation || (!hasMoreRef.current && to)) {
+            return false;
+        }
 
-        isFetchingRef.current = true;
+        const requestId = ++requestIdRef.current;
+        activeRequestRef.current = { id: requestId, generation };
         try {
             const response = await getOhlcData(CHART_CONSTANTS.DEFAULT_SYMBOL_ID, activeTimeframe, CHART_CONSTANTS.PAGE_SIZE, to);
 
+            if (generation !== requestGenerationRef.current) {
+                return false;
+            }
+
             if (response.candles.length === 0) {
                 hasMoreRef.current = false;
-                return;
+                return false;
             }
 
             const newCandles: ChartCandle[] = [];
@@ -92,21 +101,28 @@ export const TradingChart = () => {
                 lastCandleTimeRef.current = Math.max(lastCandleTimeRef.current, maxTime);
             }
 
-            // If initial load doesn't fill viewport, load more
-            if (!to) {
-                setTimeout(() => ensureFullViewRef.current(), CHART_CONSTANTS.INITIAL_FILL_DELAY_MS);
-            }
-
+            return true;
         } catch (err) {
-            console.error("[TradingChart] Failed to load data", err);
+            if (generation === requestGenerationRef.current) {
+                console.error("[TradingChart] Failed to load data", err);
+            }
+            return false;
         } finally {
-            isFetchingRef.current = false;
-            setIsLoading(false);
+            if (activeRequestRef.current?.id === requestId) {
+                activeRequestRef.current = null;
+            }
         }
     }, [activeTimeframe]);
 
     const ensureFullView = useCallback(() => {
-        if (!mainChartRef.current || isFetchingRef.current || !hasMoreRef.current) return;
+        const generation = requestGenerationRef.current;
+        const isCurrentGenerationFetching = activeRequestRef.current?.generation === generation;
+        if (!mainChartRef.current
+            || isInitializingRef.current
+            || isCurrentGenerationFetching
+            || !hasMoreRef.current) {
+            return;
+        }
 
         const timeScale = mainChartRef.current.timeScale();
         const range = timeScale.getVisibleLogicalRange();
@@ -116,14 +132,10 @@ export const TradingChart = () => {
             if (oldestCandle) {
                 const toStr = new Date((oldestCandle.time as number) * 1000).toISOString().split('.')[0];
                 console.log(`[TradingChart] Infinite Scroll Triggered. Loading before: ${toStr}`);
-                loadChartData(toStr);
+                void loadChartData(generation, toStr);
             }
         }
     }, [loadChartData]);
-
-    useEffect(() => {
-        ensureFullViewRef.current = ensureFullView;
-    }, [ensureFullView]);
 
     // --- Real-time Data Handling ---
     const handleWebSocketMessage = useCallback((msg: WsMessage) => {
@@ -179,10 +191,15 @@ export const TradingChart = () => {
     useEffect(() => {
         if (!mainContainerRef.current || !volumeContainerRef.current) return;
 
+        const generation = ++requestGenerationRef.current;
+        let initializationFrame: number | null = null;
+
         // Reset
         rawDataRef.current = { candles: [], volumes: [] };
         hasMoreRef.current = true;
         lastCandleTimeRef.current = 0;
+        isInitializingRef.current = true;
+        setIsLoading(true);
 
         // Chart Creation
         const mainChart = createChart(mainContainerRef.current, {
@@ -248,9 +265,23 @@ export const TradingChart = () => {
             else mainChart.clearCrosshairPosition();
         });
 
-        // Load & Fit
-        loadChartData();
-        mainChart.timeScale().fitContent();
+        // Load first, then fit. Programmatic range changes must not trigger pagination.
+        const initializeChart = async () => {
+            const loaded = await loadChartData(generation);
+            if (generation !== requestGenerationRef.current) return;
+
+            if (loaded) {
+                mainTimeScale.fitContent();
+            }
+
+            initializationFrame = requestAnimationFrame(() => {
+                if (generation === requestGenerationRef.current) {
+                    isInitializingRef.current = false;
+                    setIsLoading(false);
+                }
+            });
+        };
+        void initializeChart();
 
         // Resize
         const handleResize = () => {
@@ -265,6 +296,12 @@ export const TradingChart = () => {
         resizeObserver.observe(mainContainerRef.current);
 
         return () => {
+            if (requestGenerationRef.current === generation) {
+                requestGenerationRef.current += 1;
+            }
+            if (initializationFrame !== null) {
+                cancelAnimationFrame(initializationFrame);
+            }
             resizeObserver.disconnect();
             mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncVolRange);
             volTimeScale.unsubscribeVisibleLogicalRangeChange(syncMainRange);
