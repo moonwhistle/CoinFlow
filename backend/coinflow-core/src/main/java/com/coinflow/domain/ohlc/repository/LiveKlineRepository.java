@@ -24,4 +24,9 @@ public interface LiveKlineRepository {
      */
     void delete(String symbol, String interval);
 
+    /**
+     * Deletes the live value only when it still represents the supplied bucket.
+     */
+    void deleteIfStartTimeMatches(String symbol, String interval, long startTime);
+
 }
