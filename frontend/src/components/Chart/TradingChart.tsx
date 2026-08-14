@@ -134,21 +134,31 @@ export const TradingChart = () => {
 
             const candleTime = msg.startTime as number;
             const isHistorical = candleTime < lastCandleTimeRef.current;
+            const liveCandle: ChartCandle = {
+                time: candleTime as Time,
+                open: msg.open,
+                high: msg.high,
+                low: msg.low,
+                close: msg.close,
+            };
+            const liveVolume: VolumeBar = {
+                time: candleTime as Time,
+                value: msg.volume,
+                color: msg.close >= msg.open
+                    ? CHART_COLORS.UP_TRANSPARENT
+                    : CHART_COLORS.DOWN_TRANSPARENT,
+            };
+
+            // Keep WebSocket data in the merge source so a slower REST response
+            // cannot overwrite a newer value for the same candle timestamp.
+            rawDataRef.current = {
+                candles: uniqueSortData([...rawDataRef.current.candles, liveCandle]),
+                volumes: uniqueSortData([...rawDataRef.current.volumes, liveVolume]),
+            };
 
             try {
-                mainSeriesRef.current.update({
-                    time: candleTime as Time,
-                    open: msg.open,
-                    high: msg.high,
-                    low: msg.low,
-                    close: msg.close,
-                }, isHistorical);
-
-                volumeSeriesRef.current.update({
-                    time: candleTime as Time,
-                    value: msg.volume,
-                    color: msg.close >= msg.open ? CHART_COLORS.UP_TRANSPARENT : CHART_COLORS.DOWN_TRANSPARENT,
-                }, isHistorical);
+                mainSeriesRef.current.update(liveCandle, isHistorical);
+                volumeSeriesRef.current.update(liveVolume, isHistorical);
 
                 if (!isHistorical) {
                     lastCandleTimeRef.current = Math.max(lastCandleTimeRef.current, candleTime);
