@@ -131,6 +131,11 @@
     color: var(--accent-red);
 }
 
+.price-change-pill.neutral {
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
 /* --- Segment 3: Stats Grid --- */
 .stats-grid {
     display: grid;
