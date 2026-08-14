@@ -1,6 +1,7 @@
 package com.coinflow.domain.ohlc.repository;
 
 import com.coinflow.domain.ohlc.domain.Ohlc1m;
+import com.coinflow.domain.ohlc.snapshot.OhlcRangeAggregate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -25,4 +26,33 @@ public interface Ohlc1mRepository extends JpaRepository<Ohlc1m, Long> {
     );
 
     Optional<Ohlc1m> findBySymbolIdAndBucketTime(Long symbolId, LocalDateTime bucketTime);
+
+    Optional<Ohlc1m> findFirstBySymbolIdAndBucketTimeGreaterThanEqualAndBucketTimeLessThanOrderByBucketTimeAsc(
+            Long symbolId,
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    Optional<Ohlc1m> findFirstBySymbolIdAndBucketTimeGreaterThanEqualAndBucketTimeLessThanOrderByBucketTimeDesc(
+            Long symbolId,
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    @Query("""
+            select new com.coinflow.domain.ohlc.snapshot.OhlcRangeAggregate(
+                max(o.highPrice),
+                min(o.lowPrice),
+                sum(o.volume)
+            )
+            from Ohlc1m o
+            where o.symbol.id = :symbolId
+              and o.bucketTime >= :start
+              and o.bucketTime < :end
+            """)
+    OhlcRangeAggregate aggregateInBucketRange(
+            @Param("symbolId") Long symbolId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 }

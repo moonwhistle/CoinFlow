@@ -1,18 +1,20 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Activity, ArrowDown, ArrowUp, BarChart2, Clock, Hash, Zap } from 'lucide-react';
+import { getMarketStats24h } from '../api/marketApi';
 import { useCoinflowWebSocket } from '../hooks/useCoinflowWebSocket';
-import { Clock, Activity, BarChart2, Hash, Zap } from 'lucide-react';
-import type { WsMessage, KlineEvent } from '../types/websocket';
+import type { MarketStats24h } from '../types/market';
+import type { KlineEvent, TickerEvent, WsMessage } from '../types/websocket';
 import { isKlineEvent, isTickerEvent } from '../types/websocket';
 import './LiveTicker.css';
 
-// --- Constants (SRP/DRY/Magic Values) ---
 const TICKER_CONSTANTS = {
+    SYMBOL_ID: 1,
     SYMBOL: 'btcusdt',
     LOGO_PATH: '/images/btc-logo.png',
     LOGO_ALT: 'BTC',
+    STATS_REFRESH_INTERVAL_MS: 30_000,
 };
 
-// --- Formatters ---
 const currencyFormatter = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -20,48 +22,51 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
 });
 
-const volumeFormatter = new Intl.NumberFormat('en-US', {
+const numberFormatter = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
 });
 
-// Mock Data for 24h Stats (Fallback when backend API is unavailable)
-const MOCK_STATS = {
-    high: 89800.00,
-    low: 88900.00,
-    volume: 45231.05,
-    changePercent: 2.45
-};
+type PriceDirection = 'up' | 'down' | 'neutral';
 
 export const LiveTicker = () => {
-    const [lastMessage, setLastMessage] = useState<KlineEvent | null>(null);
-    const [priceColor, setPriceColor] = useState<'up' | 'down' | 'neutral'>('neutral');
+    const [lastKline, setLastKline] = useState<KlineEvent | null>(null);
+    const [lastTicker, setLastTicker] = useState<TickerEvent | null>(null);
+    const [marketStats, setMarketStats] = useState<MarketStats24h | null>(null);
+    const [priceDirection, setPriceDirection] = useState<PriceDirection>('neutral');
     const [imgError, setImgError] = useState(false);
     const prevPriceRef = useRef<number | null>(null);
 
-    const handleMessage = useCallback((msg: WsMessage) => {
-        // 1. Kline (Candle) Handling - M1 is used for highest freq ticker updates
-        if (isKlineEvent(msg) && msg.interval === 'M1') {
-            const currentPrice = msg.close;
-            const previousPrice = prevPriceRef.current;
+    const updatePriceDirection = useCallback((currentPrice: number) => {
+        const previousPrice = prevPriceRef.current;
 
-            if (previousPrice !== null) {
-                if (currentPrice > previousPrice) {
-                    setPriceColor('up');
-                } else if (currentPrice < previousPrice) {
-                    setPriceColor('down');
-                }
+        if (previousPrice !== null) {
+            if (currentPrice > previousPrice) {
+                setPriceDirection('up');
+            } else if (currentPrice < previousPrice) {
+                setPriceDirection('down');
             }
+        }
 
-            prevPriceRef.current = currentPrice;
-            setLastMessage(msg);
-        }
-        // 2. Ticker Event (Price/Volume only) - Reserved for direct ticker streams
-        else if (isTickerEvent(msg)) {
-            // Logic to update UI from pure ticker events
-            console.debug(`[LiveTicker] Received Ticker: ${msg.price}`);
-        }
+        prevPriceRef.current = currentPrice;
     }, []);
+
+    const handleMessage = useCallback((msg: WsMessage) => {
+        if (msg.symbol !== TICKER_CONSTANTS.SYMBOL) {
+            return;
+        }
+
+        if (isTickerEvent(msg)) {
+            setLastTicker(msg);
+            updatePriceDirection(msg.price);
+            return;
+        }
+
+        if (isKlineEvent(msg) && msg.interval === 'M1') {
+            setLastKline(msg);
+            updatePriceDirection(msg.close);
+        }
+    }, [updatePriceDirection]);
 
     const { isConnected, subscribe } = useCoinflowWebSocket(handleMessage);
 
@@ -71,18 +76,81 @@ export const LiveTicker = () => {
         }
     }, [isConnected, subscribe]);
 
-    // Derived Display Values
-    const currentPrice = lastMessage?.close ?? null;
-    const currentVolume = lastMessage?.volume ?? null;
-    const currentTime = lastMessage ? lastMessage.startTime * 1000 : null;
+    useEffect(() => {
+        let disposed = false;
 
-    const displayPrice = currentPrice ? currencyFormatter.format(currentPrice) : '---';
-    const displayQuantity = currentVolume ? currentVolume.toFixed(6) : '---';
-    const displayTime = currentTime ? new Date(currentTime).toLocaleTimeString() : '--:--:--';
+        const refreshStats = async () => {
+            try {
+                const stats = await getMarketStats24h(TICKER_CONSTANTS.SYMBOL_ID);
+                if (!disposed) {
+                    setMarketStats(stats);
+                }
+            } catch (error) {
+                console.error('[LiveTicker] Failed to load 24h market stats:', error);
+            }
+        };
+
+        refreshStats();
+        const intervalId = window.setInterval(
+            refreshStats,
+            TICKER_CONSTANTS.STATS_REFRESH_INTERVAL_MS,
+        );
+
+        return () => {
+            disposed = true;
+            window.clearInterval(intervalId);
+        };
+    }, []);
+
+    const statsBucketStart = marketStats === null
+        ? null
+        : Math.floor(marketStats.asOfEpochMillis / 60_000) * 60;
+    const activeKline = lastKline !== null
+        && (statsBucketStart === null || lastKline.startTime >= statsBucketStart)
+        ? lastKline
+        : null;
+    const hasNewerTicker = lastTicker !== null
+        && (marketStats === null || lastTicker.eventTime > marketStats.asOfEpochMillis);
+    const currentPrice = hasNewerTicker
+        ? lastTicker.price
+        : marketStats?.currentPrice ?? activeKline?.close ?? lastTicker?.price ?? null;
+    const currentQuantity = lastTicker?.volume ?? null;
+    const currentTime = hasNewerTicker
+        ? lastTicker.eventTime
+        : marketStats?.asOfEpochMillis ?? lastTicker?.eventTime ?? null;
+
+    const high24h = marketStats === null
+        ? null
+        : Math.max(
+            marketStats.highPrice,
+            activeKline?.high ?? marketStats.highPrice,
+            currentPrice ?? marketStats.highPrice,
+        );
+    const low24h = marketStats === null
+        ? null
+        : Math.min(
+            marketStats.lowPrice,
+            activeKline?.low ?? marketStats.lowPrice,
+            currentPrice ?? marketStats.lowPrice,
+        );
+    const volume24h = calculateLiveVolume(marketStats, activeKline);
+    const changePercent24h = marketStats === null
+        ? null
+        : currentPrice !== null && marketStats.openPrice !== 0
+            ? ((currentPrice - marketStats.openPrice) / marketStats.openPrice) * 100
+            : marketStats.changePercent;
+    const changeDirection: PriceDirection = changePercent24h === null || changePercent24h === 0
+        ? 'neutral'
+        : changePercent24h > 0 ? 'up' : 'down';
+
+    const displayPrice = currentPrice === null ? '---' : currencyFormatter.format(currentPrice);
+    const displayQuantity = currentQuantity === null ? '---' : currentQuantity.toFixed(8);
+    const displayTime = currentTime === null
+        ? '--:--:--'
+        : new Date(currentTime).toLocaleTimeString();
 
     return (
         <div className="ticker-container">
-            {/* 1. Header Section with Robust Image Loading */}
             <div className="ticker-header">
                 <div className="symbol-info">
                     {!imgError ? (
@@ -106,32 +174,32 @@ export const LiveTicker = () => {
                 </div>
             </div>
 
-            {/* 2. Big Price Display */}
             <div className="ticker-price-section">
-                <div className={`price-display ${priceColor}`}>
+                <div className={`price-display ${priceDirection}`}>
                     {displayPrice}
                 </div>
-                <div className="price-change-pill up">
-                    ↑ {MOCK_STATS.changePercent}% (24h)
+                <div className={`price-change-pill ${changeDirection}`}>
+                    {changeDirection === 'up' && <ArrowUp size={14} />}
+                    {changeDirection === 'down' && <ArrowDown size={14} />}
+                    {changePercent24h === null ? '---' : `${Math.abs(changePercent24h).toFixed(2)}% (24h)`}
                 </div>
             </div>
 
-            {/* 3. Stats Grid (24h Statistics) */}
             <div className="stats-grid">
                 <StatRow
                     icon={<Activity size={14} />}
                     label="24h High"
-                    value={volumeFormatter.format(MOCK_STATS.high)}
+                    value={high24h === null ? '---' : numberFormatter.format(high24h)}
                 />
                 <StatRow
                     icon={<Activity size={14} style={{ transform: 'scaleY(-1)' }} />}
                     label="24h Low"
-                    value={volumeFormatter.format(MOCK_STATS.low)}
+                    value={low24h === null ? '---' : numberFormatter.format(low24h)}
                 />
                 <StatRow
                     icon={<BarChart2 size={14} />}
                     label="24h Volume"
-                    value={`${volumeFormatter.format(MOCK_STATS.volume)} BTC`}
+                    value={volume24h === null ? '---' : `${numberFormatter.format(volume24h)} BTC`}
                 />
                 <StatRow
                     icon={<Hash size={14} />}
@@ -140,7 +208,6 @@ export const LiveTicker = () => {
                 />
             </div>
 
-            {/* 4. Footer */}
             <div className="ticker-footer">
                 <div className="footer-item">
                     <span className="stat-label">
@@ -153,7 +220,7 @@ export const LiveTicker = () => {
                         <Zap size={14} /> Status
                     </span>
                     <span className={`status-badge ${isConnected ? 'connected' : ''}`}>
-                        {isConnected ? '● Connected' : '○ Connecting...'}
+                        {isConnected ? 'Connected' : 'Connecting...'}
                     </span>
                 </div>
             </div>
@@ -161,7 +228,6 @@ export const LiveTicker = () => {
     );
 };
 
-// Helper Component for consistent rows
 const StatRow = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) => (
     <div className="stat-row">
         <span className="stat-label">
@@ -170,3 +236,27 @@ const StatRow = ({ icon, label, value }: { icon: React.ReactNode, label: string,
         <span className="stat-value">{value}</span>
     </div>
 );
+
+const calculateLiveVolume = (
+    stats: MarketStats24h | null,
+    liveKline: KlineEvent | null,
+): number | null => {
+    if (stats === null) {
+        return null;
+    }
+    if (liveKline === null) {
+        return stats.volume;
+    }
+
+    const statsBucket = stats.currentCandleStartEpochSeconds;
+    if (statsBucket === liveKline.startTime) {
+        return stats.volume
+            - stats.currentCandleVolume
+            + Math.max(stats.currentCandleVolume, liveKline.volume);
+    }
+    if (statsBucket === null || liveKline.startTime > statsBucket) {
+        return stats.volume + liveKline.volume;
+    }
+
+    return stats.volume;
+};
