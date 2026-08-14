@@ -1,11 +1,14 @@
 package com.coinflow.chart.service;
 
+import com.coinflow.chart.cache.hot.OhlcHotWindow;
+import com.coinflow.chart.cache.hot.OhlcHotWindowStore;
 import com.coinflow.chart.constant.ChartCacheConstants;
-import com.coinflow.chart.repository.RedisOhlcWindowRepository;
 import com.coinflow.domain.ohlc.cache.OhlcChartStore;
 import com.coinflow.domain.ohlc.constant.OhlcInterval;
+import com.coinflow.domain.ohlc.constant.OhlcWindowPolicy;
 import com.coinflow.domain.ohlc.domain.AbstractOhlc;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
+import com.coinflow.domain.ohlc.repository.OhlcWindowRepository;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
 import com.coinflow.domain.ohlc.service.Ohlc30mService;
 import com.coinflow.domain.ohlc.service.Ohlc5mService;
@@ -15,6 +18,7 @@ import com.coinflow.domain.symbol.service.SymbolService;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.util.TimeBucket;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -29,16 +33,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * High-performance chart service using a tiered caching strategy.
- * L1 (Caffeine - History) -> L1.5 (Redis ZSET - Hot Window) -> DB (Cold Storage).
+ * Chart service using local hot/history caches, Redis global windows, and DB fallback.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OhlcChartService {
 
-    private final OhlcChartStore chartStore; // Caffeine L2 (History)
-    private final RedisOhlcWindowRepository ohlcWindowRepository; // Global L1.5 Window
+    private final OhlcChartStore chartStore;
+    private final OhlcWindowRepository ohlcWindowRepository;
+    private final OhlcHotWindowStore hotWindowStore;
     private final Clock clock;
     private final Ohlc1mService ohlc1mService;
     private final Ohlc5mService ohlc5mService;
@@ -50,7 +54,7 @@ public class OhlcChartService {
 
     /**
      * Retrieves OHLC candles with high performance.
-     * Uses Redis-first strategy for the last 1000 candles with DB backfill.
+     * Uses the local hot window for the last 1000 candles with Redis and DB fallback.
      * Prevents Thundering Herd via local Mutex and Double-Checked Locking.
      */
     public List<OhlcCandleSnapshot> show(Long symbolId, OhlcInterval interval, int candles, LocalDateTime to) {
@@ -65,15 +69,26 @@ public class OhlcChartService {
 
         // Check if the request is within the 'Hot Window' range (last 1000)
         long currentEpoch = TimeBucket.to1m(clock.instant()).toEpochSecond(ZoneOffset.UTC);
-        boolean isHotPath = (currentEpoch - endEpoch) <= interval.duration().getSeconds() * ChartCacheConstants.MAX_HOT_WINDOW_SIZE;
+        boolean isHotPath = (currentEpoch - endEpoch)
+                <= interval.duration().getSeconds() * OhlcWindowPolicy.MAX_SIZE;
 
         List<OhlcCandleSnapshot> finalizedCandles;
+        Optional<KlineEvent> liveCandle = Optional.empty();
 
         if (isHotPath) {
-            // Hot Path: Try Redis ZSET
-            finalizedCandles = ohlcWindowRepository.findRange(symbol.getSymbol(), interval.name(), endEpoch, candles);
+            Optional<OhlcHotWindow> localWindow = hotWindowStore
+                    .get(symbol.getSymbol(), interval.name())
+                    .filter(this::isFresh);
+
+            if (localWindow.isPresent()) {
+                finalizedCandles = localWindow.get().findFinalizedRange(endEpoch, candles);
+                liveCandle = localWindow.get().liveCandleOptional();
+            } else {
+                OhlcHotWindow redisWindow = loadRedisHotWindow(symbol, interval, endEpoch);
+                finalizedCandles = redisWindow.findFinalizedRange(endEpoch, candles);
+                liveCandle = redisWindow.liveCandleOptional();
+            }
             
-            // Thundering Herd Prevention: If Redis is empty, acquire lock and backfill
             if (finalizedCandles.size() < candles) {
                 String lockKey = ChartCacheConstants.LOCK_KEY_PREFIX + symbol.getSymbol() + ":" + interval.name();
                 ReentrantLock lock = windowLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
@@ -83,17 +98,30 @@ public class OhlcChartService {
                     if (lock.tryLock(ChartCacheConstants.LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                         try {
                             // Double-Check: Has another thread already filled the cache?
-                            finalizedCandles = ohlcWindowRepository.findRange(symbol.getSymbol(), interval.name(), endEpoch, candles);
+                            OhlcHotWindow redisWindow = loadRedisHotWindow(symbol, interval, endEpoch);
+                            finalizedCandles = redisWindow.findFinalizedRange(endEpoch, candles);
+                            liveCandle = redisWindow.liveCandleOptional();
                             if (finalizedCandles.size() < candles) {
-                                log.debug("[CHART-SERVICE] Redis miss/gap for {} {}. Backfilling...", symbol.getSymbol(), interval);
-                                finalizedCandles = backfillAndLoad(symbol, interval, candles, endExclusive);
+                                log.debug(
+                                        "[CHART-SERVICE] Redis miss/gap for {} {}. Backfilling...",
+                                        symbol.getSymbol(), interval);
+                                finalizedCandles = backfillAndLoad(
+                                        symbol, interval, candles, endExclusive);
+                                OhlcHotWindow refreshedWindow = loadRedisHotWindow(symbol, interval, endEpoch);
+                                liveCandle = refreshedWindow.liveCandleOptional();
                             }
                         } finally {
                             lock.unlock();
                         }
                     } else {
-                        log.warn("[CHART-SERVICE] Lock timeout for {}. Proceeding with potential concurrent backfill.", lockKey);
-                        finalizedCandles = backfillAndLoad(symbol, interval, candles, endExclusive);
+                        log.warn(
+                                "[CHART-SERVICE] Lock timeout for {}. "
+                                        + "Proceeding with potential concurrent backfill.",
+                                lockKey);
+                        finalizedCandles = backfillAndLoad(
+                                symbol, interval, candles, endExclusive);
+                        OhlcHotWindow refreshedWindow = loadRedisHotWindow(symbol, interval, endEpoch);
+                        liveCandle = refreshedWindow.liveCandleOptional();
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -113,7 +141,8 @@ public class OhlcChartService {
 
         // Live Merge: Add the currently updating candle if it's a 'live' request
         if (to == null) {
-            return mergeRealTimeCandleIntoSnapshot(finalizedCandles, symbol, base1mBucket, interval);
+            return mergeRealTimeCandleIntoSnapshot(
+                    finalizedCandles, symbol, endExclusive, interval, liveCandle);
         }
 
         return finalizedCandles;
@@ -128,19 +157,31 @@ public class OhlcChartService {
         LocalDateTime endExclusive = interval.resolveBucketStart(nowBucket);
         
         log.info("[CHART-SERVICE] Warming up cache for {} {}", symbol.getSymbol(), interval);
-        backfillAndLoad(symbol, interval, ChartCacheConstants.MAX_HOT_WINDOW_SIZE, endExclusive);
+        backfillAndLoad(symbol, interval, OhlcWindowPolicy.MAX_SIZE, endExclusive);
+        loadRedisHotWindow(
+                symbol,
+                interval,
+                endExclusive.toEpochSecond(ZoneOffset.UTC)
+        );
     }
 
     /**
      * Loads candles from DB and hydrates the Redis Global Window for future requests.
      */
-    private List<OhlcCandleSnapshot> backfillAndLoad(Symbol symbol, OhlcInterval interval, int count, LocalDateTime endExclusive) {
+    private List<OhlcCandleSnapshot> backfillAndLoad(
+            Symbol symbol,
+            OhlcInterval interval,
+            int count,
+            LocalDateTime endExclusive
+    ) {
         // Backfill a larger portion (MAX_HOT_WINDOW_SIZE) to prevent frequent misses
-        List<OhlcCandleSnapshot> hotWindowData = loadFromDb(symbol.getId(), interval, ChartCacheConstants.MAX_HOT_WINDOW_SIZE, endExclusive);
+        List<OhlcCandleSnapshot> hotWindowData = loadFromDb(
+                symbol.getId(), interval, OhlcWindowPolicy.MAX_SIZE, endExclusive);
         
         if (!hotWindowData.isEmpty()) {
             ohlcWindowRepository.saveAll(symbol.getSymbol(), interval.name(), hotWindowData);
-            ohlcWindowRepository.trim(symbol.getSymbol(), interval.name(), ChartCacheConstants.MAX_HOT_WINDOW_SIZE);
+            ohlcWindowRepository.trim(
+                    symbol.getSymbol(), interval.name(), OhlcWindowPolicy.MAX_SIZE);
         }
 
         // Return only the requested amount
@@ -148,13 +189,21 @@ public class OhlcChartService {
         return hotWindowData.subList(Math.max(0, size - count), size);
     }
 
-    private List<OhlcCandleSnapshot> loadFromDb(Long symbolId, OhlcInterval interval, int candles, LocalDateTime endExclusive) {
+    private List<OhlcCandleSnapshot> loadFromDb(
+            Long symbolId,
+            OhlcInterval interval,
+            int candles,
+            LocalDateTime endExclusive
+    ) {
         LocalDateTime startInclusive = endExclusive.minus(interval.duration().multipliedBy(candles));
 
         return switch (interval) {
-            case M1 -> toSnapshots(ohlc1mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive));
-            case M5 -> toSnapshots(ohlc5mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive));
-            case M30 -> toSnapshots(ohlc30mService.findCandlesInBucketRange(symbolId, startInclusive, endExclusive));
+            case M1 -> toSnapshots(ohlc1mService.findCandlesInBucketRange(
+                    symbolId, startInclusive, endExclusive));
+            case M5 -> toSnapshots(ohlc5mService.findCandlesInBucketRange(
+                    symbolId, startInclusive, endExclusive));
+            case M30 -> toSnapshots(ohlc30mService.findCandlesInBucketRange(
+                    symbolId, startInclusive, endExclusive));
         };
     }
 
@@ -166,14 +215,15 @@ public class OhlcChartService {
 
     private List<OhlcCandleSnapshot> mergeRealTimeCandleIntoSnapshot(
             List<OhlcCandleSnapshot> snapshots, Symbol symbol,
-            LocalDateTime baseBucket, OhlcInterval interval) {
+            LocalDateTime baseBucket, OhlcInterval interval,
+            Optional<KlineEvent> cachedLiveCandle) {
 
-        if (liveKlineRepository.isEmpty()) {
-            return snapshots;
+        Optional<KlineEvent> liveKlineOpt = cachedLiveCandle;
+        if (liveKlineOpt.isEmpty() && hotWindowStore.get(symbol.getSymbol(), interval.name()).isEmpty()
+                && liveKlineRepository.isPresent()) {
+            liveKlineOpt = liveKlineRepository.get().findBySymbolAndInterval(
+                    symbol.getSymbol(), interval.name());
         }
-
-        Optional<KlineEvent> liveKlineOpt = liveKlineRepository.get().findBySymbolAndInterval(
-                symbol.getSymbol(), interval.name());
 
         if (liveKlineOpt.isEmpty()) {
             return snapshots;
@@ -211,6 +261,36 @@ public class OhlcChartService {
         }
 
         return result;
+    }
+
+    private OhlcHotWindow loadRedisHotWindow(Symbol symbol, OhlcInterval interval, long endEpoch) {
+        long expectedVersion = hotWindowStore.eventVersion(symbol.getSymbol(), interval.name());
+        List<OhlcCandleSnapshot> finalized = ohlcWindowRepository.findRange(
+                symbol.getSymbol(),
+                interval.name(),
+                endEpoch,
+                OhlcWindowPolicy.MAX_SIZE
+        );
+        Optional<KlineEvent> live = liveKlineRepository.flatMap(repository ->
+                repository.findBySymbolAndInterval(symbol.getSymbol(), interval.name()));
+        hotWindowStore.replaceIfVersion(
+                symbol.getSymbol(),
+                interval.name(),
+                finalized,
+                live,
+                Instant.now(clock),
+                expectedVersion
+        );
+        return hotWindowStore.get(symbol.getSymbol(), interval.name())
+                .orElseGet(() -> new OhlcHotWindow(finalized, live.orElse(null), Instant.now(clock), 0));
+    }
+
+    private boolean isFresh(OhlcHotWindow window) {
+        if (Instant.EPOCH.equals(window.synchronizedAt())) {
+            return false;
+        }
+        long ageMillis = Duration.between(window.synchronizedAt(), clock.instant()).toMillis();
+        return ageMillis >= 0 && ageMillis <= ChartCacheConstants.HOT_WINDOW_STALE_AFTER_MILLIS;
     }
 }
 

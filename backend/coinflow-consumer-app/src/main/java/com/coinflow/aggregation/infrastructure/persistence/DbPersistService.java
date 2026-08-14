@@ -85,9 +85,9 @@ public class DbPersistService {
      */
     @Recover
     public CompletableFuture<Void> recover(Exception e, String symbolCode, ClosedKlineSnapshot closedSnapshot) {
-        log.error("[DB-ASYNC-FATAL] All retry attempts failed for {} {} candle. Batch will reconcile later. error={}",
+        log.error("[DB-ASYNC-FATAL] All retry attempts failed for {} {} candle. Message will remain pending. error={}",
                 symbolCode, closedSnapshot.interval(), e.getMessage());
 
-        return CompletableFuture.completedFuture(null);
+        return CompletableFuture.failedFuture(e);
     }
 }

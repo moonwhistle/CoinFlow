@@ -32,6 +32,14 @@ logging:
 server:
   port: 8080
 
+coinflow:
+  chart:
+    hot-window:
+      enabled: true
+      refresh-interval-ms: 1000
+      initial-delay-ms: 1000
+      symbol-refresh-interval-ms: 60000
+
 management:
   endpoints:
     web:

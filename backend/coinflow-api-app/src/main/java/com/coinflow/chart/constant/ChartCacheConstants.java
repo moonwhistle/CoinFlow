@@ -11,16 +11,6 @@ import lombok.NoArgsConstructor;
 public final class ChartCacheConstants {
 
     /**
-     * The sliding window size for the global Redis ZSET cache.
-     */
-    public static final int MAX_HOT_WINDOW_SIZE = 1000;
-
-    /**
-     * Redis key prefix for OHLC candle windows.
-     */
-    public static final String REDIS_WINDOW_KEY_PREFIX = "klines:window:";
-
-    /**
      * Lock key prefix for preventing Thundering Herd during cache backfill.
      */
     public static final String LOCK_KEY_PREFIX = "lock:klines:";
@@ -29,6 +19,11 @@ public final class ChartCacheConstants {
      * Timeout for acquiring the local mutex lock in seconds.
      */
     public static final long LOCK_TIMEOUT_SECONDS = 3;
+
+    /**
+     * Maximum age of a local hot-window snapshot before request-time Redis fallback.
+     */
+    public static final long HOT_WINDOW_STALE_AFTER_MILLIS = 3000;
 
     /**
      * Property name to enable/disable chart cache warm-up at startup.
