@@ -5,6 +5,7 @@ import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
 import com.coinflow.domain.aggregation.service.KlineAggregatorService;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
+import com.coinflow.domain.ohlc.repository.OhlcWindowRepository;
 import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.monitoring.MetricRecorder;
@@ -41,6 +42,8 @@ class TickProcessServiceTest {
     private KlineAggregatorService klineAggregatorService;
     @Mock
     private LiveKlineRepository liveKlineRepository;
+    @Mock
+    private OhlcWindowRepository ohlcWindowRepository;
     @Mock
     private KlineBroadcaster klineBroadcaster;
     @Mock
@@ -103,7 +106,11 @@ class TickProcessServiceTest {
                 // 1. Ticker 최신성 기반 전파 확인
                 () -> verify(tickerBroadcaster, times(1)).broadcast(anyString()),
                 // 2. 캐시 저장 및 브로드캐스트 전파 확인
-                () -> verify(liveKlineRepository, times(1)).save(any(KlineEvent.class), anyString()),
+                () -> verify(liveKlineRepository, never()).save(any(KlineEvent.class), anyString()),
+                () -> verify(ohlcWindowRepository, times(1)).save(eq(symbol), eq("M1"), any()),
+                () -> verify(ohlcWindowRepository, times(1)).trim(eq(symbol), eq("M1"), eq(1000)),
+                () -> verify(liveKlineRepository, times(1))
+                        .deleteIfStartTimeMatches(symbol, "M1", lateSnapshot.startTime()),
                 () -> verify(klineBroadcaster, times(1)).broadcast(any(KlineEvent.class), anyString()),
                 // 3. 메인 스레드 점유 시간(나노초) 기록 확인
                 () -> verify(metricRecorder, atLeastOnce()).recordTimeNanos(eq(TICK_MAIN_THREAD_LATENCY),
@@ -113,5 +120,32 @@ class TickProcessServiceTest {
                 // 5. 비동기 파이프라인 종료 후 Batch ACK Worker 위임 확인
                 () -> verify(batchAckWorker, timeout(1000)).addAck(recordId)
         );
+    }
+
+    @Test
+    @DisplayName("Closed candle updates Redis and Pub/Sub only after DB persistence succeeds")
+    void finalizedCandleWaitsForDatabaseBeforePublishing() {
+        KlineSnapshot finalizedSnapshot = new KlineSnapshot(
+                120L, 179L, price, price, price, price, quantity, 1, true);
+        ClosedKlineSnapshot closed = new ClosedKlineSnapshot("M1", finalizedSnapshot);
+        AggregationResult result = new AggregationResult(List.of(closed), List.of(), List.of());
+        CompletableFuture<Void> dbFuture = new CompletableFuture<>();
+
+        when(klineAggregatorService.processTickAndGetResult(
+                eq(symbol), eq(price), eq(quantity), eq(eventTime))).thenReturn(result);
+        when(dbPersistService.persistClosedCandleAsync(symbol, closed)).thenReturn(dbFuture);
+
+        tickProcessService.process(
+                symbol, price, quantity, eventTime, "mystream", "mygroup", RecordId.of("124-0"));
+
+        verify(ohlcWindowRepository, never()).save(anyString(), anyString(), any());
+        verify(klineBroadcaster, never()).broadcast(any(), anyString());
+        verify(batchAckWorker, never()).addAck(any());
+
+        dbFuture.complete(null);
+
+        verify(ohlcWindowRepository).save(eq(symbol), eq("M1"), any());
+        verify(klineBroadcaster).broadcast(any(KlineEvent.class), anyString());
+        verify(batchAckWorker, timeout(1000)).addAck(RecordId.of("124-0"));
     }
 }

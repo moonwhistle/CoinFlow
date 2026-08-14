@@ -7,12 +7,17 @@ import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
 import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
 import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.aggregation.service.KlineAggregatorService;
+import com.coinflow.domain.ohlc.constant.OhlcWindowPolicy;
 import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
+import com.coinflow.domain.ohlc.repository.OhlcWindowRepository;
+import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
 import com.coinflow.event.kline.KlineEvent;
 import com.coinflow.monitoring.MetricRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +41,7 @@ public class TickProcessService {
 
     private final KlineAggregatorService klineAggregatorService;
     private final LiveKlineRepository liveKlineRepository;
+    private final OhlcWindowRepository ohlcWindowRepository;
     private final KlineBroadcaster klineBroadcaster;
     private final TickerBroadcaster tickerBroadcaster;
     private final DbPersistService dbPersistService;
@@ -87,6 +93,7 @@ public class TickProcessService {
             completeAndAcknowledge(dbFutures, streamKey, group, recordId, symbol, startNanos);
 
         } catch (Exception e) {
+            processedIdCache.invalidate(recordId.getValue());
             log.error("[Consumer] Critical failure processing tick - symbol={}", symbol, e);
             recordFailure(symbol);
             throw e;
@@ -130,8 +137,40 @@ public class TickProcessService {
 
     private void processFinalizedCandidate(String symbol, ClosedKlineSnapshot snapshot,
             List<CompletableFuture<Void>> futures) {
-        processCandidate(symbol, snapshot);
-        futures.add(dbPersistService.persistClosedCandleAsync(symbol, snapshot));
+        KlineEvent event = toEvent(symbol, snapshot.interval(), snapshot.snapshot());
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(event);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize finalized kline event", e);
+        }
+
+        CompletableFuture<Void> finalizedFuture = dbPersistService
+                .persistClosedCandleAsync(symbol, snapshot)
+                .thenRun(() -> {
+                    OhlcCandleSnapshot candle = toOhlcSnapshot(snapshot.snapshot());
+                    ohlcWindowRepository.save(symbol, snapshot.interval(), candle);
+                    ohlcWindowRepository.trim(
+                            symbol, snapshot.interval(), OhlcWindowPolicy.MAX_SIZE);
+                    liveKlineRepository.deleteIfStartTimeMatches(
+                            symbol, snapshot.interval(), snapshot.snapshot().startTime());
+                    klineBroadcaster.broadcast(event, json);
+                });
+        futures.add(finalizedFuture);
+    }
+
+    private OhlcCandleSnapshot toOhlcSnapshot(KlineSnapshot snapshot) {
+        LocalDateTime bucketTime = LocalDateTime.ofEpochSecond(
+                snapshot.startTime(), 0, ZoneOffset.UTC);
+        return new OhlcCandleSnapshot(
+                bucketTime,
+                snapshot.startTime(),
+                snapshot.open(),
+                snapshot.high(),
+                snapshot.low(),
+                snapshot.close(),
+                snapshot.volume()
+        );
     }
 
     private KlineEvent toEvent(String symbol, String interval, KlineSnapshot snapshot) {
@@ -159,6 +198,7 @@ public class TickProcessService {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                     .thenRun(() -> finalizeProcess(streamKey, group, recordId, symbol, startNanos))
                     .exceptionally(ex -> {
+                        processedIdCache.invalidate(recordId.getValue());
                         log.error("Async pipeline failed for {}. Message will stick in PENDING.", symbol, ex);
                         recordFailure(symbol);
                         return (Void) null;
