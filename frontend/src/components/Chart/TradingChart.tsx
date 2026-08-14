@@ -35,6 +35,7 @@ export const TradingChart = () => {
     const requestIdRef = useRef(0);
     const requestGenerationRef = useRef(0);
     const isInitializingRef = useRef(true);
+    const hasUserNavigatedRef = useRef(false);
     const hasMoreRef = useRef<boolean>(true);
     const rawDataRef = useRef<{ candles: ChartCandle[], volumes: VolumeBar[] }>({ candles: [], volumes: [] });
 
@@ -119,6 +120,7 @@ export const TradingChart = () => {
         const isCurrentGenerationFetching = activeRequestRef.current?.generation === generation;
         if (!mainChartRef.current
             || isInitializingRef.current
+            || !hasUserNavigatedRef.current
             || isCurrentGenerationFetching
             || !hasMoreRef.current) {
             return;
@@ -199,6 +201,7 @@ export const TradingChart = () => {
         hasMoreRef.current = true;
         lastCandleTimeRef.current = 0;
         isInitializingRef.current = true;
+        hasUserNavigatedRef.current = false;
         setIsLoading(true);
 
         // Chart Creation
@@ -295,6 +298,16 @@ export const TradingChart = () => {
         const resizeObserver = new ResizeObserver(() => handleResize());
         resizeObserver.observe(mainContainerRef.current);
 
+        const markUserNavigation = () => {
+            hasUserNavigatedRef.current = true;
+        };
+        const navigationTargets = [mainContainerRef.current, volumeContainerRef.current];
+        navigationTargets.forEach((target) => {
+            target.addEventListener('wheel', markUserNavigation, { passive: true });
+            target.addEventListener('pointerdown', markUserNavigation, { passive: true });
+            target.addEventListener('touchstart', markUserNavigation, { passive: true });
+        });
+
         return () => {
             if (requestGenerationRef.current === generation) {
                 requestGenerationRef.current += 1;
@@ -303,6 +316,11 @@ export const TradingChart = () => {
                 cancelAnimationFrame(initializationFrame);
             }
             resizeObserver.disconnect();
+            navigationTargets.forEach((target) => {
+                target.removeEventListener('wheel', markUserNavigation);
+                target.removeEventListener('pointerdown', markUserNavigation);
+                target.removeEventListener('touchstart', markUserNavigation);
+            });
             mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncVolRange);
             volTimeScale.unsubscribeVisibleLogicalRangeChange(syncMainRange);
             mainChart.remove();
