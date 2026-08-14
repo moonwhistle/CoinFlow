@@ -8,7 +8,7 @@ import { forwardFillCandles, uniqueSortData } from '../../utils/chartHelpers';
 import type { ChartCandle, VolumeBar } from '../../utils/chartHelpers';
 import { getOhlcData } from '../../api/ohlcApi';
 import type { OhlcInterval, OhlcCandleSnapshot } from '../../types/chart';
-import { type WsMessage, isKlineEvent, isTickerEvent } from '../../types/websocket';
+import { type KlineEvent, type WsMessage, isKlineEvent, isTickerEvent } from '../../types/websocket';
 import './TradingChart.css';
 
 // --- Constants for Maintenance (SRP/DRY/Magic Values) ---
@@ -17,6 +17,7 @@ const CHART_CONSTANTS = {
     DEFAULT_SYMBOL_NAME: 'btcusdt',
     PAGE_SIZE: 120,
     SCROLL_THRESHOLD: 10,
+    INITIAL_LOAD_RETRY_DELAYS_MS: [0, 300, 1_000],
 };
 
 export const TradingChart = () => {
@@ -35,6 +36,8 @@ export const TradingChart = () => {
     const requestIdRef = useRef(0);
     const requestGenerationRef = useRef(0);
     const isInitializingRef = useRef(true);
+    const isHydratedRef = useRef(false);
+    const pendingKlineRef = useRef<KlineEvent | null>(null);
     const hasUserNavigatedRef = useRef(false);
     const hasMoreRef = useRef<boolean>(true);
     const rawDataRef = useRef<{ candles: ChartCandle[], volumes: VolumeBar[] }>({ candles: [], volumes: [] });
@@ -140,52 +143,60 @@ export const TradingChart = () => {
     }, [loadChartData]);
 
     // --- Real-time Data Handling ---
-    const handleWebSocketMessage = useCallback((msg: WsMessage) => {
+    const applyKlineEvent = useCallback((msg: KlineEvent) => {
         if (!mainSeriesRef.current || !volumeSeriesRef.current) return;
+        if (msg.interval !== activeTimeframe) return;
 
+        const candleTime = msg.startTime as number;
+        const isHistorical = candleTime < lastCandleTimeRef.current;
+        const liveCandle: ChartCandle = {
+            time: candleTime as Time,
+            open: msg.open,
+            high: msg.high,
+            low: msg.low,
+            close: msg.close,
+        };
+        const liveVolume: VolumeBar = {
+            time: candleTime as Time,
+            value: msg.volume,
+            color: msg.close >= msg.open
+                ? CHART_COLORS.UP_TRANSPARENT
+                : CHART_COLORS.DOWN_TRANSPARENT,
+        };
+
+        rawDataRef.current = {
+            candles: uniqueSortData([...rawDataRef.current.candles, liveCandle]),
+            volumes: uniqueSortData([...rawDataRef.current.volumes, liveVolume]),
+        };
+
+        try {
+            mainSeriesRef.current.update(liveCandle, isHistorical);
+            volumeSeriesRef.current.update(liveVolume, isHistorical);
+
+            if (!isHistorical) {
+                lastCandleTimeRef.current = Math.max(lastCandleTimeRef.current, candleTime);
+            }
+        } catch (err) {
+            console.warn(`[TradingChart] Update Error ${candleTime}:`, err);
+        }
+    }, [activeTimeframe]);
+
+    const handleWebSocketMessage = useCallback((msg: WsMessage) => {
         if (isKlineEvent(msg)) {
             if (msg.interval !== activeTimeframe) return;
 
-            const candleTime = msg.startTime as number;
-            const isHistorical = candleTime < lastCandleTimeRef.current;
-            const liveCandle: ChartCandle = {
-                time: candleTime as Time,
-                open: msg.open,
-                high: msg.high,
-                low: msg.low,
-                close: msg.close,
-            };
-            const liveVolume: VolumeBar = {
-                time: candleTime as Time,
-                value: msg.volume,
-                color: msg.close >= msg.open
-                    ? CHART_COLORS.UP_TRANSPARENT
-                    : CHART_COLORS.DOWN_TRANSPARENT,
-            };
-
-            // Keep WebSocket data in the merge source so a slower REST response
-            // cannot overwrite a newer value for the same candle timestamp.
-            rawDataRef.current = {
-                candles: uniqueSortData([...rawDataRef.current.candles, liveCandle]),
-                volumes: uniqueSortData([...rawDataRef.current.volumes, liveVolume]),
-            };
-
-            try {
-                mainSeriesRef.current.update(liveCandle, isHistorical);
-                volumeSeriesRef.current.update(liveVolume, isHistorical);
-
-                if (!isHistorical) {
-                    lastCandleTimeRef.current = Math.max(lastCandleTimeRef.current, candleTime);
-                }
-            } catch (err) {
-                console.warn(`[TradingChart] Update Error ${candleTime}:`, err);
+            if (!isHydratedRef.current) {
+                pendingKlineRef.current = msg;
+                return;
             }
+
+            applyKlineEvent(msg);
         }
         else if (isTickerEvent(msg)) {
             const tickerEvent = new CustomEvent('coinflow-ticker', { detail: msg });
             window.dispatchEvent(tickerEvent);
         }
-    }, [activeTimeframe]);
+    }, [activeTimeframe, applyKlineEvent]);
 
     const { isConnected, subscribe } = useCoinflowWebSocket(handleWebSocketMessage);
 
@@ -201,6 +212,8 @@ export const TradingChart = () => {
         hasMoreRef.current = true;
         lastCandleTimeRef.current = 0;
         isInitializingRef.current = true;
+        isHydratedRef.current = false;
+        pendingKlineRef.current = null;
         hasUserNavigatedRef.current = false;
         setIsLoading(true);
 
@@ -270,7 +283,16 @@ export const TradingChart = () => {
 
         // Load first, then fit. Programmatic range changes must not trigger pagination.
         const initializeChart = async () => {
-            const loaded = await loadChartData(generation);
+            let loaded = false;
+            for (const delayMs of CHART_CONSTANTS.INITIAL_LOAD_RETRY_DELAYS_MS) {
+                if (delayMs > 0) {
+                    await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+                }
+                if (generation !== requestGenerationRef.current) return;
+
+                loaded = await loadChartData(generation);
+                if (loaded || generation !== requestGenerationRef.current) break;
+            }
             if (generation !== requestGenerationRef.current) return;
 
             if (loaded) {
@@ -288,6 +310,12 @@ export const TradingChart = () => {
                         if (settledRange) {
                             volTimeScale.setVisibleLogicalRange(settledRange);
                         }
+                    }
+                    isHydratedRef.current = true;
+                    const pendingKline = pendingKlineRef.current;
+                    pendingKlineRef.current = null;
+                    if (pendingKline) {
+                        applyKlineEvent(pendingKline);
                     }
                     isInitializingRef.current = false;
                     setIsLoading(false);
@@ -326,6 +354,8 @@ export const TradingChart = () => {
             if (initializationFrame !== null) {
                 cancelAnimationFrame(initializationFrame);
             }
+            isHydratedRef.current = false;
+            pendingKlineRef.current = null;
             resizeObserver.disconnect();
             navigationTargets.forEach((target) => {
                 target.removeEventListener('wheel', markUserNavigation);
@@ -334,10 +364,14 @@ export const TradingChart = () => {
             });
             mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncVolRange);
             volTimeScale.unsubscribeVisibleLogicalRangeChange(syncMainRange);
+            mainChartRef.current = null;
+            volumeChartRef.current = null;
+            mainSeriesRef.current = null;
+            volumeSeriesRef.current = null;
             mainChart.remove();
             volumeChart.remove();
         };
-    }, [activeTimeframe, loadChartData, ensureFullView]);
+    }, [activeTimeframe, loadChartData, ensureFullView, applyKlineEvent]);
 
     // WebSocket Sub
     useEffect(() => {
@@ -369,6 +403,12 @@ export const TradingChart = () => {
                     <Maximize size={18} className="tool-icon" />
                 </div>
             </div>
+
+            {isLoading && (
+                <div className="chart-loading" role="status" aria-label="Loading chart data">
+                    <div className="chart-loading-spinner" />
+                </div>
+            )}
 
             <div
                 ref={mainContainerRef}
