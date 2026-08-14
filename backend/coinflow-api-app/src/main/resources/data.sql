@@ -1,5 +1,3 @@
-SELECT pg_advisory_lock(hashtext('coinflow:symbol:btcusdt'));
-
 INSERT INTO symbol (
     symbol,
     exchange,
@@ -10,7 +8,7 @@ INSERT INTO symbol (
     created_at,
     updated_at
 )
-SELECT
+VALUES (
     'btcusdt',
     'BINANCE',
     'Bitcoin / USDT',
@@ -19,10 +17,5 @@ SELECT
     'btcusdt',
     NOW(),
     NOW()
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM symbol
-    WHERE symbol = 'btcusdt'
-);
-
-SELECT pg_advisory_unlock(hashtext('coinflow:symbol:btcusdt'));
+)
+ON CONFLICT (symbol) DO NOTHING;
