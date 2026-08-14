@@ -275,10 +275,20 @@ export const TradingChart = () => {
 
             if (loaded) {
                 mainTimeScale.fitContent();
+                const initialRange = mainTimeScale.getVisibleLogicalRange();
+                if (initialRange) {
+                    volTimeScale.setVisibleLogicalRange(initialRange);
+                }
             }
 
             initializationFrame = requestAnimationFrame(() => {
                 if (generation === requestGenerationRef.current) {
+                    if (loaded) {
+                        const settledRange = mainTimeScale.getVisibleLogicalRange();
+                        if (settledRange) {
+                            volTimeScale.setVisibleLogicalRange(settledRange);
+                        }
+                    }
                     isInitializingRef.current = false;
                     setIsLoading(false);
                 }
@@ -297,6 +307,7 @@ export const TradingChart = () => {
         };
         const resizeObserver = new ResizeObserver(() => handleResize());
         resizeObserver.observe(mainContainerRef.current);
+        resizeObserver.observe(volumeContainerRef.current);
 
         const markUserNavigation = () => {
             hasUserNavigatedRef.current = true;
