@@ -13,7 +13,7 @@ COPY build/libs/*-SNAPSHOT.jar app.jar
 ENV PROFILE=prod
 
 # 포트 개방 (Consumer 모듈 내부 포트)
-EXPOSE 8082
+EXPOSE 8081
 
 # 메모리 최적화 옵션 및 실행
 ENTRYPOINT ["sh", "-c", "java -Dspring.profiles.active=${PROFILE} -Xms512m -Xmx1024m -jar app.jar"]
