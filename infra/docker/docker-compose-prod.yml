@@ -39,6 +39,7 @@ services:
       - SPRING_CONFIG_NAME=application-api
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
@@ -60,6 +61,7 @@ services:
       - SPRING_CONFIG_NAME=application-ws
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-ws -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
     depends_on:
       redis:
@@ -76,18 +78,27 @@ services:
       - SPRING_CONFIG_NAME=application-consumer
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
       - REDIS_STREAM_TICK_STREAMKEY=tick:raw
       - REDIS_STREAM_TICK_GROUP=tick-consumer-group
       - REDIS_STREAM_TICK_CONSUMERNAME=consumer-1
+      - REDIS_STREAM_TICK_MAXLENGTH=200000
+      - REDIS_STREAM_TICK_LAGWARNINGRATIO=0.8
     entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-consumer -Dspring.profiles.active=prod -Xms256m -Xmx384m -jar app.jar" ]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
     restart: always
 
   collector-app:
@@ -100,16 +111,19 @@ services:
       - SPRING_CONFIG_NAME=application-collector
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
       - SPRING_DATASOURCE_USERNAME=ohlc_user
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
       - BINANCE_WEBSOCKET_BASEURL=wss://stream.binance.com:9443/stream
       - BINANCE_WEBSOCKET_SYMBOLS_0=btcusdt
       - BINANCE_WEBSOCKET_TRADESTREAMSUFFIX=@trade
+      - REDIS_STREAM_TICK_STREAMKEY=tick:raw
+      - REDIS_STREAM_TICK_MAXLENGTH=200000
     entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-collector -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
     depends_on:
       consumer-app:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: always
@@ -137,9 +151,28 @@ services:
   redis:
     image: redis:7.2
     container_name: coinflow-redis
-    command: [ "redis-server", "--bind", "0.0.0.0", "--appendonly", "no", "--protected-mode", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru" ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command:
+      - redis-server
+      - --bind
+      - 0.0.0.0
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --protected-mode
+      - "no"
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG" ]
       interval: 3s
       timeout: 3s
       retries: 10
@@ -148,3 +181,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:

@@ -4,25 +4,21 @@ import com.coinflow.config.properties.TickConsumerProperties;
 import com.coinflow.consumer.TickRawEventConsumer;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
-import org.springframework.data.redis.connection.stream.StreamRecords;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
+import org.springframework.data.redis.stream.StreamMessageListenerContainer.StreamReadRequest;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer.StreamMessageListenerContainerOptions;
-
-import static com.coinflow.monitoring.constant.MetricConstants.STREAM_MAX_LEN;
 
 /**
  * Redis Stream 소비자(Consumer) 설정을 담당하며, 바이너리 수신(Phase 3.1)을 지원합니다.
@@ -33,23 +29,17 @@ import static com.coinflow.monitoring.constant.MetricConstants.STREAM_MAX_LEN;
 @RequiredArgsConstructor
 public class RedisConsumerConfig {
 
-    private static final String ERROR_BUSYGROUP = "BUSYGROUP";
-    private static final String ERROR_NO_SUCH_KEY = "No such key";
-    private static final String ERROR_NO_GROUP = "NOGROUP";
-    private static final String DUMMY_EVENT_KEY = "init-event";
-    private static final String DUMMY_EVENT_VALUE = "true";
-
     private final RedisConnectionFactory connectionFactory;
     private final TickRawEventConsumer consumer;
     private final TickConsumerProperties properties;
+    private final RedisConsumerGroupManager consumerGroupManager;
 
     private StreamMessageListenerContainer<String, MapRecord<String, String, byte[]>> container;
 
     @Bean
-    public StreamMessageListenerContainer<String, MapRecord<String, String, byte[]>> tickStreamContainer(
-            RedisTemplate<String, String> redisTemplate) {
-
-        initializeConsumerGroup(redisTemplate);
+    @ConditionalOnProperty(prefix = "redis.stream.tick", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public StreamMessageListenerContainer<String, MapRecord<String, String, byte[]>> tickStreamContainer() {
+        consumerGroupManager.ensureConsumerGroup();
 
         // 바이너리 수신을 위한 컨테이너 옵션 설정 (ByteArrayRedisSerializer)
         @SuppressWarnings("unchecked")
@@ -63,41 +53,17 @@ public class RedisConsumerConfig {
                         .build();
 
         container = StreamMessageListenerContainer.create(connectionFactory, options);
-        container.receive(
-                Consumer.from(properties.group(), properties.consumerName()),
-                StreamOffset.create(properties.streamKey(), ReadOffset.lastConsumed()),
-                this.consumer);
+        StreamReadRequest<String> readRequest = StreamReadRequest
+                .builder(StreamOffset.create(properties.streamKey(), ReadOffset.lastConsumed()))
+                .consumer(Consumer.from(properties.group(), properties.consumerName()))
+                .errorHandler(consumerGroupManager::handleSubscriptionError)
+                .cancelOnError(consumerGroupManager::shouldCancelSubscription)
+                .build();
+        container.register(readRequest, consumer);
         container.start();
 
         log.info("Successfully started Redis Stream Container (Binary Mode) for group: {}", properties.group());
         return container;
-    }
-
-    private void initializeConsumerGroup(RedisTemplate<String, String> redisTemplate) {
-        String streamKey = properties.streamKey();
-        String group = properties.group();
-        
-        try {
-            redisTemplate.opsForStream().createGroup(streamKey, ReadOffset.latest(), group);
-        } catch (Exception e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "";
-            if (msg.contains(ERROR_BUSYGROUP)) {
-                log.info("Redis consumer group already exists: {}", group);
-            } else if (msg.contains(ERROR_NO_SUCH_KEY) || msg.contains(ERROR_NO_GROUP)) {
-                log.warn("Redis stream does not exist. Initializing stream and group: {}", group);
-                
-                // 더미 메시지 발행 시에도 MAXLEN 적용 (안정성 강화)
-                XAddOptions options = XAddOptions.maxlen(STREAM_MAX_LEN).approximateTrimming(true);
-                MapRecord<String, String, String> record = StreamRecords.newRecord()
-                        .in(streamKey)
-                        .ofMap(Map.of(DUMMY_EVENT_KEY, DUMMY_EVENT_VALUE));
-                
-                redisTemplate.opsForStream().add(record, options);
-                redisTemplate.opsForStream().createGroup(streamKey, ReadOffset.latest(), group);
-            } else {
-                log.error("Critical error during Redis Consumer Group initialization: {}", msg);
-            }
-        }
     }
 
     @PreDestroy

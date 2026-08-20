@@ -30,6 +30,8 @@ redis:
       stream-key: tick:raw
       group: tick-consumer-group
       consumer-name: consumer-1
+      max-length: ${REDIS_STREAM_TICK_MAXLENGTH:200000}
+      lag-warning-ratio: ${REDIS_STREAM_TICK_LAGWARNINGRATIO:0.8}
 
 coinflow:
   async:

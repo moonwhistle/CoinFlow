@@ -60,6 +60,7 @@ jobs:
         if: steps.changes.outputs.deploy == 'true'
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         run: |
           cd infra/docker
           docker compose -f docker-compose-prod.yml build
@@ -70,18 +71,20 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: DOCKERHUB_USERNAME,DEPLOY_SHA
+          envs: DOCKERHUB_USERNAME,REDIS_PASSWORD,DEPLOY_SHA
           script: |
             cd ~/CoinFlow
             git fetch origin master
             git checkout "$DEPLOY_SHA"
 
             export DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME
+            export REDIS_PASSWORD=$REDIS_PASSWORD
 
             cd infra/docker
             docker compose -f docker-compose-prod.yml pull

@@ -3,6 +3,7 @@ package com.coinflow.monitoring;
 import com.coinflow.config.properties.TickConsumerProperties;
 import io.micrometer.core.instrument.Counter;
 import jakarta.annotation.PostConstruct;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Component;
 
 import static com.coinflow.monitoring.constant.MetricConstants.REDIS_COMMAND_COUNT;
 import static com.coinflow.monitoring.constant.MetricConstants.STREAM_BACKLOG_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_BACKLOG_RETENTION_RATIO;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_RETENTION_WARNING_COUNT;
 import static com.coinflow.monitoring.constant.MetricConstants.TAG_COMMAND;
 import static com.coinflow.monitoring.constant.MetricConstants.TAG_FLUSH_REASON;
 import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
@@ -33,11 +36,15 @@ public class StreamLagMonitorWorker {
     private final MetricRecorder metricRecorder;
 
     private AtomicReference<Double> backlogGauge;
+    private AtomicReference<Double> backlogRetentionRatioGauge;
     private Counter xinfoCounter;
+    private final AtomicBoolean retentionWarningActive = new AtomicBoolean(false);
 
     @PostConstruct
     public void init() {
         this.backlogGauge = metricRecorder.registerGauge(STREAM_BACKLOG_COUNT, 0.0, TAG_MODULE, VALUE_MODULE_CONSUMER);
+        this.backlogRetentionRatioGauge = metricRecorder.registerGauge(
+                STREAM_BACKLOG_RETENTION_RATIO, 0.0, TAG_MODULE, VALUE_MODULE_CONSUMER);
         this.xinfoCounter = metricRecorder.getCounter(REDIS_COMMAND_COUNT, 
                 TAG_COMMAND, "XINFO",
                 TAG_FLUSH_REASON, VALUE_NA);
@@ -64,9 +71,7 @@ public class StreamLagMonitorWorker {
                             Object lagObj = g.getRaw().get("lag");
                             if (lagObj instanceof Number) {
                                 double lagValue = ((Number) lagObj).doubleValue();
-                                backlogGauge.set(lagValue);
-                                log.debug("Redis Stream Lag monitored: stream={}, group={}, lag={}", 
-                                        streamKey, group, lagValue);
+                                updateBacklogMetrics(lagValue);
                             } else {
                                 log.warn("Stream lag information is not available for group: {}. Please check Redis version (7.0+ required).", group);
                             }
@@ -75,6 +80,34 @@ public class StreamLagMonitorWorker {
         } catch (Exception e) {
             log.error("Failed to monitor Redis stream lag. stream={}, group={}, error={}", 
                     streamKey, group, e.getMessage());
+        }
+    }
+
+    void updateBacklogMetrics(double lagValue) {
+        double retentionRatio = lagValue / properties.maxLength();
+        backlogGauge.set(lagValue);
+        backlogRetentionRatioGauge.set(retentionRatio);
+
+        if (retentionRatio >= properties.lagWarningRatio()) {
+            if (retentionWarningActive.compareAndSet(false, true)) {
+                metricRecorder.increment(
+                        STREAM_RETENTION_WARNING_COUNT,
+                        TAG_MODULE,
+                        VALUE_MODULE_CONSUMER);
+                log.error("Redis Stream retention warning. stream={}, group={}, lag={}, maxLength={}, ratio={}",
+                        properties.streamKey(), properties.group(), lagValue,
+                        properties.maxLength(), retentionRatio);
+            }
+            return;
+        }
+
+        if (retentionWarningActive.compareAndSet(true, false)) {
+            log.info("Redis Stream retention recovered. stream={}, group={}, lag={}, maxLength={}, ratio={}",
+                    properties.streamKey(), properties.group(), lagValue,
+                    properties.maxLength(), retentionRatio);
+        } else {
+            log.debug("Redis Stream Lag monitored: stream={}, group={}, lag={}, ratio={}",
+                    properties.streamKey(), properties.group(), lagValue, retentionRatio);
         }
     }
 }

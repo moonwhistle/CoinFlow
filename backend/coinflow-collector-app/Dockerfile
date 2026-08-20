@@ -13,7 +13,7 @@ COPY build/libs/*-SNAPSHOT.jar app.jar
 ENV PROFILE=prod
 
 # 포트 개방 (Collector 모듈 내부 포트)
-EXPOSE 8083
+EXPOSE 8082
 
 # 메모리 최적화 옵션 및 실행
 ENTRYPOINT ["sh", "-c", "java -Dspring.profiles.active=${PROFILE} -Xms256m -Xmx512m -jar app.jar"]

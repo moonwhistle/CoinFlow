@@ -1,8 +1,6 @@
 package com.coinflow.publish.stream;
 
 import com.coinflow.monitoring.MetricRecorder;
-import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_LATENCY;
-
 import com.coinflow.publish.exception.PublishErrorCode;
 import com.coinflow.publish.exception.PublishException;
 import com.coinflow.tick.publisher.TickPublisher;
@@ -16,7 +14,10 @@ import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.RedisTemplate;
 
-import static com.coinflow.monitoring.constant.MetricConstants.*;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_FAILURE_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_LATENCY;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_MODULE_COLLECTOR;
 
 /**
  * Redis Stream을 통해 바이너리 틱 데이터를 전송하는 구현체입니다.
@@ -25,11 +26,12 @@ import static com.coinflow.monitoring.constant.MetricConstants.*;
 @RequiredArgsConstructor
 public class RedisStreamTickPublisher implements TickPublisher {
 
-    public static final String RAW_TICK_STREAM = "tick:raw";
     public static final String RAW_PAYLOAD_FIELD = "p";
 
     private final RedisTemplate<String, byte[]> rawRedisTemplate;
     private final MetricRecorder metricRecorder;
+    private final String streamKey;
+    private final long maxLength;
 
     /**
      * 최적화된 바이너리 방식 (Zero-POJO)
@@ -38,16 +40,15 @@ public class RedisStreamTickPublisher implements TickPublisher {
     public void publish(byte[] rawData) {
         // MapRecord 생성 (String, String, byte[])
         MapRecord<String, String, byte[]> record = StreamRecords.newRecord()
-                .in(RAW_TICK_STREAM)
+                .in(streamKey)
                 .ofMap(Map.of(RAW_PAYLOAD_FIELD, rawData));
 
-        // MAXLEN ~ 1,000,000 설정을 통한 자동 트리밍 (XAddOptions)
-        XAddOptions options = XAddOptions.maxlen(STREAM_MAX_LEN).approximateTrimming(true);
+        XAddOptions options = XAddOptions.maxlen(maxLength).approximateTrimming(true);
 
         RecordId recordId = executePublish(() -> rawRedisTemplate.opsForStream().add(record, options));
 
         log.debug("Published raw tick data. stream={}, recordId={}, maxlen={}", 
-                RAW_TICK_STREAM, recordId.getValue(), STREAM_MAX_LEN);
+                streamKey, recordId.getValue(), maxLength);
     }
 
     /**
@@ -62,7 +63,11 @@ public class RedisStreamTickPublisher implements TickPublisher {
             }
             return recordId;
         } catch (Exception e) {
-            log.error("Failed to publish tick data to Redis Stream: {}", e.getMessage());
+            metricRecorder.increment(
+                    STREAM_PUBLISH_FAILURE_COUNT,
+                    TAG_MODULE,
+                    VALUE_MODULE_COLLECTOR);
+            log.error("Failed to publish tick data to Redis Stream", e);
             if (e instanceof PublishException) {
                 throw (PublishException) e;
             }

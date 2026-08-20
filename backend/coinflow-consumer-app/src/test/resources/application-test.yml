@@ -31,6 +31,9 @@ coinflow:
 redis:
   stream:
     tick:
+      enabled: false
       stream-key: test-stream
       group: test-group
       consumer-name: test-consumer
+      max-length: 200000
+      lag-warning-ratio: 0.8

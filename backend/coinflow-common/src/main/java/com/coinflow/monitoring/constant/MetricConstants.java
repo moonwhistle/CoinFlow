@@ -10,12 +10,15 @@ public final class MetricConstants {
     public static final String STREAM_ACK_COUNT = "stream.ack.count";
     public static final String STREAM_ACK_LATENCY = "stream.ack.latency";
     public static final String STREAM_BACKLOG_COUNT = "stream.backlog.count";
+    public static final String STREAM_BACKLOG_RETENTION_RATIO = "stream.backlog.retention.ratio";
+    public static final String STREAM_RETENTION_WARNING_COUNT = "stream.retention.warning.count";
     public static final String STREAM_PEL_COUNT = "stream.pel.count";
     public static final String REDIS_COMMAND_COUNT = "redis.command.count";
 
     // Collector: 유입량 및 발행 지표
     public static final String WEBSOCKET_RECEIVE_COUNT = "tick.receive.count";
     public static final String STREAM_PUBLISH_LATENCY = "stream.publish.latency";
+    public static final String STREAM_PUBLISH_FAILURE_COUNT = "stream.publish.failure.count";
 
     // Consumer: 틱 처리 전체 지표
     public static final String TICK_PROCESS_LATENCY = "tick.process.latency";
@@ -36,10 +39,9 @@ public final class MetricConstants {
     public static final String VALUE_SUCCESS = "success";
     public static final String VALUE_FAILURE = "failure";
     public static final String VALUE_MODULE_CONSUMER = "consumer";
+    public static final String VALUE_MODULE_COLLECTOR = "collector";
     public static final String VALUE_NA = "NA";
     public static final String VALUE_FLUSH_SIZE = "size";
     public static final String VALUE_FLUSH_INTERVAL = "interval";
 
-    // Redis Stream Configuration
-    public static final long STREAM_MAX_LEN = 1_000_000L;
 }
