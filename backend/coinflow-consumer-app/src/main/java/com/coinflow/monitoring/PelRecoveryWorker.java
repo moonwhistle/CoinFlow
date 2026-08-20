@@ -96,8 +96,8 @@ public class PelRecoveryWorker {
             pelCountGauge.set((double) overThresholdCount);
 
         } catch (Exception e) {
-            log.error("Failed to monitor Redis stream PEL. stream={}, group={}, error={}", 
-                    streamKey, group, e.getMessage());
+            log.error("Failed to monitor Redis stream PEL. stream={}, group={}",
+                    streamKey, group, e);
         }
     }
 }
