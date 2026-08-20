@@ -15,8 +15,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
 
 import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_LATENCY;
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_FAILURE_COUNT;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_MODULE_COLLECTOR;
 import static com.coinflow.publish.stream.RedisStreamTickPublisher.RAW_PAYLOAD_FIELD;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -42,8 +46,6 @@ class RedisStreamTickPublisherTest {
                 redisTemplate, metricRecorder, "tick:raw", 200_000L);
 
         when(redisTemplate.<String, byte[]>opsForStream()).thenReturn(streamOperations);
-        when(streamOperations.add(any(MapRecord.class), any(XAddOptions.class)))
-                .thenReturn(RecordId.of("1-0"));
         when(metricRecorder.recordTime(
                 eq(STREAM_PUBLISH_LATENCY), any(Callable.class), any(String[].class)))
                 .thenAnswer(invocation -> {
@@ -55,6 +57,8 @@ class RedisStreamTickPublisherTest {
     @Test
     void publishesWithConfiguredApproximateMaxLength() {
         byte[] payload = new byte[]{1, 2, 3};
+        when(streamOperations.add(any(MapRecord.class), any(XAddOptions.class)))
+                .thenReturn(RecordId.of("1-0"));
 
         publisher.publish(payload);
 
@@ -68,5 +72,19 @@ class RedisStreamTickPublisherTest {
         assertThat(recordCaptor.getValue().getValue().get(RAW_PAYLOAD_FIELD)).isEqualTo(payload);
         assertThat(optionsCaptor.getValue().getMaxlen()).isEqualTo(200_000L);
         assertThat(optionsCaptor.getValue().isApproximateTrimming()).isTrue();
+    }
+
+    @Test
+    void recordsPublishFailureWhenRedisRejectsXadd() {
+        when(streamOperations.add(any(MapRecord.class), any(XAddOptions.class)))
+                .thenThrow(new RuntimeException("OOM command not allowed"));
+
+        assertThatThrownBy(() -> publisher.publish(new byte[]{1, 2, 3}))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(metricRecorder).increment(
+                STREAM_PUBLISH_FAILURE_COUNT,
+                TAG_MODULE,
+                VALUE_MODULE_COLLECTOR);
     }
 }

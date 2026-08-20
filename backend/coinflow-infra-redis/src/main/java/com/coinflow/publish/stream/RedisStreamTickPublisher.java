@@ -14,7 +14,10 @@ import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.RedisTemplate;
 
+import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_FAILURE_COUNT;
 import static com.coinflow.monitoring.constant.MetricConstants.STREAM_PUBLISH_LATENCY;
+import static com.coinflow.monitoring.constant.MetricConstants.TAG_MODULE;
+import static com.coinflow.monitoring.constant.MetricConstants.VALUE_MODULE_COLLECTOR;
 
 /**
  * Redis Stream을 통해 바이너리 틱 데이터를 전송하는 구현체입니다.
@@ -60,7 +63,11 @@ public class RedisStreamTickPublisher implements TickPublisher {
             }
             return recordId;
         } catch (Exception e) {
-            log.error("Failed to publish tick data to Redis Stream: {}", e.getMessage());
+            metricRecorder.increment(
+                    STREAM_PUBLISH_FAILURE_COUNT,
+                    TAG_MODULE,
+                    VALUE_MODULE_COLLECTOR);
+            log.error("Failed to publish tick data to Redis Stream", e);
             if (e instanceof PublishException) {
                 throw (PublishException) e;
             }
