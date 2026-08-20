@@ -35,13 +35,16 @@ class RedisConsumerGroupManagerTest {
     @Mock
     private RedisStreamCommands streamCommands;
 
+    @Mock
+    private ConsumerApplicationShutdown applicationShutdown;
+
     private RedisConsumerGroupManager groupManager;
 
     @BeforeEach
     void setUp() {
         TickConsumerProperties properties = new TickConsumerProperties(
-                "tick:raw", "tick-consumer-group", "consumer-1");
-        groupManager = new RedisConsumerGroupManager(redisTemplate, properties);
+                "tick:raw", "tick-consumer-group", "consumer-1", 200_000L, 0.8);
+        groupManager = new RedisConsumerGroupManager(redisTemplate, properties, applicationShutdown);
     }
 
     @Test
@@ -99,6 +102,15 @@ class RedisConsumerGroupManagerTest {
         groupManager.handleSubscriptionError(error);
 
         verify(streamCommands).xGroupCreate(any(byte[].class), eq("tick-consumer-group"), any(ReadOffset.class), eq(true));
+    }
+
+    @Test
+    void shutsDownApplicationForFatalSubscriptionError() {
+        RuntimeException error = new RuntimeException("Redis command timeout");
+
+        groupManager.handleSubscriptionError(error);
+
+        verify(applicationShutdown).request();
     }
 
     @SuppressWarnings("unchecked")

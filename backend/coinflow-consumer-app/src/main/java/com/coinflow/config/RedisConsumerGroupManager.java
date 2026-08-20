@@ -19,6 +19,7 @@ public class RedisConsumerGroupManager {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final TickConsumerProperties properties;
+    private final ConsumerApplicationShutdown applicationShutdown;
 
     public void ensureConsumerGroup() {
         try {
@@ -47,6 +48,7 @@ public class RedisConsumerGroupManager {
         if (!isNoGroup(error)) {
             log.error("Redis Stream subscription failed. stream={}, group={}",
                     properties.streamKey(), properties.group(), error);
+            applicationShutdown.request();
             return;
         }
 
