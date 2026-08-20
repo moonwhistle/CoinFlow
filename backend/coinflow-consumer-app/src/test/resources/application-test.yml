@@ -31,6 +31,7 @@ coinflow:
 redis:
   stream:
     tick:
+      enabled: false
       stream-key: test-stream
       group: test-group
       consumer-name: test-consumer
