@@ -22,3 +22,9 @@ management:
   metrics:
     tags:
       application: coinflow-collector
+
+redis:
+  stream:
+    tick:
+      stream-key: ${REDIS_STREAM_TICK_STREAMKEY:tick:raw}
+      max-length: ${REDIS_STREAM_TICK_MAXLENGTH:200000}

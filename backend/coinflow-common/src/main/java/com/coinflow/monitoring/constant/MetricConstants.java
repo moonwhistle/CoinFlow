@@ -40,6 +40,4 @@ public final class MetricConstants {
     public static final String VALUE_FLUSH_SIZE = "size";
     public static final String VALUE_FLUSH_INTERVAL = "interval";
 
-    // Redis Stream Configuration
-    public static final long STREAM_MAX_LEN = 1_000_000L;
 }
