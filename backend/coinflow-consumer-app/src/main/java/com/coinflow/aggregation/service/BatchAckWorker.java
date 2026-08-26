@@ -13,6 +13,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +38,11 @@ import static com.coinflow.monitoring.constant.MetricConstants.VALUE_NA;
 /**
  * Redis Stream XACK를 배치로 처리하기 위한 워커입니다.
  * 틱 처리 완료 후 전달된 RecordId들을 큐에 쌓고, 일정 조건(개수 혹은 시간) 충족 시 한 번에 XACK를 호출합니다.
+ *
+ * <p>XACK delivery is at-least-once while this process is running: a failed in-flight batch is
+ * retained and retried with exponential backoff, and later batches are not drained until it
+ * succeeds. If the process terminates first, the records remain in the Redis PEL and require a
+ * separate PEL reclaim path.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,6 +56,8 @@ public class BatchAckWorker {
     // 배치 설정: 10,000 ~ 100,000 TPS 대응을 위한 최적화 값
     private static final int BATCH_SIZE = 500; 
     private static final long FLUSH_INTERVAL_MS = 50; 
+    private static final long ACK_RETRY_INITIAL_DELAY_MS = 100;
+    private static final long ACK_RETRY_MAX_DELAY_MS = 5_000;
 
     // 부하 분산을 위한 버퍼 큐 확장 (기존 10,000)
     private final BlockingQueue<RecordId> ackQueue = new LinkedBlockingQueue<>(50000);
@@ -57,6 +65,10 @@ public class BatchAckWorker {
     private final Object flushScheduleMonitor = new Object();
     private ScheduledFuture<?> intervalFlushFuture;
     private long intervalScheduleGeneration;
+    private volatile List<RecordId> inFlightBatch = List.of();
+    private String inFlightReason = VALUE_NA;
+    private int ackRetryAttempt;
+    private ScheduledFuture<?> ackRetryFuture;
     private volatile boolean running = true; // (Point 4) 종료 상태 관리용 플래그
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "batch-ack-worker");
@@ -130,7 +142,7 @@ public class BatchAckWorker {
     }
 
     private void scheduleNextFlushIfNeeded() {
-        if (!running || ackQueue.isEmpty()) {
+        if (!running || !inFlightBatch.isEmpty() || ackQueue.isEmpty()) {
             return;
         }
 
@@ -211,35 +223,97 @@ public class BatchAckWorker {
     }
 
     private synchronized boolean flush(String reason, boolean requireFullBatch) {
-        if (ackQueue.isEmpty() || (requireFullBatch && ackQueue.size() < BATCH_SIZE)) {
+        if (!inFlightBatch.isEmpty()
+                || ackQueue.isEmpty()
+                || (requireFullBatch && ackQueue.size() < BATCH_SIZE)) {
             return false;
         }
 
         List<RecordId> batch = new ArrayList<>(BATCH_SIZE);
         ackQueue.drainTo(batch, BATCH_SIZE);
 
-        if (!batch.isEmpty()) {
-            String streamKey = properties.streamKey();
-            String group = properties.group();
-            RecordId[] ids = batch.toArray(new RecordId[0]);
-
-            try {
-                // 핸들을 직접 사용하여 런타임 객체 생성 최소화
-                ackLatencyTimer.record(() -> {
-                    redisTemplate.opsForStream().acknowledge(streamKey, group, ids);
-                    ackSuccessCounter.increment(batch.size());
-                    
-                    Counter commandCounter = commandCountersByReason.get(reason);
-                    if (commandCounter != null) {
-                        commandCounter.increment();
-                    }
-                });
-                log.trace("Flushed {} ACKs in batch (reason={})", batch.size(), reason);
-            } catch (Exception e) {
-                log.error("Failed to perform Batch XACK. stream={}, group={}, reason={}", streamKey, group, reason, e);
-            }
+        if (batch.isEmpty()) {
+            return false;
         }
 
-        return true;
+        inFlightBatch = List.copyOf(batch);
+        inFlightReason = reason;
+        return acknowledgeInFlight();
+    }
+
+    private boolean acknowledgeInFlight() {
+        List<RecordId> batch = inFlightBatch;
+        String reason = inFlightReason;
+        String streamKey = properties.streamKey();
+        String group = properties.group();
+        RecordId[] ids = batch.toArray(new RecordId[0]);
+
+        try {
+            // XACK is idempotent, so retrying is safe when Redis applied the command but its response was lost.
+            ackLatencyTimer.record(() -> {
+                redisTemplate.opsForStream().acknowledge(streamKey, group, ids);
+                ackSuccessCounter.increment(batch.size());
+
+                Counter commandCounter = commandCountersByReason.get(reason);
+                if (commandCounter != null) {
+                    commandCounter.increment();
+                }
+            });
+            log.trace("Flushed {} ACKs in batch (reason={})", batch.size(), reason);
+
+            inFlightBatch = List.of();
+            inFlightReason = VALUE_NA;
+            ackRetryAttempt = 0;
+            ackRetryFuture = null;
+            return true;
+        } catch (Exception e) {
+            log.error(
+                    "Failed to perform Batch XACK. Preserving in-flight batch for retry. "
+                            + "stream={}, group={}, reason={}, batchSize={}",
+                    streamKey, group, reason, batch.size(), e);
+            scheduleAckRetry();
+            return false;
+        }
+    }
+
+    private void scheduleAckRetry() {
+        if (!running) {
+            log.error(
+                    "BatchAckWorker is shutting down with an unacknowledged in-flight batch. "
+                            + "The records remain in the Redis PEL. batchSize={}",
+                    inFlightBatch.size());
+            return;
+        }
+
+        if (ackRetryFuture != null && !ackRetryFuture.isDone()) {
+            return;
+        }
+
+        long retryDelayMs = Math.min(
+                ACK_RETRY_INITIAL_DELAY_MS << Math.min(ackRetryAttempt, 6),
+                ACK_RETRY_MAX_DELAY_MS);
+        ackRetryAttempt++;
+
+        try {
+            ackRetryFuture = scheduler.schedule(this::retryInFlightAck, retryDelayMs, TimeUnit.MILLISECONDS);
+            log.warn(
+                    "Scheduled Batch XACK retry. attempt={}, delayMs={}, batchSize={}",
+                    ackRetryAttempt, retryDelayMs, inFlightBatch.size());
+        } catch (RejectedExecutionException e) {
+            log.error(
+                    "Failed to schedule Batch XACK retry. The records remain in the Redis PEL. batchSize={}",
+                    inFlightBatch.size(), e);
+        }
+    }
+
+    private synchronized void retryInFlightAck() {
+        ackRetryFuture = null;
+        if (inFlightBatch.isEmpty()) {
+            return;
+        }
+
+        if (acknowledgeInFlight()) {
+            scheduleNextFlushIfNeeded();
+        }
     }
 }

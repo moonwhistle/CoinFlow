@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -126,9 +127,75 @@ class BatchAckWorkerTest {
                 .isGreaterThanOrEqualTo(TimeUnit.MILLISECONDS.toNanos(40));
     }
 
+    @Test
+    void retriesFailedBatchBeforeDrainingFollowingBatches() throws Exception {
+        CountDownLatch firstXackFailed = new CountDownLatch(1);
+        CountDownLatch retryStarted = new CountDownLatch(1);
+        CountDownLatch releaseRetry = new CountDownLatch(1);
+        AtomicInteger xackCalls = new AtomicInteger();
+        AtomicLong firstFailureNanos = new AtomicLong();
+        AtomicLong retryStartedNanos = new AtomicLong();
+        List<List<String>> attemptedBatches = Collections.synchronizedList(new ArrayList<>());
+
+        doAnswer(invocation -> {
+            List<String> ids = new ArrayList<>();
+            Object[] arguments = invocation.getArguments();
+            for (int index = 2; index < arguments.length; index++) {
+                ids.add(((RecordId) arguments[index]).getValue());
+            }
+            attemptedBatches.add(ids);
+
+            int call = xackCalls.incrementAndGet();
+            if (call == 1) {
+                firstFailureNanos.set(System.nanoTime());
+                firstXackFailed.countDown();
+                throw new RuntimeException("Redis unavailable");
+            }
+            if (call == 2) {
+                retryStartedNanos.set(System.nanoTime());
+                retryStarted.countDown();
+                assertThat(releaseRetry.await(1, TimeUnit.SECONDS)).isTrue();
+            }
+            return 0L;
+        }).when(streamOperations).acknowledge(anyString(), anyString(), any(RecordId[].class));
+
+        addRecords(0, 500);
+        assertThat(firstXackFailed.await(1, TimeUnit.SECONDS)).isTrue();
+
+        addRecords(500, 600);
+        assertThat(retryStarted.await(1, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(attemptedBatches).containsExactly(
+                expectedIds(0, 500),
+                expectedIds(0, 500));
+        assertThat(retryStartedNanos.get() - firstFailureNanos.get())
+                .isGreaterThanOrEqualTo(TimeUnit.MILLISECONDS.toNanos(80));
+
+        releaseRetry.countDown();
+
+        verify(sizeFlushCounter, timeout(2_000).times(2)).increment();
+        verify(intervalFlushCounter, timeout(2_000).atLeastOnce()).increment();
+
+        assertThat(attemptedBatches).containsExactly(
+                expectedIds(0, 500),
+                expectedIds(0, 500),
+                expectedIds(500, 500),
+                expectedIds(1_000, 100));
+        verify(defaultCounter, times(2)).increment(500.0);
+        verify(defaultCounter).increment(100.0);
+    }
+
     private void addRecords(long start, int count) {
         for (long sequence = start; sequence < start + count; sequence++) {
             worker.addAck(RecordId.of("1-" + sequence));
         }
+    }
+
+    private List<String> expectedIds(long start, int count) {
+        List<String> ids = new ArrayList<>(count);
+        for (long sequence = start; sequence < start + count; sequence++) {
+            ids.add("1-" + sequence);
+        }
+        return ids;
     }
 }
