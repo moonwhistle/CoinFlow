@@ -87,6 +87,8 @@ services:
       - REDIS_STREAM_TICK_CONSUMERNAME=consumer-1
       - REDIS_STREAM_TICK_MAXLENGTH=200000
       - REDIS_STREAM_TICK_LAGWARNINGRATIO=0.8
+      - LOGGING_LEVEL_COM_COINFLOW=INFO
+      - LOGGING_LEVEL_ORG_HIBERNATE_SQL=WARN
     entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-consumer -Dspring.profiles.active=prod -Xms256m -Xmx384m -jar app.jar" ]
     depends_on:
       postgres:
@@ -99,6 +101,11 @@ services:
       timeout: 3s
       retries: 20
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: always
 
   collector-app:
@@ -120,12 +127,18 @@ services:
       - BINANCE_WEBSOCKET_TRADESTREAMSUFFIX=@trade
       - REDIS_STREAM_TICK_STREAMKEY=tick:raw
       - REDIS_STREAM_TICK_MAXLENGTH=200000
+      - LOGGING_LEVEL_COM_COINFLOW=INFO
     entrypoint: [ "sh", "-c", "java -Dspring.config.name=application-collector -Dspring.profiles.active=prod -Xms128m -Xmx256m -jar app.jar" ]
     depends_on:
       consumer-app:
         condition: service_healthy
       redis:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: always
 
   # ──────────────────────────────────────────────
