@@ -10,12 +10,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
@@ -52,6 +53,10 @@ public class BatchAckWorker {
 
     // 부하 분산을 위한 버퍼 큐 확장 (기존 10,000)
     private final BlockingQueue<RecordId> ackQueue = new LinkedBlockingQueue<>(50000);
+    private final AtomicBoolean sizeFlushScheduled = new AtomicBoolean(false);
+    private final Object flushScheduleMonitor = new Object();
+    private ScheduledFuture<?> intervalFlushFuture;
+    private long intervalScheduleGeneration;
     private volatile boolean running = true; // (Point 4) 종료 상태 관리용 플래그
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "batch-ack-worker");
@@ -78,7 +83,6 @@ public class BatchAckWorker {
                     TAG_FLUSH_REASON, reason));
         }
 
-        scheduler.scheduleWithFixedDelay(() -> flush(VALUE_FLUSH_INTERVAL), FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
         log.info("BatchAckWorker initialized with Zero-Allocation Monitoring (BatchSize={}, Interval={}ms)", BATCH_SIZE, FLUSH_INTERVAL_MS);
     }
 
@@ -88,6 +92,7 @@ public class BatchAckWorker {
         
         // 1. 새로운 요청 차단 (Point 4)
         this.running = false;
+        cancelIntervalFlush();
 
         // 2. 종료 전 마지막 강제 Flush
         try {
@@ -121,17 +126,93 @@ public class BatchAckWorker {
             log.warn("BatchAckWorker queue is full!");
         }
         
-        if (ackQueue.size() >= BATCH_SIZE) {
-            CompletableFuture.runAsync(() -> flush(VALUE_FLUSH_SIZE), scheduler);
+        scheduleNextFlushIfNeeded();
+    }
+
+    private void scheduleNextFlushIfNeeded() {
+        if (!running || ackQueue.isEmpty()) {
+            return;
         }
+
+        if (ackQueue.size() >= BATCH_SIZE) {
+            scheduleSizeFlush();
+        } else {
+            scheduleIntervalFlush();
+        }
+    }
+
+    private void scheduleSizeFlush() {
+        if (!sizeFlushScheduled.compareAndSet(false, true)) {
+            return;
+        }
+
+        cancelIntervalFlush();
+        scheduler.execute(() -> {
+            try {
+                while (flushFullBatch()) {
+                    // Drain every complete batch without scheduling duplicate tasks.
+                }
+            } finally {
+                sizeFlushScheduled.set(false);
+                scheduleNextFlushIfNeeded();
+            }
+        });
+    }
+
+    private void scheduleIntervalFlush() {
+        synchronized (flushScheduleMonitor) {
+            if (!running || ackQueue.isEmpty() || sizeFlushScheduled.get()
+                    || (intervalFlushFuture != null && !intervalFlushFuture.isDone())) {
+                return;
+            }
+
+            long generation = ++intervalScheduleGeneration;
+            intervalFlushFuture = scheduler.schedule(
+                    () -> runIntervalFlush(generation),
+                    FLUSH_INTERVAL_MS,
+                    TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void runIntervalFlush(long generation) {
+        synchronized (flushScheduleMonitor) {
+            if (generation != intervalScheduleGeneration) {
+                return;
+            }
+            intervalFlushFuture = null;
+        }
+
+        flush(VALUE_FLUSH_INTERVAL);
+        scheduleNextFlushIfNeeded();
+    }
+
+    private void cancelIntervalFlush() {
+        ScheduledFuture<?> future;
+        synchronized (flushScheduleMonitor) {
+            intervalScheduleGeneration++;
+            future = intervalFlushFuture;
+            intervalFlushFuture = null;
+        }
+
+        if (future != null) {
+            future.cancel(false);
+        }
+    }
+
+    private boolean flushFullBatch() {
+        return flush(VALUE_FLUSH_SIZE, true);
     }
 
     /**
      * 큐에 쌓인 RecordId들을 한 번에 XACK 처리합니다.
      */
-    private synchronized void flush(String reason) {
-        if (ackQueue.isEmpty()) {
-            return;
+    private void flush(String reason) {
+        flush(reason, false);
+    }
+
+    private synchronized boolean flush(String reason, boolean requireFullBatch) {
+        if (ackQueue.isEmpty() || (requireFullBatch && ackQueue.size() < BATCH_SIZE)) {
+            return false;
         }
 
         List<RecordId> batch = new ArrayList<>(BATCH_SIZE);
@@ -158,5 +239,7 @@ public class BatchAckWorker {
                 log.error("Failed to perform Batch XACK. stream={}, group={}, reason={}", streamKey, group, reason, e);
             }
         }
+
+        return true;
     }
 }
