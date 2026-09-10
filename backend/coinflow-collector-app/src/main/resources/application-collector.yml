@@ -28,3 +28,5 @@ redis:
     tick:
       stream-key: ${REDIS_STREAM_TICK_STREAMKEY:tick:raw}
       max-length: ${REDIS_STREAM_TICK_MAXLENGTH:200000}
+  pubsub:
+    ticker-topic: ${REDIS_PUBSUB_TICKER_TOPIC:ticker:broadcast}

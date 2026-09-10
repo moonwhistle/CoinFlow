@@ -70,9 +70,6 @@ public class TickProcessAsyncPerformanceTest {
     @MockitoBean
     private KlineBroadcaster klineBroadcaster;
 
-    @MockitoBean
-    private TickerBroadcaster tickerBroadcaster;
-
     private Symbol savedSymbol;
 
     @BeforeEach

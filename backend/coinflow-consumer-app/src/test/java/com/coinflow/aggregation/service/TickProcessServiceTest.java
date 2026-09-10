@@ -47,8 +47,6 @@ class TickProcessServiceTest {
     @Mock
     private KlineBroadcaster klineBroadcaster;
     @Mock
-    private TickerBroadcaster tickerBroadcaster;
-    @Mock
     private DbPersistService dbPersistService;
     @Mock
     private BatchAckWorker batchAckWorker;
@@ -103,21 +101,19 @@ class TickProcessServiceTest {
 
         // then: 집계 엔진 호출 및 서비스 간 조율 결과 검증
         assertAll(
-                // 1. Ticker 최신성 기반 전파 확인
-                () -> verify(tickerBroadcaster, times(1)).broadcast(anyString()),
-                // 2. 캐시 저장 및 브로드캐스트 전파 확인
+                // 1. 캐시 저장 및 브로드캐스트 전파 확인
                 () -> verify(liveKlineRepository, never()).save(any(KlineEvent.class), anyString()),
                 () -> verify(ohlcWindowRepository, times(1)).save(eq(symbol), eq("M1"), any()),
                 () -> verify(ohlcWindowRepository, times(1)).trim(eq(symbol), eq("M1"), eq(1000)),
                 () -> verify(liveKlineRepository, times(1))
                         .deleteIfStartTimeMatches(symbol, "M1", lateSnapshot.startTime()),
                 () -> verify(klineBroadcaster, times(1)).broadcast(any(KlineEvent.class), anyString()),
-                // 3. 메인 스레드 점유 시간(나노초) 기록 확인
+                // 2. 메인 스레드 점유 시간(나노초) 기록 확인
                 () -> verify(metricRecorder, atLeastOnce()).recordTimeNanos(eq(TICK_MAIN_THREAD_LATENCY),
                         anyLong(), any(String[].class)),
-                // 4. DB 비동기 저장 서비스 호출 확인
+                // 3. DB 비동기 저장 서비스 호출 확인
                 () -> verify(dbPersistService, times(1)).persistClosedCandleAsync(eq(symbol), any()),
-                // 5. 비동기 파이프라인 종료 후 Batch ACK Worker 위임 확인
+                // 4. 비동기 파이프라인 종료 후 Batch ACK Worker 위임 확인
                 () -> verify(batchAckWorker, timeout(1000)).addAck(recordId)
         );
     }

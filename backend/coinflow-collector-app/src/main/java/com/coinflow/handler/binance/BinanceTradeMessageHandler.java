@@ -63,12 +63,23 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
             // Note: TickRawBinaryCodec.encode() 내부에서 TickValidator.validate()가 강제 호출됨 (DRY)
             if (symbol != null && price != null && quantity != null && eventTime != 0) {
                 byte[] rawData = TickRawBinaryCodec.encode(symbol, price, quantity, eventTime);
-                publisher.publish(rawData);
-                log.debug("Successfully published streaming binary tick: {}", symbol);
+                String tickerPayload = createTickerPayload(symbol, price, quantity, eventTime);
+                publisher.publish(rawData, tickerPayload);
+                log.debug("Successfully stored and broadcast streaming binary tick: {}", symbol);
             }
 
         } catch (Exception e) {
             log.warn("Failed to stream binance trade message. error={}", e.getMessage());
         }
+    }
+
+    private String createTickerPayload(
+            String symbol,
+            BigDecimal price,
+            BigDecimal quantity,
+            long eventTime
+    ) {
+        return "{\"symbol\":\"" + symbol + "\",\"price\":" + price
+                + ",\"volume\":" + quantity + ",\"eventTime\":" + eventTime + "}";
     }
 }

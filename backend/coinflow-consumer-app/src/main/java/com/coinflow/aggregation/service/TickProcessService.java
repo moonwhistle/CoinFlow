@@ -20,9 +20,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
@@ -43,7 +41,6 @@ public class TickProcessService {
     private final LiveKlineRepository liveKlineRepository;
     private final OhlcWindowRepository ohlcWindowRepository;
     private final KlineBroadcaster klineBroadcaster;
-    private final TickerBroadcaster tickerBroadcaster;
     private final DbPersistService dbPersistService;
     private final MetricRecorder metricRecorder;
     private final BatchAckWorker batchAckWorker;
@@ -54,8 +51,6 @@ public class TickProcessService {
             .maximumSize(100_000)
             .expireAfterWrite(Duration.ofMinutes(1))
             .build();
-
-    private final Map<String, Long> lastBroadcastingTimeMap = new ConcurrentHashMap<>();
 
     /**
      * Optimized entry point for tick processing (Zero-POJO variant).
@@ -75,21 +70,18 @@ public class TickProcessService {
         long startNanos = System.nanoTime();
 
         try {
-            // 1단계: Ticker 전파
-            propagateTicker(symbol, price, quantity, eventTime);
-
-            // 2단계: 집계 엔진 호출
+            // 1단계: 집계 엔진 호출
             AggregationResult result = klineAggregatorService.processTickAndGetResult(
                     symbol, price, quantity, eventTime
             );
 
-            // 3단계: 결과 조율
+            // 2단계: 결과 조율
             List<CompletableFuture<Void>> dbFutures = coordinateResults(symbol, result);
 
             metricRecorder.recordTimeNanos(TICK_MAIN_THREAD_LATENCY, System.nanoTime() - startNanos, 
                     TAG_MODULE, "consumer", TAG_TYPE, "main");
 
-            // 4단계: 비동기 완료 후 ACK
+            // 3단계: 비동기 완료 후 ACK
             completeAndAcknowledge(dbFutures, streamKey, group, recordId, symbol, startNanos);
 
         } catch (Exception e) {
@@ -97,22 +89,6 @@ public class TickProcessService {
             log.error("[Consumer] Critical failure processing tick - symbol={}", symbol, e);
             recordFailure(symbol);
             throw e;
-        }
-    }
-
-    private void propagateTicker(String symbol, BigDecimal price, BigDecimal quantity, long eventTime) {
-        long lastTime = lastBroadcastingTimeMap.getOrDefault(symbol, 0L);
-
-        if (eventTime >= lastTime) {
-            try {
-                // Zero-POJO: TickerEvent 객체 생성 및 Jackson 호출 없이 직접 JSON 조립
-                String json = "{\"symbol\":\"" + symbol + "\",\"price\":" + price + 
-                              ",\"volume\":" + quantity + ",\"eventTime\":" + eventTime + "}";
-                tickerBroadcaster.broadcast(json);
-                lastBroadcastingTimeMap.put(symbol, eventTime);
-            } catch (Exception e) {
-                log.error("Failed to propagate ticker for symbol={}", symbol, e);
-            }
         }
     }
 

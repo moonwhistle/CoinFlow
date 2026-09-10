@@ -17,10 +17,12 @@ public class TickPublisherConfig {
             RedisTemplate<String, byte[]> rawRedisTemplate,
             MetricRecorder metricRecorder,
             @Value("${redis.stream.tick.stream-key:tick:raw}") String streamKey,
+            @Value("${redis.pubsub.ticker-topic:ticker:broadcast}") String tickerTopic,
             @Value("${redis.stream.tick.max-length:200000}") long maxLength
     ) {
         Assert.hasText(streamKey, "redis.stream.tick.stream-key must not be blank");
+        Assert.hasText(tickerTopic, "redis.pubsub.ticker-topic must not be blank");
         Assert.isTrue(maxLength > 0, "redis.stream.tick.max-length must be greater than zero");
-        return new RedisStreamTickPublisher(rawRedisTemplate, metricRecorder, streamKey, maxLength);
+        return new RedisStreamTickPublisher(rawRedisTemplate, metricRecorder, streamKey, tickerTopic, maxLength);
     }
 }
