@@ -36,9 +36,8 @@ public class TickRawMessageHandler {
 
             // 0. 프로토콜 버전 체크 (Point 1)
             byte version = TickRawBinaryCodec.extractVersion(rawData);
-            if (version != TickRawBinaryCodec.PROTOCOL_VERSION) {
-                log.warn("Unsupported binary protocol version. expected={}, received={}, recordId={}", 
-                        TickRawBinaryCodec.PROTOCOL_VERSION, version, recordId);
+            if (!TickRawBinaryCodec.isSupportedVersion(version)) {
+                log.warn("Unsupported binary protocol version. received={}, recordId={}", version, recordId);
                 return false;
             }
 
@@ -47,13 +46,16 @@ public class TickRawMessageHandler {
             BigDecimal price = TickRawBinaryCodec.extractPrice(rawData);
             BigDecimal quantity = TickRawBinaryCodec.extractQuantity(rawData);
             long eventTime = TickRawBinaryCodec.extractEventTime(rawData);
+            Long tradeId = version == TickRawBinaryCodec.PROTOCOL_VERSION
+                    ? TickRawBinaryCodec.extractTradeId(rawData)
+                    : null;
 
             // 2. 무결성 검증 (Early Validation)
             // Note: 이미 Producer에서 검증되어 직렬화되었으나, Consumer 보안을 위해 2중 방어 유지 (SRP)
             TickValidator.validate(symbol, price, quantity, eventTime);
 
             // 3. 집계 엔진으로 직접적인 기본형 전달 (Zero-POJO)
-            tickProcessService.process(symbol, price, quantity, eventTime, streamKey, group, recordId);
+            tickProcessService.process(symbol, tradeId, price, quantity, eventTime, streamKey, group, recordId);
 
             return true;
         } catch (Exception e) {

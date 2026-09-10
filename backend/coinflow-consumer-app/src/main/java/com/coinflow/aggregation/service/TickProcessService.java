@@ -57,9 +57,15 @@ public class TickProcessService {
      */
     public void process(String symbol, BigDecimal price, BigDecimal quantity, long eventTime, 
                         String streamKey, String group, RecordId recordId) {
+        process(symbol, null, price, quantity, eventTime, streamKey, group, recordId);
+    }
+
+    public void process(String symbol, Long tradeId, BigDecimal price, BigDecimal quantity, long eventTime,
+                        String streamKey, String group, RecordId recordId) {
+        String dedupeKey = tradeId == null ? recordId.getValue() : symbol + ':' + tradeId;
         
         // 1. 중복 체크: 이미 처리된 ID라면 비즈니스 로직 스킵 후 ACK만 수행
-        if (isDuplicate(symbol, recordId)) {
+        if (isDuplicate(symbol, dedupeKey)) {
             batchAckWorker.addAck(recordId);
             return;
         }
@@ -82,10 +88,10 @@ public class TickProcessService {
                     TAG_MODULE, "consumer", TAG_TYPE, "main");
 
             // 3단계: 비동기 완료 후 ACK
-            completeAndAcknowledge(dbFutures, streamKey, group, recordId, symbol, startNanos);
+            completeAndAcknowledge(dbFutures, streamKey, group, recordId, symbol, dedupeKey, startNanos);
 
         } catch (Exception e) {
-            processedIdCache.invalidate(recordId.getValue());
+            processedIdCache.invalidate(dedupeKey);
             log.error("[Consumer] Critical failure processing tick - symbol={}", symbol, e);
             recordFailure(symbol);
             throw e;
@@ -167,14 +173,14 @@ public class TickProcessService {
 
     private void completeAndAcknowledge(List<CompletableFuture<Void>> futures,
             String streamKey, String group, RecordId recordId,
-            String symbol, long startNanos) {
+            String symbol, String dedupeKey, long startNanos) {
         if (futures.isEmpty()) {
             finalizeProcess(streamKey, group, recordId, symbol, startNanos);
         } else {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                     .thenRun(() -> finalizeProcess(streamKey, group, recordId, symbol, startNanos))
                     .exceptionally(ex -> {
-                        processedIdCache.invalidate(recordId.getValue());
+                        processedIdCache.invalidate(dedupeKey);
                         log.error("Async pipeline failed for {}. Message will stick in PENDING.", symbol, ex);
                         recordFailure(symbol);
                         return (Void) null;
@@ -198,15 +204,14 @@ public class TickProcessService {
      * Checks if the incoming record is a duplicate based on the exact RecordId value.
      * Uses a high-performance Caffeine cache to handle out-of-order re-deliveries.
      */
-    private boolean isDuplicate(String symbol, RecordId incomingId) {
-        String idValue = incomingId.getValue();
-        if (processedIdCache.getIfPresent(idValue) != null) {
-            log.trace("Duplicate tick detected for {}: id={}. Skipping aggregation.", 
-                    symbol, idValue);
+    private boolean isDuplicate(String symbol, String dedupeKey) {
+        if (processedIdCache.getIfPresent(dedupeKey) != null) {
+            log.trace("Duplicate tick detected for {}: key={}. Skipping aggregation.",
+                    symbol, dedupeKey);
             return true;
         }
 
-        processedIdCache.put(idValue, Boolean.TRUE);
+        processedIdCache.put(dedupeKey, Boolean.TRUE);
         return false;
     }
 }
