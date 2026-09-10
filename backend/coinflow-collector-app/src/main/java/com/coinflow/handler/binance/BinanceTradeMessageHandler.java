@@ -9,6 +9,7 @@ import static com.coinflow.monitoring.constant.MetricConstants.WEBSOCKET_RECEIVE
 
 import com.coinflow.handler.TickMessageHandler;
 import com.coinflow.monitoring.MetricRecorder;
+import com.coinflow.ticker.publisher.TickerPublisher;
 import com.coinflow.tick.publisher.TickPublisher;
 import com.coinflow.tick.serialization.TickRawBinaryCodec;
 import com.fasterxml.jackson.core.JsonParser;
@@ -28,6 +29,7 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
 
     private final ObjectMapper objectMapper;
     private final TickPublisher publisher;
+    private final TickerPublisher tickerPublisher;
     private final MetricRecorder metricRecorder;
 
     @Override
@@ -64,12 +66,32 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
             if (symbol != null && price != null && quantity != null && eventTime != 0) {
                 byte[] rawData = TickRawBinaryCodec.encode(symbol, price, quantity, eventTime);
                 String tickerPayload = createTickerPayload(symbol, price, quantity, eventTime);
-                publisher.publish(rawData, tickerPayload);
-                log.debug("Successfully stored and broadcast streaming binary tick: {}", symbol);
+                publishTicker(tickerPayload, symbol);
+                publishStream(rawData, symbol);
             }
 
         } catch (Exception e) {
             log.warn("Failed to stream binance trade message. error={}", e.getMessage());
+        }
+    }
+
+    private void publishTicker(String tickerPayload, String symbol) {
+        try {
+            tickerPublisher.publish(tickerPayload);
+            log.debug("Successfully broadcast ticker directly from collector: {}", symbol);
+        } catch (Exception e) {
+            log.warn("Failed to broadcast ticker from collector. symbol={}, error={}",
+                    symbol, e.getMessage());
+        }
+    }
+
+    private void publishStream(byte[] rawData, String symbol) {
+        try {
+            publisher.publish(rawData);
+            log.debug("Successfully published streaming binary tick: {}", symbol);
+        } catch (Exception e) {
+            log.warn("Failed to publish tick to stream. symbol={}, error={}",
+                    symbol, e.getMessage());
         }
     }
 

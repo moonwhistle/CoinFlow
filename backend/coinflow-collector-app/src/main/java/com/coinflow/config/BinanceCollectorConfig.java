@@ -6,6 +6,7 @@ import com.coinflow.client.binance.support.BinanceStreamUrlBuilder;
 import com.coinflow.config.properties.BinanceWebSocketProperties;
 import com.coinflow.handler.TickMessageHandler;
 import com.coinflow.handler.binance.BinanceTradeMessageHandler;
+import com.coinflow.ticker.publisher.TickerPublisher;
 import com.coinflow.tick.publisher.TickPublisher;
 import com.coinflow.monitoring.MetricRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,9 +22,10 @@ public class BinanceCollectorConfig {
     public TickMessageHandler tickMessageHandler(
             ObjectMapper objectMapper,
             TickPublisher publisher,
+            TickerPublisher tickerPublisher,
             MetricRecorder metricRecorder
     ) {
-        return new BinanceTradeMessageHandler(objectMapper, publisher, metricRecorder);
+        return new BinanceTradeMessageHandler(objectMapper, publisher, tickerPublisher, metricRecorder);
     }
 
     @Bean

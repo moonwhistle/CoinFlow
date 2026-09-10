@@ -19,6 +19,8 @@ public final class MetricConstants {
     public static final String WEBSOCKET_RECEIVE_COUNT = "tick.receive.count";
     public static final String STREAM_PUBLISH_LATENCY = "stream.publish.latency";
     public static final String STREAM_PUBLISH_FAILURE_COUNT = "stream.publish.failure.count";
+    public static final String TICKER_PUBLISH_LATENCY = "ticker.publish.latency";
+    public static final String TICKER_PUBLISH_FAILURE_COUNT = "ticker.publish.failure.count";
 
     // Consumer: 틱 처리 전체 지표
     public static final String TICK_PROCESS_LATENCY = "tick.process.latency";

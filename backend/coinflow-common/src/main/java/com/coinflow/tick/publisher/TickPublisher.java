@@ -6,8 +6,7 @@ package com.coinflow.tick.publisher;
 public interface TickPublisher {
 
     /**
-     * 원본 틱은 Stream에 저장하고, 현재가 payload는 Pub/Sub으로 전파합니다.
-     * 구현체는 두 Redis 명령 사이에 애플리케이션 장애 구간이 없도록 원자적으로 실행해야 합니다.
+     * 캔들 집계에 사용할 원본 틱을 메시지 스트림에 저장합니다.
      */
-    void publish(byte[] rawData, String tickerPayload);
+    void publish(byte[] rawData);
 }
