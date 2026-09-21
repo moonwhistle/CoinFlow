@@ -9,6 +9,8 @@ dependencies {
     implementation project(':coinflow-core')
 
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    compileOnly 'jakarta.persistence:jakarta.persistence-api'
+    testCompileOnly 'jakarta.persistence:jakarta.persistence-api'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

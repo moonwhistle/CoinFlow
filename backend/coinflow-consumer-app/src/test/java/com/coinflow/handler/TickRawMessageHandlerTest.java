@@ -27,6 +27,9 @@ class TickRawMessageHandlerTest {
     @Mock
     private TickProcessService tickProcessService;
 
+    @Mock
+    private com.coinflow.recovery.service.FailedRecordService failures;
+
     @InjectMocks
     private TickRawMessageHandler handler;
 

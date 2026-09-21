@@ -30,10 +30,16 @@ redis:
       stream-key: tick:raw
       group: tick-consumer-group
       consumer-name: consumer-1
-      max-length: ${REDIS_STREAM_TICK_MAXLENGTH:200000}
+      max-length: ${REDIS_STREAM_TICK_MAXLENGTH:0}
       lag-warning-ratio: ${REDIS_STREAM_TICK_LAGWARNINGRATIO:0.8}
 
 coinflow:
+  recovery:
+    maintenance:
+      enabled: true
+    checkpoint-batch-size: 500
+    checkpoint-interval-ms: 50
+    dlq-backoff-ms: 1000
   async:
     db-persist:
       core-pool-size: 10

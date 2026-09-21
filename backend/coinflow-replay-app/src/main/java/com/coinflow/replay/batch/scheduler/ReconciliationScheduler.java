@@ -58,8 +58,8 @@ public class ReconciliationScheduler {
                     .addLong(ReconciliationBatchConstants.PARAM_RUN_ID, nowMs)
                     .toJobParameters();
 
-            jobLauncher.run(klineReconciliationJob, params);
-            log.info("Successfully triggered reconciliation job. Range: {} to {}", startTime, endTime);
+            var execution = jobLauncher.run(klineReconciliationJob, params);
+            log.info("Reconciliation finished. status={}, range={} to {}", execution.getStatus(), startTime, endTime);
         } catch (Exception e) {
             log.error("Failed to trigger reconciliation job", e);
         }

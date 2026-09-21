@@ -108,7 +108,10 @@ public class BatchAckWorker {
 
         // 2. 종료 전 마지막 강제 Flush
         try {
-            flush(VALUE_NA);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!ackQueue.isEmpty() && inFlightBatch.isEmpty() && System.nanoTime() < deadline) {
+                flush(VALUE_NA);
+            }
         } catch (Exception e) {
             log.error("Failed to perform final flush during shutdown", e);
         }
@@ -135,7 +138,7 @@ public class BatchAckWorker {
         }
 
         if (!ackQueue.offer(recordId)) {
-            log.warn("BatchAckWorker queue is full!");
+            log.error("ACK_DEFERRED_TO_CHECKPOINT: queue full; durable checkpoint sweep will ACK recordId={}", recordId);
         }
         
         scheduleNextFlushIfNeeded();
@@ -251,8 +254,9 @@ public class BatchAckWorker {
         try {
             // XACK is idempotent, so retrying is safe when Redis applied the command but its response was lost.
             ackLatencyTimer.record(() -> {
-                redisTemplate.opsForStream().acknowledge(streamKey, group, ids);
-                ackSuccessCounter.increment(batch.size());
+                Long removed = redisTemplate.opsForStream().acknowledge(streamKey, group, ids);
+                if (removed == null) throw new IllegalStateException("Missing XACK response");
+                ackSuccessCounter.increment(removed);
 
                 Counter commandCounter = commandCountersByReason.get(reason);
                 if (commandCounter != null) {
