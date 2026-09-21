@@ -46,7 +46,7 @@ public class KlineAggregatorService {
     /**
      * Processes a single tick for all supported intervals.
      */
-    public AggregationResult processTickAndGetResult(String symbol, BigDecimal price, BigDecimal quantity, long epochMs) {
+    public synchronized AggregationResult processTickAndGetResult(String symbol, BigDecimal price, BigDecimal quantity, long epochMs) {
         long epochSec = epochMs / 1000;
         long scaledQty = VolumeScaler.toLong(quantity);
 
@@ -115,5 +115,33 @@ public class KlineAggregatorService {
 
     private String buildKey(String symbol, String interval) {
         return symbol.toLowerCase() + ":" + interval;
+    }
+
+    public record Buffered(KlineSnapshot snapshot, long createdAtMs) {}
+    public record Checkpoint(Map<String, KlineSnapshot> active, Map<String, List<Buffered>> recent) {}
+
+    public synchronized Checkpoint checkpoint() {
+        Map<String, KlineSnapshot> active = new LinkedHashMap<>();
+        Map<String, List<Buffered>> recent = new LinkedHashMap<>();
+        states.forEach((key, state) -> active.put(key, state.checkpoint()));
+        recentlyClosed.forEach((key, buffer) -> recent.put(key, buffer.values().stream()
+                .map(value -> new Buffered(value.toSnapshot(), value.createdAtMs())).toList()));
+        return new Checkpoint(active, recent);
+    }
+
+    public synchronized void restore(Checkpoint checkpoint) {
+        states.clear();
+        recentlyClosed.clear();
+        checkpoint.active().forEach((key, snapshot) -> {
+            String interval = key.substring(key.lastIndexOf(':') + 1);
+            KlineState state = new KlineState((int) OhlcInterval.valueOf(interval).duration().toSeconds());
+            state.restore(snapshot);
+            states.put(key, state);
+        });
+        checkpoint.recent().forEach((key, snapshots) -> snapshots.forEach(buffered -> {
+            addToRecentlyClosedBuffer(key, buffered.snapshot());
+            recentlyClosed.get(key).put(buffered.snapshot().startTime(),
+                    new MutableKlineSnapshot(buffered.snapshot(), buffered.createdAtMs()));
+        }));
     }
 }

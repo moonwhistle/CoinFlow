@@ -23,6 +23,10 @@ public class MutableKlineSnapshot {
     private final long createdAtMs;
 
     public MutableKlineSnapshot(KlineSnapshot snapshot) {
+        this(snapshot, System.currentTimeMillis());
+    }
+
+    public MutableKlineSnapshot(KlineSnapshot snapshot, long createdAtMs) {
         this.startTime = snapshot.startTime();
         this.closeTime = snapshot.closeTime();
         this.open = snapshot.open();
@@ -32,8 +36,10 @@ public class MutableKlineSnapshot {
         this.volume = VolumeScaler.toLong(snapshot.volume());
         this.trades = snapshot.trades();
         this.closed = snapshot.closed();
-        this.createdAtMs = System.currentTimeMillis();
+        this.createdAtMs = createdAtMs;
     }
+
+    public long createdAtMs() { return createdAtMs; }
 
     /**
      * Applies a late tick to the closed candle.
