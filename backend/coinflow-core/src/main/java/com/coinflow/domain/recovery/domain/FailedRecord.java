@@ -20,6 +20,7 @@ public class FailedRecord {
     @Column(length = 2000) private String reason;
     private String dlqId;
     private boolean dlqExhausted;
+    private int dlqAttempts;
     @Enumerated(EnumType.STRING) private Status status = Status.WAITING_REPAIR;
     private long createdAt;
     public static String key(String stream, String group, String record) {

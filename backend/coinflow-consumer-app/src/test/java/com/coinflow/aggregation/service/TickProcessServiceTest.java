@@ -1,147 +1,92 @@
 package com.coinflow.aggregation.service;
 
-import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
-import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
-import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
+import com.coinflow.config.ConsumerApplicationShutdown;
 import com.coinflow.domain.aggregation.service.KlineAggregatorService;
-import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
-import com.coinflow.domain.ohlc.repository.OhlcWindowRepository;
-import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
-import com.coinflow.event.kline.KlineEvent;
-import com.coinflow.monitoring.MetricRecorder;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.connection.stream.RecordId;
-
+import com.coinflow.recovery.service.ConsumerCheckpointService;
+import com.coinflow.recovery.service.CandleProjectionPublisher;
 import java.math.BigDecimal;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.connection.stream.RecordId;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static com.coinflow.monitoring.constant.MetricConstants.*;
+import static org.mockito.ArgumentMatchers.*;
 
-/**
- * TickProcessService의 집계 연동 및 전파 로직을 검증하는 테스트입니다.
- */
-@Slf4j
-@ExtendWith(MockitoExtension.class)
 class TickProcessServiceTest {
+    private final ConsumerCheckpointService checkpoints = mock(ConsumerCheckpointService.class);
+    private final CandleProjectionPublisher projections = mock(CandleProjectionPublisher.class);
+    private final BatchAckWorker ack = mock(BatchAckWorker.class);
+    private final ConsumerApplicationShutdown shutdown = mock(ConsumerApplicationShutdown.class);
+    private final com.coinflow.monitoring.MetricRecorder metrics = mock(com.coinflow.monitoring.MetricRecorder.class);
+    private KlineAggregatorService aggregate;
+    private TickProcessService ticks;
 
-    @Mock
-    private KlineAggregatorService klineAggregatorService;
-    @Mock
-    private LiveKlineRepository liveKlineRepository;
-    @Mock
-    private OhlcWindowRepository ohlcWindowRepository;
-    @Mock
-    private KlineBroadcaster klineBroadcaster;
-    @Mock
-    private DbPersistService dbPersistService;
-    @Mock
-    private BatchAckWorker batchAckWorker;
-    @Mock
-    private MetricRecorder metricRecorder;
-    @Mock
-    private ObjectMapper objectMapper;
-
-    @InjectMocks
-    private TickProcessService tickProcessService;
-
-    private final String symbol = "btcusdt";
-    private final BigDecimal price = new BigDecimal("100");
-    private final BigDecimal quantity = new BigDecimal("10");
-    private final long eventTime = 123456789L;
-    private final RecordId recordId = RecordId.of("123-0");
-
-    @BeforeEach
-    void setUp() throws Exception {
-        // MetricRecorder가 인자로 받은 Runnable을 즉시 실행하도록 설정 (Metric 측정 모킹)
-        lenient().doAnswer(invocation -> {
-            ((Runnable) invocation.getArgument(1)).run();
-            return null;
-        }).when(metricRecorder).recordTime(anyString(), any(Runnable.class), any(String[].class));
-
-        // ObjectMapper가 null을 반환하면 broadcast/save에 null이 전달되어 검증에 실패하므로 stubbing
-        lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+    @BeforeEach void setup() {
+        aggregate = new KlineAggregatorService();
+        ticks = new TickProcessService(aggregate, checkpoints, projections, ack, shutdown, metrics);
+        when(checkpoints.acquire()).thenReturn(new ConsumerCheckpointService.Restored("0-0", null));
+        ticks.restore();
     }
 
-    @Test
-    @DisplayName("지연 틱 발생 시 캐시 저장, 전파, 비동기 DB 저장이 올바른 순서로 수행되어야 한다 (Zero-POJO)")
-    void processLateTickTest() {
-        // given: 지연 틱 데이터 결과 시나리오 구성
-        KlineSnapshot lateSnapshot = new KlineSnapshot(100L, 159L, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0, true);
-        ClosedKlineSnapshot closedKlineSnapshot = new ClosedKlineSnapshot("M1", lateSnapshot);
-
-        AggregationResult result = new AggregationResult(
-                List.of(), // 신규 마감 없음
-                List.of(), // 라이브 스냅샷 없음
-                List.of(closedKlineSnapshot) // 지연 업데이트 스냅샷 존재
-        );
-
-        when(klineAggregatorService.processTickAndGetResult(
-                eq(symbol), eq(price), eq(quantity), eq(eventTime))).thenReturn(result);
-
-        when(dbPersistService.persistClosedCandleAsync(any(), any()))
-                .thenReturn(CompletableFuture.completedFuture(null));
-
-        // when: 기본형 파라미터를 통한 프로세스 호출
-        tickProcessService.process(symbol, price, quantity, eventTime, "mystream", "mygroup", recordId);
-
-        // then: 집계 엔진 호출 및 서비스 간 조율 결과 검증
-        assertAll(
-                // 1. 캐시 저장 및 브로드캐스트 전파 확인
-                () -> verify(liveKlineRepository, never()).save(any(KlineEvent.class), anyString()),
-                () -> verify(ohlcWindowRepository, times(1)).save(eq(symbol), eq("M1"), any()),
-                () -> verify(ohlcWindowRepository, times(1)).trim(eq(symbol), eq("M1"), eq(1000)),
-                () -> verify(liveKlineRepository, times(1))
-                        .deleteIfStartTimeMatches(symbol, "M1", lateSnapshot.startTime()),
-                () -> verify(klineBroadcaster, times(1)).broadcast(any(KlineEvent.class), anyString()),
-                // 2. 메인 스레드 점유 시간(나노초) 기록 확인
-                () -> verify(metricRecorder, atLeastOnce()).recordTimeNanos(eq(TICK_MAIN_THREAD_LATENCY),
-                        anyLong(), any(String[].class)),
-                // 3. DB 비동기 저장 서비스 호출 확인
-                () -> verify(dbPersistService, times(1)).persistClosedCandleAsync(eq(symbol), any()),
-                // 4. 비동기 파이프라인 종료 후 Batch ACK Worker 위임 확인
-                () -> verify(batchAckWorker, timeout(1000)).addAck(recordId)
-        );
+    @Test void acknowledgesOnlyAfterAtomicCheckpointCommit() {
+        tick("1-0", 60_000);
+        tick("2-0", 120_000);
+        verifyNoInteractions(ack, projections);
+        ticks.flush();
+        var ordered = inOrder(checkpoints, projections, ack);
+        ordered.verify(checkpoints).commit(eq("2-0"), any(), argThat(list -> list.size() == 1));
+        ordered.verify(projections).publish(any());
+        ordered.verify(ack).addAck(RecordId.of("1-0"));
+        ordered.verify(ack).addAck(RecordId.of("2-0"));
     }
 
-    @Test
-    @DisplayName("Closed candle updates Redis and Pub/Sub only after DB persistence succeeds")
-    void finalizedCandleWaitsForDatabaseBeforePublishing() {
-        KlineSnapshot finalizedSnapshot = new KlineSnapshot(
-                120L, 179L, price, price, price, price, quantity, 1, true);
-        ClosedKlineSnapshot closed = new ClosedKlineSnapshot("M1", finalizedSnapshot);
-        AggregationResult result = new AggregationResult(List.of(closed), List.of(), List.of());
-        CompletableFuture<Void> dbFuture = new CompletableFuture<>();
+    @Test void checkpointFailureDoesNotAckOrContinue() {
+        tick("1-0", 60_000);
+        doThrow(new IllegalStateException("DB down")).when(checkpoints).commit(anyString(), any(), anyList());
+        assertThrows(IllegalStateException.class, ticks::flush);
+        assertThrows(IllegalStateException.class, () -> tick("2-0", 120_000));
+        verifyNoInteractions(ack, projections);
+    }
 
-        when(klineAggregatorService.processTickAndGetResult(
-                eq(symbol), eq(price), eq(quantity), eq(eventTime))).thenReturn(result);
-        when(dbPersistService.persistClosedCandleAsync(symbol, closed)).thenReturn(dbFuture);
+    @Test void committedRecordRedeliveryDoesNotAggregateAgain() {
+        tick("1-0", 60_000);
+        ticks.flush();
+        var before = aggregate.checkpoint();
+        tick("1-0", 60_000);
+        assertEquals(before, aggregate.checkpoint());
+        verify(ack, times(2)).addAck(RecordId.of("1-0"));
+    }
 
-        tickProcessService.process(
-                symbol, price, quantity, eventTime, "mystream", "mygroup", RecordId.of("124-0"));
+    @Test void restartRestoresLiveAndClosedBucketsBeforeReplaying() {
+        tick("1-0", 1_799_000);
+        tick("2-0", 1_801_000);
+        var state = new ConsumerCheckpointService.State(1, aggregate.checkpoint(), Map.of());
+        when(checkpoints.acquire()).thenReturn(new ConsumerCheckpointService.Restored("2-0", state));
+        var restartedAggregate = new KlineAggregatorService();
+        var restarted = new TickProcessService(restartedAggregate, checkpoints, projections, ack, shutdown, metrics);
+        restarted.restore();
+        tick("3-0", 1_799_500);
+        restarted.process("btcusdt", BigDecimal.TEN, BigDecimal.ONE, 1_799_500, "tick", "group", RecordId.of("3-0"));
+        assertEquals(aggregate.checkpoint().active(), restartedAggregate.checkpoint().active());
+        assertEquals(aggregate.checkpoint().recent(), restartedAggregate.checkpoint().recent());
+    }
 
-        verify(ohlcWindowRepository, never()).save(anyString(), anyString(), any());
-        verify(klineBroadcaster, never()).broadcast(any(), anyString());
-        verify(batchAckWorker, never()).addAck(any());
+    @Test void invalidAggregationRollsBackAllIntervals() {
+        tick("1-0", 6_000_000);
+        var before = aggregate.checkpoint();
+        assertThrows(TickProcessService.InvalidTickException.class, () -> tick("2-0", 60_000));
+        assertEquals(before, aggregate.checkpoint());
+    }
 
-        dbFuture.complete(null);
+    @Test void cacheFailureDoesNotUndoCommittedCheckpoint() {
+        tick("1-0", 60_000);
+        doThrow(new IllegalStateException("Redis down")).when(projections).publish(any());
+        ticks.flush();
+        verify(ack).addAck(RecordId.of("1-0"));
+    }
 
-        verify(ohlcWindowRepository).save(eq(symbol), eq("M1"), any());
-        verify(klineBroadcaster).broadcast(any(KlineEvent.class), anyString());
-        verify(batchAckWorker, timeout(1000)).addAck(RecordId.of("124-0"));
+    private void tick(String id, long time) {
+        ticks.process("btcusdt", BigDecimal.TEN, BigDecimal.ONE, time, "tick", "group", RecordId.of(id));
     }
 }

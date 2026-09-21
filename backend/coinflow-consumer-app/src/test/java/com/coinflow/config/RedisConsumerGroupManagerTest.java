@@ -38,13 +38,17 @@ class RedisConsumerGroupManagerTest {
     @Mock
     private ConsumerApplicationShutdown applicationShutdown;
 
+    @Mock
+    private com.coinflow.domain.recovery.service.RecoveryLedger ledger;
+
     private RedisConsumerGroupManager groupManager;
 
     @BeforeEach
     void setUp() {
         TickConsumerProperties properties = new TickConsumerProperties(
                 "tick:raw", "tick-consumer-group", "consumer-1", 200_000L, 0.8);
-        groupManager = new RedisConsumerGroupManager(redisTemplate, properties, applicationShutdown);
+        groupManager = new RedisConsumerGroupManager(redisTemplate, properties, applicationShutdown, ledger);
+        org.mockito.Mockito.lenient().when(ledger.locked(any())).thenReturn("0-0");
     }
 
     @Test
@@ -62,7 +66,7 @@ class RedisConsumerGroupManagerTest {
                 eq(true));
 
         assertThat(new String(streamKey.getValue(), StandardCharsets.UTF_8)).isEqualTo("tick:raw");
-        assertThat(readOffset.getValue().getOffset()).isEqualTo("$");
+        assertThat(readOffset.getValue().getOffset()).isEqualTo("0-0");
     }
 
     @Test
@@ -86,22 +90,22 @@ class RedisConsumerGroupManagerTest {
     }
 
     @Test
-    void keepsSubscriptionActiveForNestedNoGroupError() {
+    void cancelsSubscriptionForNestedNoGroupError() {
         RuntimeException error = new RuntimeException(
                 "Error in execution", new RuntimeException("NOGROUP No such consumer group"));
 
-        assertThat(groupManager.shouldCancelSubscription(error)).isFalse();
+        assertThat(groupManager.shouldCancelSubscription(error)).isTrue();
         assertThat(groupManager.shouldCancelSubscription(new RuntimeException("timeout"))).isTrue();
     }
 
     @Test
-    void recreatesMissingGroupWithoutCancellingSubscription() {
-        stubRedisExecute();
+    void missingGroupRequiresRestartThroughRecovery() {
         RuntimeException error = new RuntimeException("NOGROUP No such consumer group");
 
         groupManager.handleSubscriptionError(error);
 
-        verify(streamCommands).xGroupCreate(any(byte[].class), eq("tick-consumer-group"), any(ReadOffset.class), eq(true));
+        verify(applicationShutdown).request();
+        org.mockito.Mockito.verifyNoInteractions(streamCommands);
     }
 
     @Test

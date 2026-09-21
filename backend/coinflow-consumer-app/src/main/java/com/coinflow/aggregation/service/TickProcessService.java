@@ -1,217 +1,172 @@
 package com.coinflow.aggregation.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.coinflow.aggregation.infrastructure.persistence.DbPersistService;
-import com.coinflow.domain.aggregation.domain.vo.AggregationResult;
+import com.coinflow.config.ConsumerApplicationShutdown;
 import com.coinflow.domain.aggregation.domain.vo.ClosedKlineSnapshot;
-import com.coinflow.domain.aggregation.domain.vo.KlineSnapshot;
 import com.coinflow.domain.aggregation.service.KlineAggregatorService;
-import com.coinflow.domain.ohlc.constant.OhlcWindowPolicy;
-import com.coinflow.domain.ohlc.repository.LiveKlineRepository;
-import com.coinflow.domain.ohlc.repository.OhlcWindowRepository;
-import com.coinflow.domain.ohlc.snapshot.OhlcCandleSnapshot;
-import com.coinflow.event.kline.KlineEvent;
+import com.coinflow.domain.ohlc.constant.OhlcInterval;
+import com.coinflow.domain.recovery.domain.StreamRecordIds;
+import com.coinflow.domain.recovery.domain.VerifiedCandle;
+import com.coinflow.recovery.service.CandleProjectionPublisher;
+import com.coinflow.recovery.service.ConsumerCheckpointService;
 import com.coinflow.monitoring.MetricRecorder;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static com.coinflow.monitoring.constant.MetricConstants.*;
+import jakarta.annotation.PreDestroy;
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import static com.coinflow.monitoring.constant.MetricConstants.*;
-
-/**
- * Orchestrates the tick processing pipeline (SRP).
- * Ensures low-latency propagation and reliable persistence via an async pipeline.
- */
+/** A bounded, ordered micro-batch. Only a committed snapshot permits ACK. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class TickProcessService {
+    private final KlineAggregatorService aggregator;
+    private final ConsumerCheckpointService checkpoints;
+    private final CandleProjectionPublisher projections;
+    private final BatchAckWorker acknowledgements;
+    private final ConsumerApplicationShutdown shutdown;
+    private final MetricRecorder metrics;
+    @Value("${coinflow.recovery.checkpoint-batch-size:500}") private int batchSize = 500;
+    private final Map<String, Long> dedupe = new LinkedHashMap<>();
+    private final Map<String, ConsumerCheckpointService.Candle> updates = new LinkedHashMap<>();
+    private final List<RecordId> pending = new ArrayList<>();
+    private final Map<RecordId, Long> processingStarted = new HashMap<>();
+    private String lastRecord = "0-0";
+    private String committed = "0-0";
+    private boolean ready;
+    private boolean failed;
+    private long lastHeartbeat;
 
-    private final KlineAggregatorService klineAggregatorService;
-    private final LiveKlineRepository liveKlineRepository;
-    private final OhlcWindowRepository ohlcWindowRepository;
-    private final KlineBroadcaster klineBroadcaster;
-    private final DbPersistService dbPersistService;
-    private final MetricRecorder metricRecorder;
-    private final BatchAckWorker batchAckWorker;
-    private final ObjectMapper objectMapper;
-
-    // 인메모리 중복 방지를 위한 처리 완료 ID 캐시 (LRU 기반 정확한 존재 여부 검증)
-    private final Cache<String, Boolean> processedIdCache = Caffeine.newBuilder()
-            .maximumSize(100_000)
-            .expireAfterWrite(Duration.ofMinutes(1))
-            .build();
-
-    /**
-     * Optimized entry point for tick processing (Zero-POJO variant).
-     */
-    public void process(String symbol, BigDecimal price, BigDecimal quantity, long eventTime, 
-                        String streamKey, String group, RecordId recordId) {
-        process(symbol, null, price, quantity, eventTime, streamKey, group, recordId);
+    public synchronized String restore() {
+        var restored = checkpoints.acquire();
+        if (restored.state() != null) {
+            aggregator.restore(restored.state().aggregate());
+            dedupe.putAll(restored.state().dedupe());
+        }
+        committed = lastRecord = restored.recordId();
+        lastHeartbeat = System.currentTimeMillis();
+        ready = true;
+        return committed;
     }
 
-    public void process(String symbol, Long tradeId, BigDecimal price, BigDecimal quantity, long eventTime,
-                        String streamKey, String group, RecordId recordId) {
-        String dedupeKey = tradeId == null ? recordId.getValue() : symbol + ':' + tradeId;
-        
-        // 1. 중복 체크: 이미 처리된 ID라면 비즈니스 로직 스킵 후 ACK만 수행
-        if (isDuplicate(symbol, dedupeKey)) {
-            batchAckWorker.addAck(recordId);
+    public void process(String symbol, BigDecimal price, BigDecimal quantity, long eventTime,
+            String stream, String group, RecordId id) {
+        process(symbol, null, price, quantity, eventTime, stream, group, id);
+    }
+
+    public synchronized void process(String symbol, Long tradeId, BigDecimal price, BigDecimal quantity,
+            long eventTime, String stream, String group, RecordId id) {
+        if (!ready || failed) throw new IllegalStateException("Consumer recovery is not ready");
+        long started = System.nanoTime();
+        if (StreamRecordIds.compare(id.getValue(), committed) <= 0) {
+            acknowledgements.addAck(id);
             return;
         }
+        if (StreamRecordIds.compare(id.getValue(), lastRecord) <= 0) return;
+        String key = tradeId == null ? id.getValue() : symbol.toLowerCase(Locale.ROOT) + ':' + tradeId;
+        if (!dedupe.containsKey(key)) {
+            var before = aggregator.checkpoint();
+            try {
+                var result = aggregator.processTickAndGetResult(symbol, price, quantity, eventTime);
+                Set<String> applied = new HashSet<>();
+                result.liveSnapshots().forEach(s -> applied.add(s.interval()));
+                result.lateUpdatedSnapshots().forEach(s -> applied.add(s.interval()));
+                if (applied.size() != 3) throw new IllegalArgumentException("Tick exceeds late-buffer horizon; batch repair required");
+                result.liveSnapshots().forEach(s -> remember(symbol, s));
+                result.closedSnapshots().forEach(s -> remember(symbol, s));
+                result.lateUpdatedSnapshots().forEach(s -> remember(symbol, s));
+            } catch (RuntimeException e) {
+                aggregator.restore(before);
+                metrics.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_FAILURE);
+                throw new InvalidTickException(e);
+            }
+            dedupe.put(key, System.currentTimeMillis());
+        }
+        pending.add(id);
+        processingStarted.put(id, started);
+        lastRecord = id.getValue();
+        metrics.recordTimeNanos(TICK_MAIN_THREAD_LATENCY, System.nanoTime() - started, TAG_MODULE, "consumer", TAG_TYPE, "main");
+        if (pending.size() >= batchSize) flush();
+    }
 
-        log.trace("Processing raw tick data: symbol={}, price={}, time={}, id={}", 
-                symbol, price, eventTime, recordId);
+    /** Include event buckets and buckets that its transition could have closed. */
+    public synchronized Set<String> affectedCandles(String symbol, long eventTime) {
+        Set<String> keys = new LinkedHashSet<>();
+        for (var interval : OhlcInterval.values()) {
+            long seconds = interval.duration().toSeconds();
+            keys.add(VerifiedCandle.key(symbol, interval.name(), eventTime / 1000 / seconds * seconds));
+        }
+        aggregator.checkpoint().active().forEach((key, state) -> {
+            if (key.startsWith(symbol.toLowerCase(Locale.ROOT) + ':')) keys.add(key + ':' + state.startTime());
+        });
+        return keys;
+    }
 
-        long startNanos = System.nanoTime();
-
+    public synchronized void flush() {
+        if (!ready || failed) return;
         try {
-            // 1단계: 집계 엔진 호출
-            AggregationResult result = klineAggregatorService.processTickAndGetResult(
-                    symbol, price, quantity, eventTime
-            );
-
-            // 2단계: 결과 조율
-            List<CompletableFuture<Void>> dbFutures = coordinateResults(symbol, result);
-
-            metricRecorder.recordTimeNanos(TICK_MAIN_THREAD_LATENCY, System.nanoTime() - startNanos, 
-                    TAG_MODULE, "consumer", TAG_TYPE, "main");
-
-            // 3단계: 비동기 완료 후 ACK
-            completeAndAcknowledge(dbFutures, streamKey, group, recordId, symbol, dedupeKey, startNanos);
-
-        } catch (Exception e) {
-            processedIdCache.invalidate(dedupeKey);
-            log.error("[Consumer] Critical failure processing tick - symbol={}", symbol, e);
-            recordFailure(symbol);
+            if (pending.isEmpty()) {
+                if (System.currentTimeMillis() - lastHeartbeat >= 10_000) {
+                    checkpoints.heartbeat();
+                    lastHeartbeat = System.currentTimeMillis();
+                }
+                return;
+            }
+            // Source-ID replay is fenced by the checkpoint; this cache additionally covers recent WAL redelivery.
+            long expiry = System.currentTimeMillis() - 600_000;
+            dedupe.entrySet().removeIf(e -> e.getValue() < expiry);
+            while (dedupe.size() > 100_000) dedupe.remove(dedupe.keySet().iterator().next());
+            var projection = List.copyOf(updates.values());
+            var finalized = projection.stream().filter(c -> c.value().snapshot().closed()).toList();
+            long commitStarted = System.nanoTime();
+            checkpoints.commit(lastRecord,
+                    new ConsumerCheckpointService.State(1, aggregator.checkpoint(), Map.copyOf(dedupe)), finalized);
+            metrics.recordTimeNanos("consumer.checkpoint.commit", System.nanoTime() - commitStarted);
+            metrics.increment(TICK_PROCESS_STATUS, pending.size(), TAG_STATUS, VALUE_SUCCESS);
+            committed = lastRecord;
+            lastHeartbeat = System.currentTimeMillis();
+            var ackIds = List.copyOf(pending);
+            pending.clear();
+            updates.clear();
+            try { projections.publish(projection); }
+            catch (RuntimeException e) { log.error("CHECKPOINT_PROJECTION_FAILED checkpoint={}", committed, e); }
+            for (RecordId id : ackIds) {
+                acknowledgements.addAck(id);
+                metrics.recordTimeNanos(TICK_PROCESS_LATENCY, System.nanoTime() - processingStarted.remove(id),
+                        TAG_MODULE, "consumer", TAG_TYPE, "e2e");
+            }
+        } catch (RuntimeException e) {
+            failed = true;
+            log.error("CHECKPOINT_COMMIT_FAILED: stop consumption; uncommitted IDs remain in PEL", e);
             throw e;
         }
     }
 
-    private List<CompletableFuture<Void>> coordinateResults(String symbol, AggregationResult result) {
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        result.lateUpdatedSnapshots().forEach(c -> processFinalizedCandidate(symbol, c, futures));
-        result.closedSnapshots().forEach(c -> processFinalizedCandidate(symbol, c, futures));
-        result.liveSnapshots().forEach(c -> processCandidate(symbol, c));
-        return futures;
+    @Scheduled(fixedDelayString = "${coinflow.recovery.checkpoint-interval-ms:50}")
+    public void flushPeriodically() {
+        try { flush(); }
+        catch (RuntimeException e) { shutdown.request(); }
     }
 
-    private void processCandidate(String symbol, ClosedKlineSnapshot snapshot) {
-        KlineEvent event = toEvent(symbol, snapshot.interval(), snapshot.snapshot());
-        try {
-            String json = objectMapper.writeValueAsString(event);
-            liveKlineRepository.save(event, json);
-            klineBroadcaster.broadcast(event, json);
-        } catch (Exception e) {
-            log.error("Failed to serialize kline event for symbol={}, interval={}", symbol, snapshot.interval(), e);
-        }
+    @PreDestroy
+    public synchronized void close() {
+        if (!ready) return;
+        try { flush(); } catch (RuntimeException e) { log.error("Uncommitted checkpoint retained for restart", e); }
+        try { checkpoints.release(); } catch (RuntimeException e) { log.warn("Checkpoint lease will expire", e); }
+        ready = false;
     }
 
-    private void processFinalizedCandidate(String symbol, ClosedKlineSnapshot snapshot,
-            List<CompletableFuture<Void>> futures) {
-        KlineEvent event = toEvent(symbol, snapshot.interval(), snapshot.snapshot());
-        String json;
-        try {
-            json = objectMapper.writeValueAsString(event);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to serialize finalized kline event", e);
-        }
-
-        CompletableFuture<Void> finalizedFuture = dbPersistService
-                .persistClosedCandleAsync(symbol, snapshot)
-                .thenRun(() -> {
-                    OhlcCandleSnapshot candle = toOhlcSnapshot(snapshot.snapshot());
-                    ohlcWindowRepository.save(symbol, snapshot.interval(), candle);
-                    ohlcWindowRepository.trim(
-                            symbol, snapshot.interval(), OhlcWindowPolicy.MAX_SIZE);
-                    liveKlineRepository.deleteIfStartTimeMatches(
-                            symbol, snapshot.interval(), snapshot.snapshot().startTime());
-                    klineBroadcaster.broadcast(event, json);
-                });
-        futures.add(finalizedFuture);
+    private void remember(String symbol, ClosedKlineSnapshot candle) {
+        updates.put(symbol + ':' + candle.interval() + ':' + candle.snapshot().startTime(),
+                new ConsumerCheckpointService.Candle(symbol, candle));
     }
 
-    private OhlcCandleSnapshot toOhlcSnapshot(KlineSnapshot snapshot) {
-        LocalDateTime bucketTime = LocalDateTime.ofEpochSecond(
-                snapshot.startTime(), 0, ZoneOffset.UTC);
-        return new OhlcCandleSnapshot(
-                bucketTime,
-                snapshot.startTime(),
-                snapshot.open(),
-                snapshot.high(),
-                snapshot.low(),
-                snapshot.close(),
-                snapshot.volume()
-        );
-    }
-
-    private KlineEvent toEvent(String symbol, String interval, KlineSnapshot snapshot) {
-        return KlineEvent.builder()
-                .symbol(symbol)
-                .interval(interval)
-                .startTime(snapshot.startTime())
-                .closeTime(snapshot.closeTime())
-                .open(snapshot.open())
-                .high(snapshot.high())
-                .low(snapshot.low())
-                .close(snapshot.close())
-                .volume(snapshot.volume())
-                .trades(snapshot.trades())
-                .closed(snapshot.closed())
-                .build();
-    }
-
-    private void completeAndAcknowledge(List<CompletableFuture<Void>> futures,
-            String streamKey, String group, RecordId recordId,
-            String symbol, String dedupeKey, long startNanos) {
-        if (futures.isEmpty()) {
-            finalizeProcess(streamKey, group, recordId, symbol, startNanos);
-        } else {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenRun(() -> finalizeProcess(streamKey, group, recordId, symbol, startNanos))
-                    .exceptionally(ex -> {
-                        processedIdCache.invalidate(dedupeKey);
-                        log.error("Async pipeline failed for {}. Message will stick in PENDING.", symbol, ex);
-                        recordFailure(symbol);
-                        return (Void) null;
-                    });
-        }
-    }
-
-    private void finalizeProcess(String streamKey, String group, RecordId recordId, String symbol, long startNanos) {
-        batchAckWorker.addAck(recordId);
-        long e2eDurationNanos = System.nanoTime() - startNanos;
-        metricRecorder.recordTimeNanos(TICK_PROCESS_LATENCY, e2eDurationNanos, TAG_MODULE, "consumer", TAG_TYPE, "e2e");
-        metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_SUCCESS);
-        log.trace("Acknowledge stream successfully (E2E Latency: {}ns) - symbol={}", e2eDurationNanos, symbol);
-    }
-
-    private void recordFailure(String symbol) {
-        metricRecorder.increment(TICK_PROCESS_STATUS, TAG_STATUS, VALUE_FAILURE);
-    }
-
-    /**
-     * Checks if the incoming record is a duplicate based on the exact RecordId value.
-     * Uses a high-performance Caffeine cache to handle out-of-order re-deliveries.
-     */
-    private boolean isDuplicate(String symbol, String dedupeKey) {
-        if (processedIdCache.getIfPresent(dedupeKey) != null) {
-            log.trace("Duplicate tick detected for {}: key={}. Skipping aggregation.",
-                    symbol, dedupeKey);
-            return true;
-        }
-
-        processedIdCache.put(dedupeKey, Boolean.TRUE);
-        return false;
+    public static class InvalidTickException extends RuntimeException {
+        public InvalidTickException(Throwable cause) { super(cause); }
     }
 }

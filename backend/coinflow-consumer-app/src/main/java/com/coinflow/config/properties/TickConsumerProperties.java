@@ -13,7 +13,7 @@ public record TickConsumerProperties(
         @NotBlank String streamKey,
         @NotBlank String group,
         @NotBlank String consumerName,
-        @Positive long maxLength,
+        @jakarta.validation.constraints.PositiveOrZero long maxLength,
         @DecimalMin("0.0") @DecimalMax("1.0") double lagWarningRatio
 ) {
 }
