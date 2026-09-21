@@ -73,12 +73,16 @@ class ReconciliationJobIntegrationTest {
         @Autowired
         private ObjectMapper objectMapper;
 
+        @Autowired
+        private com.coinflow.domain.recovery.repository.VerifiedCandleRepository verified;
+
         private MockRestServiceServer mockServer;
         private Symbol testSymbol;
 
         @BeforeEach
         void setUp() {
                 mockServer = MockRestServiceServer.createServer(restTemplate);
+                verified.deleteAll();
                 ohlc30mRepository.deleteAll();
                 ohlc5mRepository.deleteAll();
                 ohlc1mRepository.deleteAll();
@@ -145,7 +149,8 @@ class ReconciliationJobIntegrationTest {
                                 .toJobParameters();
 
                 // when
-                jobLauncher.run(klineReconciliationJob, params);
+                var execution = jobLauncher.run(klineReconciliationJob, params);
+                assertThat(execution.getStatus()).isEqualTo(org.springframework.batch.core.BatchStatus.COMPLETED);
 
                 // then
                 // 검증 1: 1분봉 보정 확인 (10:00 데이터가 정답으로 교체되었는지 핵심 필드만 확인)
@@ -159,6 +164,7 @@ class ReconciliationJobIntegrationTest {
                 assertThat(ohlc5mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime1000))
                                 .isPresent();
                 assertThat(ohlc30mRepository.findBySymbolIdAndBucketTime(testSymbol.getId(), bucketTime1000))
-                                .isPresent();
+                                .isEmpty(); // Five minutes cannot certify a complete thirty-minute candle.
+                assertThat(verified.count()).isEqualTo(6); // Five M1 candles plus one complete M5 candle.
         }
 }

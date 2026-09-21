@@ -1,5 +1,9 @@
 package com.coinflow.replay.batch.config;
 
+import com.coinflow.domain.recovery.service.RecoveryCandleStore;
+import com.coinflow.domain.recovery.service.RecoveryLedger;
+import org.springframework.batch.core.ChunkListener;
+import org.springframework.batch.core.scope.context.ChunkContext;
 import com.coinflow.domain.log.service.MissingTickLogService;
 import com.coinflow.domain.ohlc.domain.AbstractOhlc;
 import com.coinflow.domain.ohlc.service.Ohlc1mService;
@@ -52,15 +56,21 @@ public class ReconciliationJobConfig {
     private final Ohlc30mService ohlc30mService;
     private final SymbolService symbolService;
     private final MissingTickLogService missingTickLogService;
+    private final RecoveryCandleStore recoveryCandles;
+    private final RecoveryLedger recoveryLedger;
 
     public ReconciliationJobConfig(Ohlc1mService ohlc1mService, Ohlc5mService ohlc5mService,
             Ohlc30mService ohlc30mService, SymbolService symbolService,
-            MissingTickLogService missingTickLogService) {
+            MissingTickLogService missingTickLogService,
+            RecoveryCandleStore recoveryCandles,
+            RecoveryLedger recoveryLedger) {
         this.ohlc1mService = ohlc1mService;
         this.ohlc5mService = ohlc5mService;
         this.ohlc30mService = ohlc30mService;
         this.symbolService = symbolService;
         this.missingTickLogService = missingTickLogService;
+        this.recoveryCandles = recoveryCandles;
+        this.recoveryLedger = recoveryLedger;
     }
 
     @Bean
@@ -123,6 +133,7 @@ public class ReconciliationJobConfig {
                 .reader(klineReader)
                 .processor(klineProcessor)
                 .writer(klineWriter)
+                .listener(repairLock())
                 .build();
     }
 
@@ -137,6 +148,7 @@ public class ReconciliationJobConfig {
                 .reader(rollup5mReader)
                 .processor(rollupProcessor)
                 .writer(rollupWriter)
+                .listener(repairLock())
                 .build();
     }
 
@@ -151,6 +163,7 @@ public class ReconciliationJobConfig {
                 .reader(rollup30mReader)
                 .processor(rollupProcessor)
                 .writer(rollupWriter)
+                .listener(repairLock())
                 .build();
     }
 
@@ -182,7 +195,7 @@ public class ReconciliationJobConfig {
     @Bean
     @StepScope
     public BinanceKlineWriter klineWriter() {
-        return new BinanceKlineWriter(ohlc1mService, missingTickLogService);
+        return new BinanceKlineWriter(recoveryCandles, missingTickLogService);
     }
 
     @Bean
@@ -212,12 +225,22 @@ public class ReconciliationJobConfig {
     @Bean
     @StepScope
     public OhlcRollupProcessor rollupProcessor() {
-        return new OhlcRollupProcessor(ohlc1mService, ohlc5mService, ohlc30mService);
+        return new OhlcRollupProcessor(ohlc1mService, recoveryCandles);
     }
 
     @Bean
     @StepScope
     public OhlcRollupWriter rollupWriter() {
-        return new OhlcRollupWriter(ohlc5mService, ohlc30mService);
+        return new OhlcRollupWriter(recoveryCandles);
+    }
+
+    private ChunkListener repairLock() {
+        return new ChunkListener() {
+            @Override
+            public void beforeChunk(ChunkContext context) {
+                // Join the chunk transaction: hold the fence through reads, writes and verification markers.
+                recoveryLedger.locked(checkpoint -> null);
+            }
+        };
     }
 }

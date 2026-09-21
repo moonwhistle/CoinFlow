@@ -37,7 +37,7 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Reconc
         if (symbolName == null || symbolName.trim().isEmpty()) {
             throw new ReplayException(ReplayErrorCode.INVALID_BATCH_PARAMETER);
         }
-        if (intervalType == null || intervalType.trim().isEmpty()) {
+        if (!ReconciliationBatchConstants.INTERVAL_1M.equals(intervalType)) {
             throw new ReplayException(ReplayErrorCode.INVALID_BATCH_PARAMETER);
         }
 
@@ -49,6 +49,13 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Reconc
 
     @Override
     public ReconciliationResult process(@NonNull BinanceKline item) {
+        if (item.openTime() % 60_000 != 0 || item.closeTime() != item.openTime() + 59_999
+                || item.low().signum() <= 0 || item.volume().signum() < 0
+                || item.high().compareTo(item.open().max(item.close())) < 0
+                || item.low().compareTo(item.open().min(item.close())) > 0) {
+            throw new IllegalArgumentException("Invalid authoritative one-minute candle");
+        }
+        if (item.closeTime() >= System.currentTimeMillis()) return null;
         if (cachedSymbol == null) {
             cachedSymbol = symbolService.findBySymbol(symbolName);
         }
@@ -83,12 +90,17 @@ public class BinanceKlineProcessor implements ItemProcessor<BinanceKline, Reconc
             MissingTickLog logEntry = createMissingTickLog(bucketTime, ReconciliationReason.MISMATCH, item.close(),
                     existingOhlc.getClosePrice());
 
-            existingOhlc.apply(item.open(), item.high(), item.low(), item.close(), VolumeScaler.toLong(item.volume()));
-            return new ReconciliationResult(existingOhlc, logEntry);
+            return new ReconciliationResult(candidate(item, bucketTime), logEntry);
         }
 
         // Case 3: 정상 (정합성 완벽 일치, DB 조작 생략)
-        return null;
+        return new ReconciliationResult(candidate(item, bucketTime), null);
+    }
+
+    private Ohlc1m candidate(BinanceKline item, LocalDateTime bucketTime) {
+        return Ohlc1m.builder().symbol(cachedSymbol).bucketTime(bucketTime)
+                .open(item.open()).high(item.high()).low(item.low()).close(item.close())
+                .volume(VolumeScaler.toLong(item.volume())).build();
     }
 
     private boolean isMismatch(Ohlc1m existing, BinanceKline binance) {

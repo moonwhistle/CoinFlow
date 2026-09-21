@@ -1,5 +1,6 @@
 package com.coinflow.replay.batch.writer;
 
+import com.coinflow.domain.recovery.service.RecoveryCandleStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.item.Chunk;
@@ -19,11 +20,11 @@ import com.coinflow.replay.batch.processor.ReconciliationResult;
 public class BinanceKlineWriter implements ItemWriter<ReconciliationResult> {
     private static final Logger log = LoggerFactory.getLogger(BinanceKlineWriter.class);
 
-    private final Ohlc1mService ohlc1mService;
+    private final RecoveryCandleStore candles;
     private final MissingTickLogService missingTickLogService;
 
-    public BinanceKlineWriter(Ohlc1mService ohlc1mService, MissingTickLogService missingTickLogService) {
-        this.ohlc1mService = ohlc1mService;
+    public BinanceKlineWriter(RecoveryCandleStore candles, MissingTickLogService missingTickLogService) {
+        this.candles = candles;
         this.missingTickLogService = missingTickLogService;
     }
 
@@ -45,7 +46,7 @@ public class BinanceKlineWriter implements ItemWriter<ReconciliationResult> {
 
         if (!candles.isEmpty()) {
             log.info("Writing a chunk of {} Ohlc1m records to DB", candles.size());
-            ohlc1mService.saveAll(candles);
+            candles.forEach(this.candles::saveVerified);
         }
 
         if (!logs.isEmpty()) {
