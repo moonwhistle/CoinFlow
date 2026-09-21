@@ -9,6 +9,19 @@ import org.junit.jupiter.api.Test;
 class TickRawBinaryCodecTest {
 
     @Test
+    @DisplayName("v2 payload는 거래소 tradeId를 보존해야 한다")
+    void shouldEncodeAndExtractTradeIdInV2() {
+        byte[] encoded = TickRawBinaryCodec.encode(
+                "btcusdt", 987654321L, new BigDecimal("65000.1"), new BigDecimal("0.01"), 1711512345678L);
+
+        assertThat(TickRawBinaryCodec.extractVersion(encoded)).isEqualTo(TickRawBinaryCodec.PROTOCOL_VERSION);
+        assertThat(TickRawBinaryCodec.extractTradeId(encoded)).isEqualTo(987654321L);
+        assertThat(TickRawBinaryCodec.extractPrice(encoded)).isEqualByComparingTo("65000.1");
+        assertThat(TickRawBinaryCodec.extractQuantity(encoded)).isEqualByComparingTo("0.01");
+        assertThat(TickRawBinaryCodec.extractEventTime(encoded)).isEqualTo(1711512345678L);
+    }
+
+    @Test
     @DisplayName("정상적인 틱 데이터를 인코딩하고 각 필드를 정확하게 추출해야 한다")
     void shouldEncodeAndExtractCorrectly() {
         // given
@@ -22,6 +35,7 @@ class TickRawBinaryCodecTest {
 
         // then
         assertThat(TickRawBinaryCodec.extractSymbol(encoded)).isEqualTo(symbol);
+        assertThat(TickRawBinaryCodec.extractVersion(encoded)).isEqualTo(TickRawBinaryCodec.LEGACY_PROTOCOL_VERSION);
         assertThat(TickRawBinaryCodec.extractPrice(encoded)).isEqualByComparingTo(price);
         assertThat(TickRawBinaryCodec.extractQuantity(encoded)).isEqualByComparingTo(quantity);
         assertThat(TickRawBinaryCodec.extractEventTime(encoded)).isEqualTo(eventTime);

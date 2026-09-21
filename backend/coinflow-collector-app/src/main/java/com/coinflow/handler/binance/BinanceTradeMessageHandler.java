@@ -5,6 +5,7 @@ import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.EV
 import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.PRICE;
 import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.QUANTITY;
 import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.SYMBOL;
+import static com.coinflow.handler.binance.constant.BinanceTradeMessageFields.TRADE_ID;
 import static com.coinflow.monitoring.constant.MetricConstants.WEBSOCKET_RECEIVE_COUNT;
 
 import com.coinflow.handler.TickMessageHandler;
@@ -41,6 +42,7 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
             BigDecimal price = null;
             BigDecimal quantity = null;
             long eventTime = 0;
+            long tradeId = -1;
 
             // 1. JSON 스트리밍 파싱 (JsonNode 생성 방지)
             while (parser.nextToken() != JsonToken.END_OBJECT) {
@@ -57,14 +59,15 @@ public class BinanceTradeMessageHandler implements TickMessageHandler {
                         else if (PRICE.equals(dataFieldName)) price = new BigDecimal(parser.getText());
                         else if (QUANTITY.equals(dataFieldName)) quantity = new BigDecimal(parser.getText());
                         else if (EVENT_TIME.equals(dataFieldName)) eventTime = parser.getLongValue();
+                        else if (TRADE_ID.equals(dataFieldName)) tradeId = parser.getLongValue();
                     }
                 }
             }
 
             // 2. 바이너리 인코딩 및 전송
             // Note: TickRawBinaryCodec.encode() 내부에서 TickValidator.validate()가 강제 호출됨 (DRY)
-            if (symbol != null && price != null && quantity != null && eventTime != 0) {
-                byte[] rawData = TickRawBinaryCodec.encode(symbol, price, quantity, eventTime);
+            if (symbol != null && price != null && quantity != null && eventTime != 0 && tradeId >= 0) {
+                byte[] rawData = TickRawBinaryCodec.encode(symbol, tradeId, price, quantity, eventTime);
                 String tickerPayload = createTickerPayload(symbol, price, quantity, eventTime);
                 publishTicker(tickerPayload, symbol);
                 publishStream(rawData, symbol);

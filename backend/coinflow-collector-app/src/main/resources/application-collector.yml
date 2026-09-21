@@ -27,6 +27,18 @@ redis:
   stream:
     tick:
       stream-key: ${REDIS_STREAM_TICK_STREAMKEY:tick:raw}
-      max-length: ${REDIS_STREAM_TICK_MAXLENGTH:200000}
+      max-length: ${REDIS_STREAM_TICK_MAXLENGTH:0}
   pubsub:
     ticker-topic: ${REDIS_PUBSUB_TICKER_TOPIC:ticker:broadcast}
+
+collector:
+  delivery:
+    mode: ${COLLECTOR_DELIVERY_MODE:DIRECT}
+    batch-size: ${COLLECTOR_DELIVERY_BATCH_SIZE:500}
+    flush-interval: ${COLLECTOR_DELIVERY_FLUSH_INTERVAL:10ms}
+    queue-capacity: ${COLLECTOR_DELIVERY_QUEUE_CAPACITY:100000}
+    retry-initial-delay: ${COLLECTOR_DELIVERY_RETRY_INITIAL_DELAY:100ms}
+    retry-max-delay: ${COLLECTOR_DELIVERY_RETRY_MAX_DELAY:5s}
+    wal-directory: ${COLLECTOR_WAL_DIRECTORY:./data/collector-wal}
+    wal-segment-bytes: ${COLLECTOR_WAL_SEGMENT_BYTES:134217728}
+    wal-max-bytes: ${COLLECTOR_WAL_MAX_BYTES:1073741824}

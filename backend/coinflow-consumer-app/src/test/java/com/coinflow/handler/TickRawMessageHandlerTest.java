@@ -27,6 +27,9 @@ class TickRawMessageHandlerTest {
     @Mock
     private TickProcessService tickProcessService;
 
+    @Mock
+    private com.coinflow.recovery.service.FailedRecordService failures;
+
     @InjectMocks
     private TickRawMessageHandler handler;
 
@@ -50,6 +53,7 @@ class TickRawMessageHandlerTest {
         assertThat(result).isTrue();
         verify(tickProcessService).process(
                 eq(symbol),
+                eq(null),
                 eq(price),
                 eq(quantity),
                 eq(eventTime),
@@ -57,6 +61,25 @@ class TickRawMessageHandlerTest {
                 eq("group"),
                 eq(recordId)
         );
+    }
+
+    @Test
+    @DisplayName("v2 바이너리의 tradeId를 처리 서비스에 전달해야 한다")
+    void shouldPassTradeIdFromV2Payload() {
+        String symbol = "btcusdt";
+        BigDecimal price = new BigDecimal("65000.50");
+        BigDecimal quantity = new BigDecimal("0.1");
+        long eventTime = 1711512345000L;
+        long tradeId = 123456L;
+        byte[] rawData = TickRawBinaryCodec.encode(symbol, tradeId, price, quantity, eventTime);
+        RecordId recordId = RecordId.of("1711512345000-0");
+
+        boolean result = handler.handle(Map.of(RAW_PAYLOAD_FIELD, rawData), "tick:raw", "group", recordId);
+
+        assertThat(result).isTrue();
+        verify(tickProcessService).process(
+                eq(symbol), eq(tradeId), eq(price), eq(quantity), eq(eventTime),
+                eq("tick:raw"), eq("group"), eq(recordId));
     }
 
     @Test

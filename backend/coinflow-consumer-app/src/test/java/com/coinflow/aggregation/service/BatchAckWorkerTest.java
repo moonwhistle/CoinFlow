@@ -181,8 +181,8 @@ class BatchAckWorkerTest {
                 expectedIds(0, 500),
                 expectedIds(500, 500),
                 expectedIds(1_000, 100));
-        verify(defaultCounter, times(2)).increment(500.0);
-        verify(defaultCounter).increment(100.0);
+        // Redis returned zero (e.g. the first response was lost after applying XACK).
+        verify(defaultCounter, times(3)).increment(0.0);
     }
 
     private void addRecords(long start, int count) {

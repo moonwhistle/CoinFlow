@@ -5,6 +5,8 @@ build/
 out/
 *.class
 *.log
+data/collector-wal/
+**/data/collector-wal/
 .DS_Store
 .env
 

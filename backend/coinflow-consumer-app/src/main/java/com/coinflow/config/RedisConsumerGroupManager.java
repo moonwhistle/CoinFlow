@@ -1,5 +1,6 @@
 package com.coinflow.config;
 
+import com.coinflow.domain.recovery.service.RecoveryLedger;
 import com.coinflow.config.properties.TickConsumerProperties;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
@@ -20,14 +21,16 @@ public class RedisConsumerGroupManager {
     private final RedisTemplate<String, String> redisTemplate;
     private final TickConsumerProperties properties;
     private final ConsumerApplicationShutdown applicationShutdown;
+    private final RecoveryLedger ledger;
 
     public void ensureConsumerGroup() {
+        String offset = ledger.locked(checkpoint -> checkpoint.getRecordId());
         try {
             redisTemplate.execute((RedisCallback<String>) connection ->
                     connection.streamCommands().xGroupCreate(
                             raw(properties.streamKey()),
                             properties.group(),
-                            ReadOffset.latest(),
+                            ReadOffset.from(offset),
                             true));
             log.info("Created Redis consumer group. stream={}, group={}",
                     properties.streamKey(), properties.group());
@@ -45,26 +48,12 @@ public class RedisConsumerGroupManager {
     }
 
     public void handleSubscriptionError(Throwable error) {
-        if (!isNoGroup(error)) {
-            log.error("Redis Stream subscription failed. stream={}, group={}",
-                    properties.streamKey(), properties.group(), error);
-            applicationShutdown.request();
-            return;
-        }
-
-        log.warn("Redis consumer group is missing. Recreating group without cancelling subscription. "
-                        + "stream={}, group={}",
-                properties.streamKey(), properties.group());
-        try {
-            ensureConsumerGroup();
-        } catch (RuntimeException recoveryError) {
-            log.error("Failed to recover missing Redis consumer group. stream={}, group={}",
-                    properties.streamKey(), properties.group(), recoveryError);
-        }
+        log.error("Redis subscription failed; restart through checkpoint recovery is required", error);
+        applicationShutdown.request();
     }
 
     public boolean shouldCancelSubscription(Throwable error) {
-        return !isNoGroup(error);
+        return true;
     }
 
     boolean isNoGroup(Throwable error) {

@@ -84,7 +84,7 @@ public class StreamLagMonitorWorker {
     }
 
     void updateBacklogMetrics(double lagValue) {
-        double retentionRatio = lagValue / properties.maxLength();
+        double retentionRatio = properties.maxLength() == 0 ? 0 : lagValue / properties.maxLength();
         backlogGauge.set(lagValue);
         backlogRetentionRatioGauge.set(retentionRatio);
 

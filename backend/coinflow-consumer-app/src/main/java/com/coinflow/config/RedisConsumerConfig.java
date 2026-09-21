@@ -1,5 +1,6 @@
 package com.coinflow.config;
 
+import com.coinflow.recovery.service.StreamRecoveryService;
 import com.coinflow.config.properties.TickConsumerProperties;
 import com.coinflow.consumer.TickRawEventConsumer;
 import jakarta.annotation.PreDestroy;
@@ -33,6 +34,7 @@ public class RedisConsumerConfig {
     private final TickRawEventConsumer consumer;
     private final TickConsumerProperties properties;
     private final RedisConsumerGroupManager consumerGroupManager;
+    private final StreamRecoveryService recoveryService;
 
     private StreamMessageListenerContainer<String, MapRecord<String, String, byte[]>> container;
 
@@ -40,6 +42,7 @@ public class RedisConsumerConfig {
     @ConditionalOnProperty(prefix = "redis.stream.tick", name = "enabled", havingValue = "true", matchIfMissing = true)
     public StreamMessageListenerContainer<String, MapRecord<String, String, byte[]>> tickStreamContainer() {
         consumerGroupManager.ensureConsumerGroup();
+        recoveryService.recover();
 
         // 바이너리 수신을 위한 컨테이너 옵션 설정 (ByteArrayRedisSerializer)
         @SuppressWarnings("unchecked")

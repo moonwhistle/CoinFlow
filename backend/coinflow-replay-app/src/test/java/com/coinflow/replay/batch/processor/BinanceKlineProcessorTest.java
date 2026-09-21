@@ -123,7 +123,8 @@ class BinanceKlineProcessorTest {
         ReconciliationResult result = processor.process(binanceKline);
 
         // then
-        assertThat(result).isNull();
+        assertThat(result).isNotNull();
+        assertThat(result.missingTickLog()).isNull();
     }
 
     private BinanceKline createBinanceKline(long openTime, String o, String h, String l, String c, String v) {

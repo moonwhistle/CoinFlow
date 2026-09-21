@@ -70,6 +70,7 @@ class BinanceTradeMessageHandlerTest {
         publishOrder.verify(tickerPublisher).publish(tickerCaptor.getValue());
         publishOrder.verify(publisher).publish(rawCaptor.getValue());
         assertThat(TickRawBinaryCodec.extractSymbol(rawCaptor.getValue())).isEqualTo("btcusdt");
+        assertThat(TickRawBinaryCodec.extractTradeId(rawCaptor.getValue())).isEqualTo(12345L);
         assertThat(TickRawBinaryCodec.extractPrice(rawCaptor.getValue())).isEqualByComparingTo("65432.12345678");
         assertThat(TickRawBinaryCodec.extractQuantity(rawCaptor.getValue())).isEqualByComparingTo("0.001234");
         assertThat(TickRawBinaryCodec.extractEventTime(rawCaptor.getValue())).isEqualTo(1711512345678L);
@@ -115,7 +116,7 @@ class BinanceTradeMessageHandlerTest {
     private String validMessage() {
         return """
                 {"stream":"btcusdt@trade","data":{
-                  "E":1711512345678,"s":"BTCUSDT","p":"65432.1","q":"0.001"
+                  "E":1711512345678,"s":"BTCUSDT","t":12345,"p":"65432.1","q":"0.001"
                 }}
                 """;
     }

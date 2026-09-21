@@ -103,6 +103,25 @@ public class KlineState {
         return this.open != null;
     }
 
+    /** Unlike takeSnapshot, checkpointing must not consume the broadcast dirty flag. */
+    public synchronized KlineSnapshot checkpoint() {
+        return new KlineSnapshot(startTime, closeTime, open, high, low, close,
+                VolumeScaler.toBigDecimal(volume), trades, closed);
+    }
+
+    public synchronized void restore(KlineSnapshot snapshot) {
+        startTime = snapshot.startTime();
+        closeTime = snapshot.closeTime();
+        open = snapshot.open();
+        high = snapshot.high();
+        low = snapshot.low();
+        close = snapshot.close();
+        volume = VolumeScaler.toLong(snapshot.volume());
+        trades = snapshot.trades();
+        closed = snapshot.closed();
+        dirty = true;
+    }
+
     private void reset(long bucketStart) {
         this.startTime = bucketStart;
         this.closeTime = bucketStart + durationSeconds - 1;

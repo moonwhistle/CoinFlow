@@ -13,9 +13,27 @@ dependencyManagement {
 dependencies {
     // TickRawBinaryCodec, TickPublisher 등 공통 유틸
     implementation project(':coinflow-common')
+    implementation project(':coinflow-infra-redis')
 
     // Spring Boot 없이 직접 Redis 연결
     implementation 'io.lettuce:lettuce-core:6.3.2.RELEASE'
+    implementation 'org.hdrhistogram:HdrHistogram:2.2.2'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+}
+
+tasks.register('collectorDeliveryBenchmark', JavaExec) {
+    group = 'benchmark'
+    description = 'Runs the isolated Collector delivery benchmark'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.coinflow.loadtest.CollectorDeliveryBenchmarkMain'
+}
+
+tasks.register('collectorWalRecoveryProbe', JavaExec) {
+    group = 'verification'
+    description = 'Runs a process-crash/restart probe for the collector WAL.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.coinflow.loadtest.CollectorWalRecoveryProbeMain'
 }
 
 application {
@@ -23,7 +41,7 @@ application {
 }
 
 jar {
-    dependsOn(':coinflow-common:jar')
+    dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes 'Main-Class': 'com.coinflow.loadtest.LoadTestMain'
     }
