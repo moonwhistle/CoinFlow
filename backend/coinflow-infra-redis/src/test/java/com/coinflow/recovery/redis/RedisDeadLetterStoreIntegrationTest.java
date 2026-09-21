@@ -60,4 +60,15 @@ class RedisDeadLetterStoreIntegrationTest {
         assertFalse(redis.hasKey(stream + ":dlq"));
         assertEquals(1, redis.opsForStream().pending(stream, "group").getTotalPendingMessages());
     }
+
+    @Test void disabledProducerMaxlenPreservesRecoveryHistory() {
+        var raw = new com.coinflow.common.config.RedisConfig().rawRedisTemplate(connection);
+        raw.afterPropertiesSet();
+        var metrics = new com.coinflow.monitoring.MetricRecorder(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        var publisher = new com.coinflow.publish.stream.RedisStreamTickPublisher(raw, metrics, stream, 0);
+        publisher.publish(new byte[] {1});
+        publisher.publishBatch(List.of(new byte[] {2}, new byte[] {3}));
+        assertEquals(4, redis.opsForStream().size(stream));
+        assertEquals(1, redis.opsForStream().pending(stream, "group").getTotalPendingMessages());
+    }
 }

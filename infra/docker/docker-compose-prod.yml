@@ -85,7 +85,7 @@ services:
       - REDIS_STREAM_TICK_STREAMKEY=tick:raw
       - REDIS_STREAM_TICK_GROUP=tick-consumer-group
       - REDIS_STREAM_TICK_CONSUMERNAME=consumer-1
-      - REDIS_STREAM_TICK_MAXLENGTH=200000
+      - REDIS_STREAM_TICK_MAXLENGTH=0
       - REDIS_STREAM_TICK_LAGWARNINGRATIO=0.8
       - LOGGING_LEVEL_COM_COINFLOW=INFO
       - LOGGING_LEVEL_ORG_HIBERNATE_SQL=WARN
@@ -126,7 +126,7 @@ services:
       - BINANCE_WEBSOCKET_SYMBOLS_0=btcusdt
       - BINANCE_WEBSOCKET_TRADESTREAMSUFFIX=@trade
       - REDIS_STREAM_TICK_STREAMKEY=tick:raw
-      - REDIS_STREAM_TICK_MAXLENGTH=200000
+      - REDIS_STREAM_TICK_MAXLENGTH=0
       - LOGGING_LEVEL_COM_COINFLOW=INFO
       - COLLECTOR_DELIVERY_MODE=${COLLECTOR_DELIVERY_MODE:-DIRECT}
       - COLLECTOR_WAL_DIRECTORY=/app/data/collector-wal
@@ -138,6 +138,32 @@ services:
         condition: service_healthy
     volumes:
       - collector_wal:/app/data/collector-wal
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: always
+
+  replay-app:
+    image: ${DOCKERHUB_USERNAME}/coinflow-replay:latest
+    build:
+      context: ../../backend/coinflow-replay-app
+      dockerfile: Dockerfile
+    container_name: coinflow-replay
+    environment:
+      - SPRING_CONFIG_NAME=application-replay
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ohlc
+      - SPRING_DATASOURCE_USERNAME=ohlc_user
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-1234}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     logging:
       driver: json-file
       options:
@@ -177,7 +203,7 @@ services:
       - --appendonly
       - "yes"
       - --appendfsync
-      - everysec
+      - always
       - --protected-mode
       - "no"
       - --requirepass

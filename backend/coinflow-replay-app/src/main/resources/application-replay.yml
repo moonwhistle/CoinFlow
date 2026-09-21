@@ -23,6 +23,9 @@ binance:
     base-url: "https://api.binance.com"
 
 coinflow:
+  recovery:
+    maintenance:
+      enabled: true
   batch:
     reconciliation:
       interval: 300000 # 5 minutes in milliseconds

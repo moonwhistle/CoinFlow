@@ -28,10 +28,10 @@ public class TickPublisherConfig {
             RedisTemplate<String, byte[]> rawRedisTemplate,
             MetricRecorder metricRecorder,
             @Value("${redis.stream.tick.stream-key:tick:raw}") String streamKey,
-            @Value("${redis.stream.tick.max-length:200000}") long maxLength
+            @Value("${redis.stream.tick.max-length:0}") long maxLength
     ) {
         Assert.hasText(streamKey, "redis.stream.tick.stream-key must not be blank");
-        Assert.isTrue(maxLength > 0, "redis.stream.tick.max-length must be greater than zero");
+        Assert.isTrue(maxLength >= 0, "redis.stream.tick.max-length must be nonnegative; 0 enables checkpoint-based trimming");
         return new RedisStreamTickPublisher(rawRedisTemplate, metricRecorder, streamKey, maxLength);
     }
 

@@ -67,7 +67,7 @@ public class RedisStreamTickPublisher implements TickPublisher {
                 .in(streamKey)
                 .ofMap(Map.of(RAW_PAYLOAD_FIELD, rawData));
 
-        XAddOptions options = XAddOptions.maxlen(maxLength).approximateTrimming(true);
+        XAddOptions options = maxLength > 0 ? XAddOptions.maxlen(maxLength).approximateTrimming(true) : XAddOptions.none();
 
         long started = System.nanoTime();
         RecordId recordId = executePublish(() -> rawRedisTemplate.opsForStream().add(record, options));
@@ -85,7 +85,7 @@ public class RedisStreamTickPublisher implements TickPublisher {
 
         byte[] key = rawRedisTemplate.getStringSerializer().serialize(streamKey);
         byte[] field = rawRedisTemplate.getStringSerializer().serialize(RAW_PAYLOAD_FIELD);
-        XAddOptions options = XAddOptions.maxlen(maxLength).approximateTrimming(true);
+        XAddOptions options = maxLength > 0 ? XAddOptions.maxlen(maxLength).approximateTrimming(true) : XAddOptions.none();
 
         long started = System.nanoTime();
         try {
