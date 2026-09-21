@@ -39,11 +39,13 @@ public class TickProcessService {
     private String lastRecord = "0-0";
     private String committed = "0-0";
     private boolean ready;
+    private boolean baseline;
     private boolean failed;
     private long lastHeartbeat;
 
     public synchronized String restore() {
         var restored = checkpoints.acquire();
+        baseline = restored.state() != null;
         if (restored.state() != null) {
             aggregator.restore(restored.state().aggregate());
             dedupe.putAll(restored.state().dedupe());
@@ -52,6 +54,17 @@ public class TickProcessService {
         lastHeartbeat = System.currentTimeMillis();
         ready = true;
         return committed;
+    }
+
+    public synchronized boolean hasBaseline() { return baseline; }
+
+    /** Persist an empty initial state before the first XREADGROUP can advance the group. */
+    public synchronized void establishBaseline() {
+        if (!ready || failed) throw new IllegalStateException("Consumer recovery is not ready");
+        if (!baseline) {
+            checkpoints.commit(lastRecord, new ConsumerCheckpointService.State(1, aggregator.checkpoint(), Map.copyOf(dedupe)), List.of());
+            baseline = true;
+        }
     }
 
     public void process(String symbol, BigDecimal price, BigDecimal quantity, long eventTime,
@@ -107,10 +120,19 @@ public class TickProcessService {
         return keys;
     }
 
+    /** A durable failed_record is a replay decision, but is NOT permission to ACK. */
+    public synchronized void checkpointSkipped(RecordId id) {
+        if (!ready || failed) throw new IllegalStateException("Consumer recovery is not ready");
+        if (StreamRecordIds.compare(id.getValue(), lastRecord) > 0) {
+            lastRecord = id.getValue();
+            flush();
+        }
+    }
+
     public synchronized void flush() {
         if (!ready || failed) return;
         try {
-            if (pending.isEmpty()) {
+            if (pending.isEmpty() && lastRecord.equals(committed)) {
                 if (System.currentTimeMillis() - lastHeartbeat >= 10_000) {
                     checkpoints.heartbeat();
                     lastHeartbeat = System.currentTimeMillis();
@@ -129,6 +151,7 @@ public class TickProcessService {
             metrics.recordTimeNanos("consumer.checkpoint.commit", System.nanoTime() - commitStarted);
             metrics.increment(TICK_PROCESS_STATUS, pending.size(), TAG_STATUS, VALUE_SUCCESS);
             committed = lastRecord;
+            baseline = true;
             lastHeartbeat = System.currentTimeMillis();
             var ackIds = List.copyOf(pending);
             pending.clear();

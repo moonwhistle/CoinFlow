@@ -41,29 +41,31 @@ public class StreamRecoveryService {
         String highWater = streams.groups(properties.streamKey()).stream()
                 .filter(g -> g.groupName().equals(properties.group())).findFirst().orElseThrow()
                 .lastDeliveredId();
-        if (checkpoint.equals("0-0") && !highWater.equals("0-0") && !allowInitialReplay) {
+        if (!ticks.hasBaseline() && checkpoint.equals("0-0") && !highWater.equals("0-0") && !allowInitialReplay) {
             throw new IllegalStateException("RECOVERY_BASELINE_REQUIRED: existing group has no checkpoint; see recovery runbook");
         }
         if (!checkpoint.equals("0-0") && streams.range(properties.streamKey(), Range.closed(checkpoint, checkpoint)).isEmpty()) {
             throw new IllegalStateException("RECOVERY_HISTORY_MISSING: checkpoint anchor was trimmed or Redis was reset");
         }
+        ticks.establishBaseline();
+        failedRecords.resumeOutstanding(properties.streamKey(), properties.group());
         // Includes previously ACKed records. XAUTOCLAIM alone cannot rebuild lost in-memory state.
         String cursor = checkpoint;
         while (StreamRecordIds.compare(cursor, highWater) < 0) {
             List<MapRecord<String, String, byte[]>> page = streams.range(properties.streamKey(),
                     Range.of(Range.Bound.exclusive(cursor), Range.Bound.inclusive(highWater)), Limit.limit().count(500));
             if (page == null || page.isEmpty()) throw new IllegalStateException("RECOVERY_HISTORY_MISSING before " + highWater);
-            var recorded = new HashSet<String>();
+            var recorded = new java.util.HashMap<String, FailedRecord>();
             failures.findAllById(page.stream().map(record -> FailedRecord.key(
                     properties.streamKey(), properties.group(), record.getId().getValue())).toList())
-                    .forEach(failure -> {
-                        ticks.flush();
-                        failedRecords.resume(failure);
-                        recorded.add(failure.getRecordId());
-                    });
+                    .forEach(failure -> recorded.put(failure.getRecordId(), failure));
             for (var record : page) {
-                if (!recorded.contains(record.getId().getValue())) {
+                FailedRecord failure = recorded.get(record.getId().getValue());
+                if (failure == null) {
                     handler.handle(record.getValue(), properties.streamKey(), properties.group(), record.getId());
+                } else {
+                    ticks.checkpointSkipped(record.getId());
+                    failedRecords.resume(failure);
                 }
                 cursor = record.getId().getValue();
             }

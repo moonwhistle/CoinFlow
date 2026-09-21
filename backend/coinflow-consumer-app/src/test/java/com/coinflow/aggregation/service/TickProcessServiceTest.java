@@ -86,6 +86,16 @@ class TickProcessServiceTest {
         verify(ack).addAck(RecordId.of("1-0"));
     }
 
+    @Test void trackedFailureAdvancesReplayPositionWithoutAcknowledgingIt() {
+        ticks.checkpointSkipped(RecordId.of("1-0"));
+        verify(checkpoints).commit(eq("1-0"), any(), eq(java.util.List.of()));
+        verifyNoInteractions(ack);
+        tick("2-0", 60_000);
+        ticks.flush();
+        verify(ack).addAck(RecordId.of("2-0"));
+        verify(ack, never()).addAck(RecordId.of("1-0"));
+    }
+
     private void tick(String id, long time) {
         ticks.process("btcusdt", BigDecimal.TEN, BigDecimal.ONE, time, "tick", "group", RecordId.of(id));
     }

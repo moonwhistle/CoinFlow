@@ -29,6 +29,23 @@ public class FailedRecordService {
         }
     }
 
+    /** Covers a crash after skip-checkpoint commit but before the first DLQ attempt. */
+    public void resumeOutstanding(String stream, String group) {
+        String cursor = "";
+        while (true) {
+            var page = failures.findByStatusNotAndIdGreaterThanOrderByIdAsc(FailedRecord.Status.RESOLVED,
+                    cursor, org.springframework.data.domain.PageRequest.of(0, 100));
+            for (FailedRecord failure : page) {
+                if (stream.equals(failure.getStreamKey()) && group.equals(failure.getConsumerGroup())) {
+                    ticks.flush();
+                    resume(failure);
+                }
+                cursor = failure.getId();
+            }
+            if (page.size() < 100) return;
+        }
+    }
+
     public void record(String stream, String group, String id, byte[] payload,
             String symbol, Long eventTime, RuntimeException cause) {
         // Freeze earlier successful ticks before tracking a skipped record.
@@ -50,6 +67,7 @@ public class FailedRecordService {
             created.setCreatedAt(System.currentTimeMillis());
             return failures.save(created);
         }));
+        ticks.checkpointSkipped(org.springframework.data.redis.connection.stream.RecordId.of(id));
         publish(failure);
     }
 

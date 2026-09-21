@@ -154,6 +154,17 @@ class RecoveryIntegrationTest {
         readAll();
         redis.opsForStream().acknowledge(stream, group, "2-0"); // Lost memory even though this record was ACKed.
         var restarted = new KlineAggregatorService();
+        var ticks = recover(restarted);
+        assertEquals("3-0", checkpointRows.findById(1L).orElseThrow().getRecordId());
+        assertEquals(0, BigDecimal.valueOf(3).compareTo(restarted.checkpoint().active().get("btcusdt:M1").volume()));
+        var restored = checkpoints.acquire();
+        assertEquals(restarted.checkpoint(), restored.state().aggregate());
+        maintenance.cleanCheckpointPending();
+        assertEquals(0, redis.opsForStream().pending(stream, group).getTotalPendingMessages());
+        ticks.close();
+    }
+
+    private com.coinflow.aggregation.service.TickProcessService recover(KlineAggregatorService restarted) {
         var ticks = new com.coinflow.aggregation.service.TickProcessService(restarted, checkpoints,
                 org.mockito.Mockito.mock(CandleProjectionPublisher.class),
                 org.mockito.Mockito.mock(com.coinflow.aggregation.service.BatchAckWorker.class),
@@ -164,11 +175,36 @@ class RecoveryIntegrationTest {
         var worker = (org.springframework.beans.factory.ObjectProvider<RecoveryMaintenanceWorker>)
                 org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
         new StreamRecoveryService(rawRedisTemplate, properties, ticks, handler, failures, failedRecords, worker).recover();
+        return ticks;
+    }
+
+    @Test void firstBatchCrashRecoversFromEmptyBaselineAndSkipsTrackedFailureInOrder() {
+        checkpoints.commit("0-0", state(), List.of()); // Durable baseline, but no tick checkpoint yet.
+        for (int i = 1; i <= 3; i++) {
+            byte[] payload = com.coinflow.tick.serialization.TickRawBinaryCodec.encode("btcusdt", BigDecimal.TEN, BigDecimal.ONE, 60_000 + i);
+            rawRedisTemplate.opsForStream().add(StreamRecords.newRecord().in(stream).ofMap(Map.of("p", payload)).withId(RecordId.of(i + "-0")));
+        }
+        readAll();
+        FailedRecord failed = failure("2-0", "btcusdt:M1:60");
+        failed.setDlqExhausted(true);
+        failures.save(failed);
+        var restarted = new KlineAggregatorService();
+        var ticks = recover(restarted);
+        assertEquals(0, BigDecimal.valueOf(2).compareTo(restarted.checkpoint().active().get("btcusdt:M1").volume()));
         assertEquals("3-0", checkpointRows.findById(1L).orElseThrow().getRecordId());
-        assertEquals(0, BigDecimal.valueOf(3).compareTo(restarted.checkpoint().active().get("btcusdt:M1").volume()));
-        var restored = checkpoints.acquire();
-        assertEquals(restarted.checkpoint(), restored.state().aggregate());
         maintenance.cleanCheckpointPending();
+        assertEquals(1, redis.opsForStream().pending(stream, group).getTotalPendingMessages());
+        ticks.close();
+    }
+
+    @Test void crashAfterFailureCheckpointBeforeDlqPublishResumesDelivery() {
+        redis.opsForStream().add(StreamRecords.string(Map.of("p", "bad")).withStreamKey(stream).withId(RecordId.of("1-0")));
+        readAll();
+        var failed = failure("1-0", "");
+        failed.setPayload("YmFk"); failed.setReason("test"); failures.save(failed);
+        checkpoints.commit("1-0", state(), List.of());
+        var ticks = recover(new KlineAggregatorService());
+        assertNotNull(failures.findById(failed.getId()).orElseThrow().getDlqId());
         assertEquals(0, redis.opsForStream().pending(stream, group).getTotalPendingMessages());
         ticks.close();
     }

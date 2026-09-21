@@ -38,16 +38,17 @@ class ConsumerStartupIntegrationTest {
 
     @Test void actualListenerCommitsBeforeAckAndRoutesMalformedRecordToDlq() {
         try {
+            var invalid = rawRedisTemplate.opsForStream().add(STREAM, Map.of("p", new byte[] {127}));
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertEquals(1, failures.count());
+                assertNotNull(failures.findAll().get(0).getDlqId());
+                assertEquals(invalid.getValue(), checkpoints.findById(1L).orElseThrow().getRecordId());
+                assertEquals(0, rawRedisTemplate.opsForStream().pending(STREAM, "test-group").getTotalPendingMessages());
+            });
             byte[] payload = TickRawBinaryCodec.encode("btcusdt", BigDecimal.TEN, BigDecimal.ONE, 60_000);
             var valid = rawRedisTemplate.opsForStream().add(STREAM, Map.of("p", payload));
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
                 assertEquals(valid.getValue(), checkpoints.findById(1L).orElseThrow().getRecordId());
-                assertEquals(0, rawRedisTemplate.opsForStream().pending(STREAM, "test-group").getTotalPendingMessages());
-            });
-            rawRedisTemplate.opsForStream().add(STREAM, Map.of("p", new byte[] {127}));
-            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-                assertEquals(1, failures.count());
-                assertNotNull(failures.findAll().get(0).getDlqId());
                 assertEquals(0, rawRedisTemplate.opsForStream().pending(STREAM, "test-group").getTotalPendingMessages());
             });
         } finally {
